@@ -19,18 +19,24 @@
  *      (the `env.ASSETS` binding below) — that's what actually serves
  *      public/WayPoint/index.html.
  *
- * Who is allowed to reach this Worker at all is NOT decided here — that's
- * handled entirely by Cloudflare Access (Zero Trust), which sits in front
- * of the `/WayPoint*` route and only lets your own login through. This
- * file doesn't need to know anything about passwords, sessions, or who is
- * asking — by the time a request reaches this code, Access has already
- * decided the answer is "yes, let them through."
+ * Who is allowed in is decided right here, with the simplest thing that
+ * could possibly work: a single shared password, checked via ordinary
+ * HTTP Basic Auth (see checkPassword() below). There's no per-person
+ * account and no email/identity provider involved — anyone who knows the
+ * one password gets in, which is exactly the "share it with a few
+ * friends" model this was built for rather than a strictly locked-down
+ * single-user gate. The password itself is never written into this file
+ * or committed to the repo — it's set as a Cloudflare Worker *secret*
+ * (Workers & Pages → waypoint-app → Settings → Variables and Secrets),
+ * which is how this code reads it as `env.WAYPOINT_PASSWORD`.
  *
  * There is exactly one saved "document" for the whole app: one JSON blob
- * containing every trip, stored under the fixed KV key "state". That
- * matches how the app already worked (a single `state` object holding all
- * trips) and keeps this Worker as simple as possible — there's no need for
- * per-trip keys or a database when there's only ever one person using it.
+ * containing every trip, stored under the fixed KV key "state". Every
+ * visitor who knows the password shares that same one blob — that
+ * matches how the app already worked (a single `state` object holding
+ * all trips) and keeps this Worker as simple as possible, but it does
+ * mean friends you share this with will all see (and can all edit) the
+ * same trips, not separate private ones each.
  * ============================================================================
  */
 
@@ -51,6 +57,22 @@ const EMPTY_STATE = JSON.stringify({ trips: [] });
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // ---- Password gate ------------------------------------------------------
+    // Checked before anything else, for every request under /WayPoint (the
+    // page itself, its static assets, and the API alike) — so nobody can
+    // reach the app OR read/write trip data without the shared password.
+    if (!checkPassword(request, env)) {
+      return new Response("A password is required to view this page.", {
+        status: 401,
+        // This header is what makes the browser pop up its own native
+        // username/password prompt — no login form of our own to build or
+        // style. The browser then remembers it (for that browser/device)
+        // and sends it automatically on every later request, so visitors
+        // only see the prompt once.
+        headers: { "WWW-Authenticate": 'Basic realm="Waypoint", charset="UTF-8"' },
+      });
+    }
 
     // ---- Our JSON API -----------------------------------------------------
     if (url.pathname === "/WayPoint/api/data") {
@@ -130,6 +152,39 @@ async function handlePost(request, env) {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/**
+ * Checks the request's HTTP Basic Auth credentials against the one shared
+ * password stored in the WAYPOINT_PASSWORD secret. Only the password part
+ * matters — Basic Auth always sends a "username:password" pair, but since
+ * there's no concept of separate accounts here, any username is accepted
+ * and only the password after the colon is actually compared.
+ *
+ * If WAYPOINT_PASSWORD hasn't been set at all (e.g. it was forgotten
+ * during setup), this deliberately fails closed — every request gets
+ * rejected — rather than silently leaving the app wide open.
+ */
+function checkPassword(request, env) {
+  const expected = env.WAYPOINT_PASSWORD;
+  if (!expected) return false;
+
+  const authHeader = request.headers.get("Authorization") || "";
+  if (!authHeader.startsWith("Basic ")) return false;
+
+  let decoded;
+  try {
+    // atob() turns the base64 Basic Auth value back into "username:password"
+    // plain text. A malformed header just means "not authenticated" rather
+    // than a crash.
+    decoded = atob(authHeader.slice("Basic ".length));
+  } catch (err) {
+    return false;
+  }
+
+  const separatorIndex = decoded.indexOf(":");
+  const suppliedPassword = separatorIndex === -1 ? decoded : decoded.slice(separatorIndex + 1);
+  return suppliedPassword === expected;
 }
 
 function jsonError(status, message) {
