@@ -301,12 +301,22 @@ async function handleFlightLookup(url, env) {
   });
 }
 
+// `country` is read defensively — AeroDataBox's exact field name for
+// this isn't pinned down here (it may come back as `country.name`, or
+// just a `countryCode`, depending on the endpoint/response shape), so
+// this tries the friendlier shape first and falls back to the code
+// rather than throwing if neither is present. Worst case it's just an
+// empty string, same as if this whole field didn't exist — the
+// frontend's airportDisplay() (index.html) already treats a missing
+// country as optional, it just makes the geocoded "From"/"To" value a
+// little less specific.
 function airportSummary(airport) {
-  if (!airport) return { code: "", name: "", municipality: "" };
+  if (!airport) return { code: "", name: "", municipality: "", country: "" };
   return {
     code: airport.iata || airport.icao || "",
     name: airport.name || "",
     municipality: airport.municipalityName || "",
+    country: (airport.country && airport.country.name) || airport.countryCode || "",
   };
 }
 
