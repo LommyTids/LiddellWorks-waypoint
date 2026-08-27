@@ -396,6 +396,63 @@ var COMMON_COUNTRIES = ['Afghanistan','Albania','Algeria','Andorra','Angola','Ar
   'Tunisia','Turkey','Turkmenistan','Uganda','Ukraine','United Arab Emirates','United Kingdom',
   'United States','Uruguay','Uzbekistan','Vanuatu','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
 
+// A few hundred well-known cities, for the same kind of "type-ahead
+// suggestion, but anything is still accepted" datalist as countries
+// above. This isn't (and can't realistically be) every city in the
+// world — it's a helpful shortlist of common travel destinations, so
+// typing "Chia" or "Bang" surfaces the obvious match without forcing
+// the viewer to pick from a closed list. Any place name a viewer
+// actually types is saved exactly as typed, list or no list.
+var COMMON_CITIES = ['Amsterdam','Athens','Auckland','Bali (Denpasar)','Bangkok','Barcelona','Beijing','Beirut',
+  'Belgrade','Berlin','Bogota','Bologna','Boston','Brisbane','Brussels','Bucharest','Budapest','Buenos Aires',
+  'Cairo','Cancun','Cape Town','Casablanca','Chiang Mai','Chicago','Christchurch','Copenhagen','Dallas',
+  'Da Nang','Delhi','Denver','Dhaka','Doha','Dubai','Dublin','Dubrovnik','Edinburgh','Florence','Frankfurt',
+  'Fukuoka','Geneva','Genoa','Glasgow','Gothenburg','Guangzhou','Hanoi','Ha Long Bay','Havana','Helsinki',
+  'Ho Chi Minh City','Hong Kong','Honolulu','Houston','Istanbul','Jaipur','Jakarta','Johannesburg','Kathmandu',
+  'Kigali','Krabi','Kraków','Kuala Lumpur','Kyoto','Lagos','Las Vegas','Lima','Lisbon','Liverpool','Ljubljana',
+  'London','Los Angeles','Luang Prabang','Luxor','Lyon','Madrid','Malaga','Male','Manchester','Manila','Marrakech',
+  'Marseille','Melbourne','Mexico City','Miami','Milan','Montevideo','Montreal','Moscow','Mumbai','Munich',
+  'Nairobi','Naples','New Delhi','New Orleans','New York','Nice','Osaka','Oslo','Panama City','Paris','Penang',
+  'Perth','Phnom Penh','Phuket','Porto','Prague','Queenstown','Quito','Reykjavik','Rio de Janeiro','Riyadh',
+  'Rome','Rotterdam','Salvador','San Diego','San Francisco','San Sebastian','Santiago','Santorini','Sao Paulo',
+  'Sapporo','Seattle','Seoul','Seville','Shanghai','Siem Reap','Singapore','Split','Stockholm','Sydney','Taipei',
+  'Tallinn','Tbilisi','Tel Aviv','Tokyo','Toronto','Tunis','Ubud','Vancouver','Venice','Vienna','Vientiane',
+  'Warsaw','Washington DC','Wellington','Xi\'an','Yangon','Zagreb','Zanzibar City','Zurich'];
+
+// Major international/hub airports, offered the same way — shown as
+// "CODE — City, Airport name" so it's easy to spot the right one, but
+// what actually gets saved is whatever the viewer picked or typed
+// (usually just the code, since that's what most people type once
+// they've seen the suggestion). Covers the busiest hubs on each
+// continent rather than every airport that exists.
+var COMMON_AIRPORTS = ['LHR — London Heathrow','LGW — London Gatwick','STN — London Stansted','LTN — London Luton',
+  'MAN — Manchester','EDI — Edinburgh','DUB — Dublin','CDG — Paris Charles de Gaulle','ORY — Paris Orly',
+  'AMS — Amsterdam Schiphol','FRA — Frankfurt','MUC — Munich','BER — Berlin Brandenburg','MAD — Madrid Barajas',
+  'BCN — Barcelona El Prat','FCO — Rome Fiumicino','MXP — Milan Malpensa','VCE — Venice Marco Polo',
+  'ZRH — Zurich','GVA — Geneva','VIE — Vienna','CPH — Copenhagen','ARN — Stockholm Arlanda','OSL — Oslo',
+  'HEL — Helsinki','WAW — Warsaw Chopin','PRG — Prague','BUD — Budapest','ATH — Athens','LIS — Lisbon',
+  'OPO — Porto','DUB — Dublin','IST — Istanbul','SAW — Istanbul Sabiha Gökçen','SVO — Moscow Sheremetyevo',
+  'DME — Moscow Domodedovo',
+  'JFK — New York JFK','EWR — Newark','LGA — New York LaGuardia','BOS — Boston Logan','ORD — Chicago O\'Hare',
+  'ATL — Atlanta','DFW — Dallas/Fort Worth','DEN — Denver','LAS — Las Vegas','LAX — Los Angeles',
+  'SFO — San Francisco','SEA — Seattle-Tacoma','MIA — Miami','MCO — Orlando','IAH — Houston','PHX — Phoenix',
+  'YYZ — Toronto Pearson','YVR — Vancouver','YUL — Montreal','MEX — Mexico City','CUN — Cancun',
+  'GRU — Sao Paulo Guarulhos','GIG — Rio de Janeiro Galeão','EZE — Buenos Aires Ezeiza','SCL — Santiago',
+  'LIM — Lima','BOG — Bogota',
+  'DXB — Dubai','AUH — Abu Dhabi','DOH — Doha','RUH — Riyadh','JED — Jeddah','TLV — Tel Aviv','CAI — Cairo',
+  'CMN — Casablanca','JNB — Johannesburg','CPT — Cape Town','NBO — Nairobi','LOS — Lagos','ADD — Addis Ababa',
+  'DEL — Delhi','BOM — Mumbai','BLR — Bengaluru','MAA — Chennai','CCU — Kolkata','KTM — Kathmandu',
+  'DAC — Dhaka','CMB — Colombo','MLE — Malé',
+  'BKK — Bangkok Suvarnabhumi','DMK — Bangkok Don Mueang','HKT — Phuket','CNX — Chiang Mai','SGN — Ho Chi Minh City',
+  'HAN — Hanoi','DAD — Da Nang','PNH — Phnom Penh','REP — Siem Reap','VTE — Vientiane','LPQ — Luang Prabang',
+  'RGN — Yangon','KUL — Kuala Lumpur','PEN — Penang','SIN — Singapore','CGK — Jakarta','DPS — Bali Denpasar',
+  'MNL — Manila','CEB — Cebu',
+  'HKG — Hong Kong','MFM — Macau','TPE — Taipei Taoyuan','PVG — Shanghai Pudong','PEK — Beijing Capital',
+  'PKX — Beijing Daxing','CAN — Guangzhou','ICN — Seoul Incheon','GMP — Seoul Gimpo','NRT — Tokyo Narita',
+  'HND — Tokyo Haneda','KIX — Osaka Kansai','FUK — Fukuoka','CTS — Sapporo New Chitose',
+  'SYD — Sydney','MEL — Melbourne','BNE — Brisbane','PER — Perth','AKL — Auckland','CHC — Christchurch',
+  'ZQN — Queenstown','NAN — Nadi (Fiji)','HNL — Honolulu'];
+
 /* ---------- 2. Generic utilities --------------------------------- */
 
 // Turns any value into a short random-ish id, unique enough for a
@@ -692,7 +749,7 @@ function openConfirm(opts) {
   var root = document.getElementById('modal-root');
   root.innerHTML =
     '<div class="modal-backdrop" data-action="close-modal">' +
-      '<div class="modal" onclick="event.stopPropagation()">' +
+      '<div class="modal">' +
         '<div class="modal-head"><h2>' + esc(opts.title || 'Are you sure?') + '</h2>' +
           '<button class="btn btn-icon btn-ghost" data-action="close-modal">' + icon('close') + '</button></div>' +
         '<div class="modal-body"><p class="confirm-text">' + esc(opts.message) + '</p></div>' +
@@ -752,6 +809,24 @@ function fieldHtml(field, value, trip) {
       inputHtml = '<input type="text" list="country-list" maxlength="60" ' +
         'name="' + field.key + '" value="' + esc(val) + '" ' + req +
         ' placeholder="' + esc(field.placeholder || '') + '">';
+      break;
+    case 'city':
+      // Same idea as 'country' — a datalist of common cities as
+      // suggestions, but the input still happily accepts anything
+      // typed (a smaller town that isn't in the shortlist, a
+      // neighbourhood name, etc).
+      inputHtml = '<input type="text" list="city-list" maxlength="80" ' +
+        'name="' + field.key + '" value="' + esc(val) + '" ' + req +
+        ' placeholder="' + esc(field.placeholder || '') + '">';
+      break;
+    case 'airport':
+      // Suggestions are shown as "CODE — Name" but nothing forces the
+      // value to match that shape — typing just the 3-letter code (or
+      // a city name for a mode where a full airport isn't really the
+      // right concept) is equally valid.
+      inputHtml = '<input type="text" list="airport-list" maxlength="80" ' +
+        'name="' + field.key + '" value="' + esc(val) + '" ' + req +
+        ' placeholder="' + esc(field.placeholder || 'e.g. LHR or Heathrow') + '">';
       break;
     case 'timezone':
       inputHtml = '<input type="text" list="timezone-list" maxlength="40" ' +
@@ -834,7 +909,7 @@ function openForm(opts) {
   var initial = opts.initial || {};
   root.innerHTML =
     '<div class="modal-backdrop" data-action="close-modal">' +
-      '<div class="modal" onclick="event.stopPropagation()">' +
+      '<div class="modal">' +
         '<div class="modal-head"><h2>' + esc(opts.title) + '</h2>' +
           '<button class="btn btn-icon btn-ghost" data-action="close-modal">' + icon('close') + '</button></div>' +
         '<form id="entity-form">' +
@@ -848,7 +923,9 @@ function openForm(opts) {
     '</div>' +
     '<datalist id="currency-list">' + COMMON_CURRENCIES.map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>' +
     '<datalist id="timezone-list">' + COMMON_TIMEZONES.map(function (tz) { return '<option value="' + tz + '">'; }).join('') + '</datalist>' +
-    '<datalist id="country-list">' + COMMON_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>';
+    '<datalist id="country-list">' + COMMON_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
+    '<datalist id="city-list">' + COMMON_CITIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
+    '<datalist id="airport-list">' + COMMON_AIRPORTS.map(function (a) { return '<option value="' + esc(a) + '">'; }).join('') + '</datalist>';
 }
 
 /* ---------- 7. Entity field schemas --------------------------------- */
@@ -863,7 +940,7 @@ var TRIP_FIELDS = [
 
 var DESTINATION_FIELDS = [
   { key: 'country', label: 'Country', type: 'country', placeholder: 'e.g. Thailand' },
-  { key: 'name', label: 'Place / area', type: 'text', required: true, placeholder: 'e.g. Chiang Mai' },
+  { key: 'name', label: 'Place / area', type: 'city', required: true, placeholder: 'e.g. Chiang Mai' },
   { key: 'arriveDate', label: 'Arriving', type: 'date', required: true },
   { key: 'departDate', label: 'Leaving', type: 'date', required: true },
   { key: 'timezone', label: 'Local timezone', type: 'timezone', placeholder: 'e.g. Asia/Bangkok', hint: 'Used just as a reference — handy when a trip crosses several timezones.', wide: true },
@@ -924,10 +1001,17 @@ var TRANSPORT_MODE_FIELDS = {
 
 function transportFieldsForMode(mode) {
   var modeFields = TRANSPORT_MODE_FIELDS[mode] || TRANSPORT_MODE_FIELDS.Other;
+  // Flights go between airports, so "From"/"To" suggest airports for
+  // that mode; every other mode (train, bus, car, ferry, ...) suggests
+  // cities instead, since "airport" isn't really the right concept for
+  // a train station or a road trip leg. Either way it's just a
+  // suggestion list — any place name typed is still accepted, which
+  // matters for the map tab's geocoding.
+  var placeType = mode === 'Flight' ? 'airport' : 'city';
   return [{ key: 'mode', label: 'Mode', type: 'select', options: TRANSPORT_MODES }]
     .concat(modeFields, [
-      { key: 'fromLocation', label: 'From', type: 'text', required: true },
-      { key: 'toLocation', label: 'To', type: 'text', required: true },
+      { key: 'fromLocation', label: 'From', type: placeType, required: true, placeholder: mode === 'Flight' ? 'e.g. LHR or Heathrow' : 'e.g. Chiang Mai' },
+      { key: 'toLocation', label: 'To', type: placeType, required: true, placeholder: mode === 'Flight' ? 'e.g. JFK or JFK Airport' : 'e.g. Bangkok' },
       { key: 'departDate', label: 'Depart date', type: 'date', required: true },
       { key: 'departTime', label: 'Depart time', type: 'time' },
       { key: 'arriveDate', label: 'Arrive date', type: 'date', required: true },
@@ -2000,7 +2084,21 @@ document.addEventListener('click', function (e) {
   var action = el.dataset.action;
   var trip = currentTripId ? currentTrip() : null;
 
-  if (action === 'close-modal') { closeModal(); return; }
+  if (action === 'close-modal') {
+    // The backdrop itself has data-action="close-modal" too (click
+    // outside the modal box to dismiss it, a common UI convention) —
+    // but a click that starts inside the modal and simply has no more
+    // specific data-action ancestor (e.g. tapping blank space in the
+    // form body) would otherwise bubble up to that same backdrop and
+    // close the form by accident. Only treat it as "clicked the
+    // backdrop" when the click's actual target IS the backdrop
+    // element, not merely a descendant of it. Explicit close controls
+    // (the × button, "Cancel") are unaffected — el there is the
+    // button itself, not the backdrop.
+    if (el.classList.contains('modal-backdrop') && e.target !== el) return;
+    closeModal();
+    return;
+  }
   if (action === 'confirm-yes') { var fn = pendingConfirm; closeModal(); if (fn) fn(); return; }
   if (action === 'copy-text') {
     var value = el.dataset.value;
