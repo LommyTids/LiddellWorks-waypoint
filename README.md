@@ -15,8 +15,13 @@ there the next time you visit.
   POSTs the updated data back to that same endpoint.
 - **`src/worker.js`** — the server side. It answers `/WayPoint/api/data`
   (GET to read your saved trips, POST to save them) by reading/writing a
-  single JSON blob in Cloudflare KV, and hands off every other request to
-  Cloudflare's static file serving for the HTML file above.
+  single JSON blob in Cloudflare KV; answers `/WayPoint/api/flight-lookup`
+  by proxying a flight number to the free [adsbdb.com](https://www.adsbdb.com/)
+  API and handing back just its usual carrier and airports (used by the
+  "Look up" button next to Flight number on the transport form — no
+  signup or API key needed, since adsbdb is free and keyless); and hands
+  off every other request to Cloudflare's static file serving for the
+  HTML file above.
 - **`wrangler.toml`** — Cloudflare configuration: which route
   (`liddellworks.com/WayPoint*`) reaches this Worker, which KV namespace it
   uses, and where the static files live. Heavily commented — worth a skim.
@@ -78,7 +83,8 @@ npm run deploy
 
 ## Testing
 
-Two Playwright suites live outside this repo's deployed contents:
+A handful of Playwright suites live outside this repo's deployed contents
+(not part of what gets deployed):
 
 - The original app-logic tests (trip/destination/transport CRUD, the
   overnight timeline, currency conversion, CSV export) still apply
@@ -87,3 +93,10 @@ Two Playwright suites live outside this repo's deployed contents:
   server standing in for the real Worker/KV, and checks that loading,
   saving, a full page reload, and CSV export all work the same way they
   will against the real deployment.
+- A dedicated test for the Map tab, mocking the Nominatim/tile-server
+  calls it makes.
+- A dedicated test for the "Look up" flight-number button, mocking
+  `/WayPoint/api/flight-lookup` itself — it checks the frontend's side
+  (button only shows in Flight mode, fields populate on success, a clear
+  message on a not-found/error response). The Worker's own call out to
+  adsbdb.com is exercised against the real service once this is deployed.
