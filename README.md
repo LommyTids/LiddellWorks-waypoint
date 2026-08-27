@@ -16,12 +16,12 @@ there the next time you visit.
 - **`src/worker.js`** — the server side. It answers `/WayPoint/api/data`
   (GET to read your saved trips, POST to save them) by reading/writing a
   single JSON blob in Cloudflare KV; answers `/WayPoint/api/flight-lookup`
-  by proxying a flight number to the free [adsbdb.com](https://www.adsbdb.com/)
-  API and handing back just its usual carrier and airports (used by the
-  "Look up" button next to Flight number on the transport form — no
-  signup or API key needed, since adsbdb is free and keyless); and hands
-  off every other request to Cloudflare's static file serving for the
-  HTML file above.
+  by proxying a flight number + date to the [AeroDataBox](https://aerodatabox.com/)
+  API (via RapidAPI) and handing back the airline, airports, and scheduled
+  local departure/arrival date+time — used by the "Look up" button next to
+  Flight number on the transport form. Needs the `AERODATABOX_API_KEY`
+  secret set up (step 4 below); and hands off every other request to
+  Cloudflare's static file serving for the HTML file above.
 - **`wrangler.toml`** — Cloudflare configuration: which route
   (`liddellworks.com/WayPoint*`) reaches this Worker, which KV namespace it
   uses, and where the static files live. Heavily commented — worth a skim.
@@ -63,6 +63,21 @@ actions Cloudflare requires a person to click through:
    per-person accounts to configure. To change the password later, edit
    this same secret and save again; no code change or redeploy needed.
 
+4. **Set the flight-lookup API key (optional — only needed for the "Look
+   up" button on the transport form).**
+   Sign up free at [RapidAPI's AeroDataBox page](https://rapidapi.com/aedbx-aedbx/api/aerodatabox)
+   and subscribe to its free plan to get an API key, then: Workers & Pages
+   → **waypoint-app** → **Settings** → **Variables and Secrets** → **Add**
+   → name it exactly `AERODATABOX_API_KEY`, type **Secret**, value: the
+   key RapidAPI gave you → **Save**. Same "never committed to this repo,
+   never shown again once saved" model as the password above — if this
+   secret is missing, the "Look up" button just shows a clear "not set up
+   yet" message instead of the rest of the app breaking.
+
+Same as with the password, none of these secret values live anywhere in
+this repo's code — `src/worker.js` only ever reads them at runtime as
+`env.WAYPOINT_PASSWORD` / `env.AERODATABOX_API_KEY`.
+
 The KV namespace the Worker reads/writes (`waypoint-data`) already exists in
 your Cloudflare account and is wired up in `wrangler.toml` — no separate
 step needed for that.
@@ -97,6 +112,8 @@ A handful of Playwright suites live outside this repo's deployed contents
   calls it makes.
 - A dedicated test for the "Look up" flight-number button, mocking
   `/WayPoint/api/flight-lookup` itself — it checks the frontend's side
-  (button only shows in Flight mode, fields populate on success, a clear
-  message on a not-found/error response). The Worker's own call out to
-  adsbdb.com is exercised against the real service once this is deployed.
+  (button only shows in Flight mode, requires a depart date, fields
+  populate on success including an overnight flight's next-day arrival
+  date, a clear message on a not-found/error response). The Worker's own
+  call out to AeroDataBox is exercised against the real service once this
+  is deployed with `AERODATABOX_API_KEY` set.
