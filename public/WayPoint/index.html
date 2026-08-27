@@ -1124,11 +1124,40 @@ function openActivityForm(trip, existing) {
   });
 }
 
+// Resolves the map coordinate to save for one end (From or To) of a
+// Flight leg, in priority order: (1) a known match in COMMON_AIRPORTS
+// for the typed/selected code — the common case, and the one that
+// actually fixes routes like SFO–ICN not showing up on the Map tab;
+// (2) whatever the most recent "Look up" click in this form session (if
+// any) returned for that end, via AeroDataBox's own location data (see
+// lastFlightLookupCoords) — covers airports too minor to be in
+// COMMON_AIRPORTS; (3) a coordinate already saved on this same leg from
+// an earlier save, reused ONLY if the location text hasn't changed
+// since (so editing "From" to somewhere else can't accidentally keep
+// the old place's coordinate). Anything else returns null, which just
+// means the Map tab falls back to geocoding the location text via
+// Nominatim — exactly what it always did, for exactly the cases where
+// nothing better is known.
+function resolveLegCoords(text, lookupCoords, existing, textKey, latKey, lngKey) {
+  var staticMatch = airportCoordsFromText(text);
+  if (staticMatch) return staticMatch;
+  if (lookupCoords) return lookupCoords;
+  if (existing && existing[textKey] === text && typeof existing[latKey] === 'number' && typeof existing[lngKey] === 'number') {
+    return { lat: existing[latKey], lng: existing[lngKey] };
+  }
+  return null;
+}
+
 function openTransportForm(trip, existing) {
   var initial = existing ? Object.assign({}, existing, splitDateTime(existing.departDateTime), {
     arriveDate: dateOnly(existing.arriveDateTime), arriveTime: timeOnly(existing.arriveDateTime)
   }) : { mode: 'Flight' };
   if (existing) { initial.departDate = dateOnly(existing.departDateTime); initial.departTime = timeOnly(existing.departDateTime); }
+  // A fresh form session shouldn't inherit a coordinate from whatever
+  // leg was last looked up (possibly minutes ago, possibly a
+  // completely different leg) — see lastFlightLookupCoords' own
+  // comment for why this matters.
+  lastFlightLookupCoords = { from: null, to: null };
   openForm({
     title: existing ? 'Edit transport leg' : 'Add transport leg',
     // The field list depends on whichever mode is currently selected
@@ -1140,10 +1169,22 @@ function openTransportForm(trip, existing) {
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.id);
+        // Coordinates are only meaningful for Flight legs — every other
+        // mode's "From"/"To" are city-type free text (see
+        // transportFieldsForMode()), with no airport code to match
+        // against COMMON_AIRPORTS, so those just keep using Nominatim
+        // text geocoding on the Map tab exactly as before.
+        var fromCoords = null, toCoords = null;
+        if (v.mode === 'Flight') {
+          fromCoords = resolveLegCoords(v.fromLocation, lastFlightLookupCoords.from, existing, 'fromLocation', 'fromLat', 'fromLng');
+          toCoords = resolveLegCoords(v.toLocation, lastFlightLookupCoords.to, existing, 'toLocation', 'toLat', 'toLng');
+        }
         var rec = {
           id: existing ? existing.id : newId(), mode: v.mode || 'Other', carrier: v.carrier || '',
           flightNumber: v.flightNumber || '', licensePlate: v.licensePlate || '',
           fromLocation: v.fromLocation, toLocation: v.toLocation,
+          fromLat: fromCoords ? fromCoords.lat : '', fromLng: fromCoords ? fromCoords.lng : '',
+          toLat: toCoords ? toCoords.lat : '', toLng: toCoords ? toCoords.lng : '',
           departDateTime: combineDateTime(v.departDate, v.departTime), arriveDateTime: combineDateTime(v.arriveDate, v.arriveTime),
           seat: v.seat || '', bookingRef: v.bookingRef || '', contactId: v.contactId || '',
           costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(), costRate: v.costRate || '',
@@ -1181,6 +1222,32 @@ function openTransportForm(trip, existing) {
 // still-open form (not through updateState()/render() — the form is
 // mid-edit, and a full re-render would discard anything else typed and
 // reset field focus/scroll).
+//
+// AeroDataBox returns a few extra details (aircraft type, terminal,
+// gate) that used to only ever appear transiently in the status line
+// underneath ("...— not saved, just FYI") — genuinely thrown away the
+// moment the form closed. mergeFlightLookupNotes() below is what fixes
+// that: it folds those details into the Notes field instead, inside a
+// clearly-delimited block so they're easy to spot (and so re-running
+// "Look up" — e.g. after fixing a typo'd flight number — replaces that
+// block rather than piling up duplicates underneath whatever the
+// viewer already typed into Notes by hand).
+var FLIGHT_LOOKUP_NOTES_START = '--- Flight lookup details (auto-filled by "Look up") ---';
+var FLIGHT_LOOKUP_NOTES_END = '--- end flight lookup details ---';
+
+function mergeFlightLookupNotes(existingNotes, detailLines) {
+  var notes = (existingNotes || '').trim();
+  var startIdx = notes.indexOf(FLIGHT_LOOKUP_NOTES_START);
+  if (startIdx !== -1) {
+    var endIdx = notes.indexOf(FLIGHT_LOOKUP_NOTES_END, startIdx);
+    var afterEnd = endIdx !== -1 ? endIdx + FLIGHT_LOOKUP_NOTES_END.length : notes.length;
+    notes = (notes.slice(0, startIdx) + notes.slice(afterEnd)).trim();
+  }
+  if (!detailLines.length) return notes;
+  var block = FLIGHT_LOOKUP_NOTES_START + '\n' + detailLines.join('\n') + '\n' + FLIGHT_LOOKUP_NOTES_END;
+  return notes ? (notes + '\n\n' + block) : block;
+}
+
 function performFlightLookup(button) {
   var form = document.getElementById('entity-form');
   if (!form) return;
@@ -1230,6 +1297,7 @@ function performFlightLookup(button) {
       var carrierInput = currentForm.querySelector('[name="carrier"]');
       var fromInput = currentForm.querySelector('[name="fromLocation"]');
       var toInput = currentForm.querySelector('[name="toLocation"]');
+      var notesInput = currentForm.querySelector('[name="notes"]');
       var departDateField = currentForm.querySelector('[name="departDate"]');
       var departTimeField = currentForm.querySelector('[name="departTime"]');
       var arriveDateField = currentForm.querySelector('[name="arriveDate"]');
@@ -1237,6 +1305,15 @@ function performFlightLookup(button) {
       if (carrierInput && data.airline) carrierInput.value = data.airline;
       if (fromInput && data.origin) fromInput.value = airportDisplay(data.origin);
       if (toInput && data.destination) toInput.value = airportDisplay(data.destination);
+      // See this function's opening comment, and lastFlightLookupCoords'
+      // own comment (near airportCoordsFromText()) — this is the "even
+      // for an airport too minor to be in COMMON_AIRPORTS" fallback
+      // source of real map coordinates, consulted at save time in
+      // openTransportForm()'s onSubmit.
+      lastFlightLookupCoords = {
+        from: (data.origin && data.origin.location) ? data.origin.location : null,
+        to: (data.destination && data.destination.location) ? data.destination.location : null
+      };
       // The date searched with (whichever field it came from — see
       // this function's opening comment) is written into "Depart
       // date" here so it's always right there, even if someone typed
@@ -1250,11 +1327,28 @@ function performFlightLookup(button) {
       if (arriveDateField && data.arrival && data.arrival.date) arriveDateField.value = data.arrival.date;
       if (arriveTimeField && data.arrival && data.arrival.time) arriveTimeField.value = data.arrival.time;
 
+      // Everything below used to only ever flash briefly in the status
+      // line, then vanish once the form closed — mergeFlightLookupNotes()
+      // (see this function's opening comment) now actually saves it
+      // into the leg's Notes field instead, so it's still there next
+      // time this leg is opened.
+      var noteLines = [];
+      noteLines.push(flightNumber + ' on ' + departDate + (data.airline ? ' (' + data.airline + ')' : ''));
+      if (data.aircraft) noteLines.push('Aircraft: ' + data.aircraft);
+      if (data.departure && (data.departure.terminal || data.departure.gate)) {
+        noteLines.push('Departs' + (data.departure.terminal ? ' terminal ' + data.departure.terminal : '') + (data.departure.gate ? ', gate ' + data.departure.gate : ''));
+      }
+      if (data.arrival && (data.arrival.terminal || data.arrival.gate)) {
+        noteLines.push('Arrives' + (data.arrival.terminal ? ' terminal ' + data.arrival.terminal : '') + (data.arrival.gate ? ', gate ' + data.arrival.gate : ''));
+      }
+      if (data.matchCount > 1) noteLines.push(data.matchCount + ' flights matched that number/date — this is the first match, double-check it\'s the right one.');
+      if (notesInput) notesInput.value = mergeFlightLookupNotes(notesInput.value, noteLines);
+
       var extras = [];
       if (data.departure && data.departure.terminal) extras.push('departs terminal ' + data.departure.terminal);
       if (data.departure && data.departure.gate) extras.push('gate ' + data.departure.gate);
       if (data.arrival && data.arrival.terminal) extras.push('arrives terminal ' + data.arrival.terminal);
-      var extrasText = extras.length ? ' (' + extras.join(', ') + ' — not saved, just FYI)' : '';
+      var extrasText = extras.length ? ' (' + extras.join(', ') + ' — saved to Notes)' : '';
       var matchNote = data.matchCount > 1 ? ' Note: ' + data.matchCount + ' flights matched that number/date — this is the first match, double-check it\'s the right one.' : '';
 
       if (currentStatusEl) {
@@ -1287,12 +1381,16 @@ function performFlightLookup(button) {
 // The result looks like "LHR — London Heathrow, London, United
 // Kingdom" — deliberately fuller than the old "CODE — Name" alone.
 // "From"/"To" feed straight into the Map tab's Nominatim geocoding
-// (see geocodeLookup()/mapLegsForTrip()), and a bare code or airport
-// name is often too little for Nominatim to place reliably, especially
-// for smaller/regional airports — city + country give it real address
-// context to work with, which is the whole point of splitting
-// COMMON_AIRPORTS into { code, name, city, country } in the first
-// place (see the comment atop data/airports.js).
+// (see geocodeLookup()/mapLegsForTrip()) — but that's now a fallback
+// path, only used for airports NOT in COMMON_AIRPORTS' curated
+// shortlist (which carries real coordinates — see
+// airportCoordsFromText() just below, and the comment atop
+// data/airports.js for the full story of why "From"/"To" text alone
+// wasn't reliable enough for Nominatim). This still matters for that
+// fallback case, and for just reading well in the itinerary either way,
+// so it still builds a fuller string than a bare code — a bare airport
+// code or name alone is often too little for Nominatim to place
+// reliably, especially for smaller/regional airports.
 //
 // City is skipped from the "place" part when it's already embedded in
 // the airport name (e.g. "London Heathrow" already says "London"), so
@@ -1312,6 +1410,44 @@ function airportDisplay(airport) {
   if (!codeName) return place;
   return place ? (codeName + ', ' + place) : codeName;
 }
+
+// Looks up a real, known coordinate for an IATA-style airport code from
+// COMMON_AIRPORTS (data/airports.js) — the actual fix for routes like
+// SFO–ICN not showing up on the Map tab. Returns null for anything not
+// in that curated shortlist (smaller/regional airports), which is the
+// signal to fall back to Nominatim text geocoding instead — see
+// openTransportForm()'s onSubmit, where this is tried first.
+function airportCoordsForCode(code) {
+  var found = COMMON_AIRPORTS.filter(function (a) { return a.code === code; })[0];
+  return (found && typeof found.lat === 'number' && typeof found.lng === 'number') ? { lat: found.lat, lng: found.lng } : null;
+}
+
+// Pulls the leading 3-letter airport code off a "CODE — Name, City,
+// Country" (or bare "CODE") string — the shape both the airport-list
+// datalist and a successful flight lookup fill "From"/"To" with — and
+// resolves it via airportCoordsForCode() above. Returns null for
+// anything that doesn't start with a plausible 3-letter code (a city
+// name typed for a non-Flight mode, say), which is fine — the caller
+// just falls back to geocoding that text instead.
+function airportCoordsFromText(text) {
+  var m = /^([A-Za-z]{3})\b/.exec((text || '').trim());
+  return m ? airportCoordsForCode(m[1].toUpperCase()) : null;
+}
+
+// Holds whatever real coordinates the most recent successful flight
+// lookup (in the currently-open transport form) returned for its
+// origin/destination — set in performFlightLookup() below, from
+// AeroDataBox's own location data (see src/worker.js's
+// airportSummary() — this is what withLocation=true on that API call
+// is for). This is the fallback used at save time (see
+// openTransportForm()'s onSubmit) when an airport ISN'T one of the
+// major hubs in COMMON_AIRPORTS: AeroDataBox knows the location of
+// pretty much every airport it can look up a flight for, even ones far
+// too minor to be worth hand-curating into this app's own shortlist.
+// Reset every time the transport form is (re)opened (see
+// openTransportForm()) so a stale lookup from a previously-edited leg
+// can never leak into a new one.
+var lastFlightLookupCoords = { from: null, to: null };
 
 function openAccommodationForm(trip, existing) {
   var initial = existing ? Object.assign({}, existing, {
@@ -1918,9 +2054,19 @@ function mapPointsForTrip(trip) {
 // from- and a to-location filled in. There's no fallback for a missing
 // location here (unlike activities above) since a transport leg with only
 // one end known can't usefully be drawn as a line.
+//
+// fromCoords/toCoords carry through whatever real coordinate was
+// resolved and saved at the time this leg was created/edited (see
+// resolveLegCoords() in openTransportForm) — null when none was found,
+// which is the signal for initMap() below to fall back to geocoding
+// fromQuery/toQuery via Nominatim exactly as it always did.
 function mapLegsForTrip(trip) {
   return (trip.transport || []).filter(function (t) { return t.fromLocation && t.toLocation; }).map(function (t) {
-    return { fromQuery: t.fromLocation, toQuery: t.toLocation, label: transportLabel(t), mode: t.mode };
+    return {
+      fromQuery: t.fromLocation, toQuery: t.toLocation, label: transportLabel(t), mode: t.mode,
+      fromCoords: (typeof t.fromLat === 'number' && typeof t.fromLng === 'number') ? { lat: t.fromLat, lng: t.fromLng } : null,
+      toCoords: (typeof t.toLat === 'number' && typeof t.toLng === 'number') ? { lat: t.toLat, lng: t.toLng } : null
+    };
   });
 }
 
@@ -2058,10 +2204,15 @@ async function initMap(trip) {
 
   for (var j = 0; j < legs.length; j++) {
     var leg = legs[j];
-    var fromCoords = await resolve(leg.fromQuery);
+    // A leg that already carries a real coordinate (see mapLegsForTrip)
+    // skips Nominatim entirely for that end — no network round-trip,
+    // no rate-limit wait, and no risk of the free-text lookup just not
+    // resolving (which is what made routes like SFO–ICN not show up
+    // here before). Only legs without one still go through resolve().
+    var fromCoords = leg.fromCoords || await resolve(leg.fromQuery);
     if (myGeneration !== mapState.generation) return;
     done++; updateStatus();
-    var toCoords = await resolve(leg.toQuery);
+    var toCoords = leg.toCoords || await resolve(leg.toQuery);
     if (myGeneration !== mapState.generation) return;
     done++; updateStatus();
     if (fromCoords && toCoords) {
