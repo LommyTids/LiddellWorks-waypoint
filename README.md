@@ -13,6 +13,49 @@ there the next time you visit.
   object whenever something changes. On load it fetches your saved data
   from `/WayPoint/api/data`; every time you add/edit/delete something, it
   POSTs the updated data back to that same endpoint.
+- **`public/WayPoint/data/`** — a handful of small `.js` files, each just
+  a plain list: `currencies.js`, `timezones.js`, `countries.js`,
+  `cities.js`, `airports.js`. These feed the autocomplete suggestions on
+  various form fields (e.g. typing a currency code or a country name).
+  They used to live inline inside `index.html` as large arrays, which
+  made that one file unwieldy to edit/upload as a single piece — they're
+  loaded via a few `<script src="/WayPoint/data/...">` tags near the top
+  of `index.html` instead, same as the vendored Leaflet library. Each
+  entry in `airports.js` also carries the airport's city, country, and
+  a real lat/lng coordinate — that coordinate is what makes a Flight
+  leg's "From"/"To" resolve reliably on the Map tab: the app matches
+  the airport code straight against this list at save time and uses
+  the coordinate directly, rather than asking OpenStreetMap's free
+  geocoder to correctly interpret text like "SFO — San Francisco,
+  United States" (which it sometimes just can't).
+- **`public/WayPoint/data/airports-full.js`** — the same idea as
+  `airports.js`, scaled way up: a coordinate for essentially every
+  airport with an IATA code worldwide (~7,900 of them), built from the
+  `airportsdata` Python package (PyPI), which bundles a comprehensive,
+  actively-maintained database sourced from OurAirports. It's a
+  background lookup table, not a visible suggestion list — when a
+  Flight leg's airport isn't one of `airports.js`'s ~126 curated major
+  hubs, this is checked next, before falling back to whatever AeroDataBox
+  itself returns from a "Look up" click, and only then to the
+  OpenStreetMap geocoder. Loaded with `defer` (it's the one sizeable
+  file in `data/`, ~550KB) since, unlike the others, nothing needs it
+  until a Flight leg is actually saved.
+- **Airport field suggestions and the live "resolved" hint.** The
+  From/To fields on a Flight leg are still a single plain text box
+  (not a dropdown or a two-step city-then-airport picker) — typing
+  starts you off with the ~126 curated major hubs as suggestions, the
+  same list as always. Once you've typed 2+ characters, though, the
+  suggestion list quietly widens to search the full ~7,900-airport
+  `airports-full.js` database by code, city, or name, capped to the
+  best 30 matches — so a secondary airport like Birmingham (BHX) or a
+  less common city spelling still shows up, without ever rendering
+  thousands of `<option>` elements into the page (that would be slow,
+  especially on a phone or tablet). Underneath the field, a small hint
+  updates live as you type: "✓ Mapped precisely for the Map tab" once
+  what you've typed resolves to a real airport coordinate, or "No
+  exact airport match yet" if it doesn't (yet) — so you always know
+  whether that leg will place accurately on the Map tab before you
+  even hit Save.
 - **`src/worker.js`** — the server side. It answers `/WayPoint/api/data`
   (GET to read your saved trips, POST to save them) by reading/writing a
   single JSON blob in Cloudflare KV; answers `/WayPoint/api/flight-lookup`
@@ -117,3 +160,19 @@ A handful of Playwright suites live outside this repo's deployed contents
   date, a clear message on a not-found/error response). The Worker's own
   call out to AeroDataBox is exercised against the real service once this
   is deployed with `AERODATABOX_API_KEY` set.
+- A dedicated test for Flight legs resolving on the Map tab via real
+  coordinates instead of free-text geocoding — the fix for routes like
+  SFO–ICN not showing up. It mocks Nominatim to fail every request and
+  checks the leg still draws (proving the coordinate came from
+  `COMMON_AIRPORTS` or AeroDataBox's own location data, never from
+  Nominatim), and separately checks that flight details from a "Look
+  up" click (aircraft, terminal, gate) land in the leg's Notes field
+  instead of just flashing in the status line and vanishing.
+- A dedicated test for the From/To field's live suggestions and
+  resolve-hint — checks the datalist starts with the curated ~126,
+  widens to surface a secondary airport (e.g. BHX) once typed, shows
+  the "✓ Mapped precisely" hint for a real match and "No exact
+  airport match yet" for made-up text, clears the hint when the field
+  is emptied, and never renders more than 30 suggestions at once even
+  when a broad search term (e.g. "london") matches more airports than
+  that.
