@@ -21,11 +21,15 @@ there the next time you visit.
   (`liddellworks.com/WayPoint*`) reaches this Worker, which KV namespace it
   uses, and where the static files live. Heavily commented — worth a skim.
 
-There is only one login gate, and it isn't in this code at all: **Cloudflare
-Access** sits in front of the whole `/WayPoint*` route and only lets your
-own email through. The app itself doesn't know or care about
-authentication — by the time a request reaches it, Access has already
-decided who's allowed in.
+The login gate is a single shared password, checked in `src/worker.js` via
+plain HTTP Basic Auth — the browser's own built-in username/password
+prompt, no custom login page to build. Anyone who knows the password gets
+in; there's no per-person account, which matches "share it with a few
+friends" rather than a strictly single-user gate. The password is never
+committed to this repo — it's stored as a Worker *secret* in the
+Cloudflare dashboard (step 3 below) and read at runtime as
+`env.WAYPOINT_PASSWORD`. Everyone who knows it shares the same one set of
+trips (see `src/worker.js` for more on that trade-off).
 
 ## One-time setup in the Cloudflare dashboard
 
@@ -45,12 +49,14 @@ actions Cloudflare requires a person to click through:
    anything else — but if the route isn't listed after step 1's deploy, add
    it manually there.
 
-3. **Set up the Access login gate.**
-   **Zero Trust** → **Access** → **Applications** → **Add an application**
-   → **Self-hosted**. Application domain: `liddellworks.com`, path:
-   `/WayPoint`. Add a policy with action **Allow**, and include your own
-   email address. That's the entire login screen — Cloudflare renders its
-   own login page for it, nothing here needs to change.
+3. **Set the shared password.**
+   Workers & Pages → **waypoint-app** → **Settings** → **Variables and
+   Secrets** → **Add** → name it exactly `WAYPOINT_PASSWORD`, type
+   **Secret** (not plain text, so it's encrypted and never shown again in
+   the dashboard), value: whatever password you want to share → **Save**.
+   That's the whole login setup — no separate identity provider or
+   per-person accounts to configure. To change the password later, edit
+   this same secret and save again; no code change or redeploy needed.
 
 The KV namespace the Worker reads/writes (`waypoint-data`) already exists in
 your Cloudflare account and is wired up in `wrangler.toml` — no separate
