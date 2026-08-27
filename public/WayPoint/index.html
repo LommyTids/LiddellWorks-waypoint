@@ -156,6 +156,12 @@ textarea { resize: vertical; min-height: 60px; }
 .field { margin-bottom: 14px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 3px; }
+.flight-lookup-row { display: flex; gap: 8px; }
+.flight-lookup-row input { flex: 1; }
+.flight-lookup-row .btn { flex-shrink: 0; white-space: nowrap; }
+.flight-lookup-status { font-size: 11.5px; color: var(--ink-faint); margin-top: 6px; min-height: 14px; }
+.flight-lookup-status.is-error { color: var(--danger); }
+.flight-lookup-status.is-ok { color: var(--ink-soft); }
 
 /* ---- 4b. Dashboard ------------------------------------------------ */
 .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
@@ -828,6 +834,22 @@ function fieldHtml(field, value, trip) {
         'name="' + field.key + '" value="' + esc(val) + '" ' + req +
         ' placeholder="' + esc(field.placeholder || 'e.g. LHR or Heathrow') + '">';
       break;
+    case 'flight-lookup':
+      // Just a text input plus a "Look up" button — clicking it calls
+      // our /WayPoint/api/flight-lookup endpoint (see the click
+      // delegation handler's 'lookup-flight' branch) and, on success,
+      // fills in Airline/From/To right in this same open form. The
+      // status line underneath reports what happened (looking up /
+      // not found / filled in), since there's nowhere else in a modal
+      // form to show that feedback.
+      inputHtml = '<div class="flight-lookup-row">' +
+        '<input type="text" maxlength="10" style="text-transform:uppercase" ' +
+        'name="' + field.key + '" value="' + esc(val) + '" ' + req +
+        ' placeholder="' + esc(field.placeholder || '') + '">' +
+        '<button type="button" class="btn" data-action="lookup-flight">Look up</button>' +
+        '</div>' +
+        '<div class="flight-lookup-status" id="flight-lookup-status"></div>';
+      break;
     case 'timezone':
       inputHtml = '<input type="text" list="timezone-list" maxlength="40" ' +
         'name="' + field.key + '" value="' + esc(val) + '" ' + req +
@@ -974,7 +996,7 @@ var ACTIVITY_FIELDS = [
 var TRANSPORT_MODE_FIELDS = {
   Flight: [
     { key: 'carrier', label: 'Airline', type: 'text', placeholder: 'e.g. British Airways' },
-    { key: 'flightNumber', label: 'Flight number', type: 'text', placeholder: 'e.g. BA15' },
+    { key: 'flightNumber', label: 'Flight number', type: 'flight-lookup', placeholder: 'e.g. BA15', wide: true },
     { key: 'seat', label: 'Seat', type: 'text' }
   ],
   Train: [
@@ -1175,6 +1197,88 @@ function openTransportForm(trip, existing) {
       });
     }
   });
+}
+
+// Handles the "Look up" button next to Flight number (see fieldHtml's
+// 'flight-lookup' case and the 'lookup-flight' click-delegation
+// branch below). Talks to our own /WayPoint/api/flight-lookup, which
+// proxies adsbdb.com — see src/worker.js's handleFlightLookup() for
+// why that's a server-side call rather than one made straight from
+// here. On success this fills in Airline/From/To directly in the
+// still-open form (not through updateState()/render() — the form is
+// mid-edit, and a full re-render would discard anything else typed
+// and reset field focus/scroll).
+function performFlightLookup(button) {
+  var form = document.getElementById('entity-form');
+  if (!form) return;
+  var flightInput = form.querySelector('[name="flightNumber"]');
+  var statusEl = document.getElementById('flight-lookup-status');
+  var flightNumber = (flightInput && flightInput.value || '').trim();
+
+  if (!flightNumber) {
+    if (statusEl) { statusEl.textContent = 'Type a flight number first.'; statusEl.className = 'flight-lookup-status is-error'; }
+    return;
+  }
+
+  button.disabled = true;
+  if (statusEl) { statusEl.textContent = 'Looking up ' + flightNumber + '…'; statusEl.className = 'flight-lookup-status'; }
+
+  fetch('/WayPoint/api/flight-lookup?flightNumber=' + encodeURIComponent(flightNumber))
+    .then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, body: body };
+      });
+    })
+    .then(function (result) {
+      // The form may have been closed (or switched away from Flight
+      // mode) while the request was in flight — re-check both before
+      // touching anything.
+      var currentForm = document.getElementById('entity-form');
+      if (!currentForm || currentForm !== form) return;
+      var currentStatusEl = document.getElementById('flight-lookup-status');
+
+      if (!result.ok) {
+        if (currentStatusEl) {
+          currentStatusEl.textContent = (result.body && result.body.error) || 'Flight lookup failed.';
+          currentStatusEl.className = 'flight-lookup-status is-error';
+        }
+        return;
+      }
+
+      var data = result.body;
+      var carrierInput = currentForm.querySelector('[name="carrier"]');
+      var fromInput = currentForm.querySelector('[name="fromLocation"]');
+      var toInput = currentForm.querySelector('[name="toLocation"]');
+      if (carrierInput && data.airline) carrierInput.value = data.airline;
+      if (fromInput && data.origin) fromInput.value = airportDisplay(data.origin);
+      if (toInput && data.destination) toInput.value = airportDisplay(data.destination);
+
+      if (currentStatusEl) {
+        currentStatusEl.textContent = 'Filled in from adsbdb.com — double-check before saving (this is the flight\'s usual route, not confirmed for your specific date).';
+        currentStatusEl.className = 'flight-lookup-status is-ok';
+      }
+    })
+    .catch(function () {
+      var currentStatusEl = document.getElementById('flight-lookup-status');
+      if (currentStatusEl) {
+        currentStatusEl.textContent = 'Couldn\'t reach the flight lookup service — check your connection and try again.';
+        currentStatusEl.className = 'flight-lookup-status is-error';
+      }
+    })
+    .finally(function () {
+      var currentButton = document.querySelector('[data-action="lookup-flight"]');
+      if (currentButton) currentButton.disabled = false;
+    });
+}
+
+// Formats one of handleFlightLookup()'s airport objects the same way
+// the airport-list datalist options look ("CODE — Name"), so a
+// looked-up value reads consistently with one a viewer picked by hand
+// — and geocodes just as well on the Map tab.
+function airportDisplay(airport) {
+  if (!airport.code && !airport.name) return '';
+  if (airport.code && airport.name) return airport.code + ' — ' + airport.name;
+  return airport.code || airport.name;
 }
 
 function openAccommodationForm(trip, existing) {
@@ -2123,6 +2227,7 @@ document.addEventListener('click', function (e) {
     }
     return;
   }
+  if (action === 'lookup-flight') { performFlightLookup(el); return; }
   if (action === 'new-trip') { openTripForm(); return; }
   if (action === 'edit-trip') { openTripForm(byId(state.trips, el.dataset.id)); return; }
   if (action === 'delete-trip') { deleteTrip(el.dataset.id); return; }
