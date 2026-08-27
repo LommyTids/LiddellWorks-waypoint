@@ -117,7 +117,23 @@ function waitForServer(url, tries) {
     console.log('6. ZZZ (unknown airport) toLat came from AeroDataBox location fallback:', savedLeg2.toLat === 12.3456, savedLeg2.toLat);
     console.log('   Saved notes carried through onto the record:', /Somewhere/.test(savedLeg2.notes) === false && /Aircraft/.test(savedLeg2.notes));
 
-    // ---- Now check the Map tab: both legs should draw fully, and
+    // ---- Leg 3: BHX -> AGP — two SECONDARY airports, in neither
+    // COMMON_AIRPORTS' curated 126 nor exercised via a flight lookup.
+    // This is what the new data/airports-full.js (~7,900 airports) is
+    // actually for — should still resolve via AIRPORT_DB, no lookup,
+    // no Nominatim. ----
+    await page.click('[data-action="new-transport"]');
+    await page.fill('input[name="fromLocation"]', 'BHX');
+    await page.fill('input[name="toLocation"]', 'AGP');
+    await page.fill('input[name="departDate"]', '2027-07-05');
+    await page.fill('input[name="arriveDate"]', '2027-07-05');
+    await page.click('#entity-form button[type="submit"]');
+    await page.waitForTimeout(100);
+    const savedLeg3 = await page.evaluate(() => currentTrip().transport[2]);
+    console.log('7. BHX (secondary airport, not curated) resolved via AIRPORT_DB:', typeof savedLeg3.fromLat === 'number', savedLeg3.fromLat);
+    console.log('8. AGP (secondary airport, not curated) resolved via AIRPORT_DB:', typeof savedLeg3.toLat === 'number', savedLeg3.toLat);
+
+    // ---- Now check the Map tab: all three legs should draw fully, and
     // Nominatim should never have been called at all. ----
     await page.click('[data-action="switch-tab"][data-tab="map"]');
     await page.waitForFunction(() => {
@@ -125,13 +141,13 @@ function waitForServer(url, tries) {
       return el && /placed on the map/.test(el.textContent);
     }, { timeout: 15000 });
     const mapStatusText = await page.locator('#map-status').textContent();
-    console.log('7. Map status:', mapStatusText);
-    console.log('8. Both legs placed, none missing:', /^All locations placed on the map\.$/.test(mapStatusText.trim()));
+    console.log('9. Map status:', mapStatusText);
+    console.log('10. All three legs placed, none missing:', /^All locations placed on the map\.$/.test(mapStatusText.trim()));
 
     const transportLayerCount = await page.evaluate(() => mapState.layers.transport.getLayers().length);
-    console.log('9. Transport layer has 4 entries (2 lines + 2 arrows):', transportLayerCount === 4, transportLayerCount);
+    console.log('11. Transport layer has 6 entries (3 lines + 3 arrows):', transportLayerCount === 6, transportLayerCount);
 
-    console.log('10. Nominatim was never called (both legs used known coordinates):', nominatimCalls === 0, nominatimCalls);
+    console.log('12. Nominatim was never called (all three legs used known coordinates):', nominatimCalls === 0, nominatimCalls);
 
     console.log('\nPage errors:', errors.length ? errors : 'NONE');
     await browser.close();
