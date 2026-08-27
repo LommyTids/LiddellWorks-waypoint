@@ -1,0 +1,52 @@
+# ==============================================================================
+# Waypoint — Cloudflare Worker configuration
+# ------------------------------------------------------------------------------
+# This file tells Cloudflare how to run and route the Waypoint app. You
+# shouldn't need to edit it by hand for normal use — it's read automatically
+# whenever the connected GitHub repo is deployed (see the repo's README.md
+# for the one-time dashboard setup that wires that up).
+#
+# What each section below does, briefly:
+#   name / main            -> identifies this Worker and its entry-point code
+#   routes                 -> *this* is what makes liddellworks.com/WayPoint*
+#                              reach this Worker, without touching any other
+#                              route/Worker already serving the rest of the site
+#   [assets]                -> serves the static app (public/WayPoint/index.html)
+#                              for any request our own code doesn't handle
+#   [[kv_namespaces]]       -> the Cloudflare KV store this Worker uses to save
+#                              trip data between visits (see src/worker.js)
+# ==============================================================================
+
+name = "waypoint-app"
+main = "src/worker.js"
+compatibility_date = "2026-08-27"
+
+# Only requests matching this exact pattern are sent to this Worker. Any
+# other path on liddellworks.com (e.g. "/", "/blog", etc.) is untouched and
+# keeps going to whatever already serves it — this route is intentionally
+# scoped as narrowly as possible so adding Waypoint can't break anything
+# else on the site.
+routes = [
+  { pattern = "liddellworks.com/WayPoint*", zone_name = "liddellworks.com" }
+]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# Every request that matches our route above is sent to this Worker's own
+# code FIRST (see src/worker.js), which handles /WayPoint/api/* itself and
+# forwards everything else to these static assets. Without this setting,
+# Cloudflare would sometimes serve static files directly without ever
+# running our code, which would break the API routes.
+run_worker_first = true
+# Lets a request for "/WayPoint" or "/WayPoint/" both correctly find
+# public/WayPoint/index.html, the same way a normal static web server would.
+html_handling = "auto-trailing-slash"
+
+[[kv_namespaces]]
+# The name your Worker code uses to reach this store (see `env.WAYPOINT_KV`
+# in src/worker.js). This namespace was already created for you — its ID
+# below points at the real "waypoint-data" namespace in your Cloudflare
+# account, it doesn't need to be created again.
+binding = "WAYPOINT_KV"
+id = "2224928fef98456992e12b1a4dba3295"

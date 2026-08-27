@@ -1,0 +1,13 @@
+{
+  "name": "waypoint-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Waypoint travel planner, self-hosted on liddellworks.com/WayPoint via a Cloudflare Worker + KV.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

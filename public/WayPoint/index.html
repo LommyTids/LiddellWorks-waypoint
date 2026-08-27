@@ -1,0 +1,1777 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waypoint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   WAYPOINT — a multi-trip travel planner
+   ------------------------------------------------------------
+   This stylesheet is organised top-to-bottom as:
+     1. Design tokens (colors/type/spacing) for light + dark mode
+     2. Reset & base element styles
+     3. Layout shell (top bar, page container)
+     4. Components (cards, tabs, timeline, forms, modal, toast)
+   ============================================================ */
+
+/* ---- 1. Design tokens --------------------------------------- */
+:root {
+  --bg: #eef0ec;
+  --surface: #ffffff;
+  --surface-2: #e3e6dd;
+  --ink: #1a2233;
+  --ink-soft: #56607a;
+  --ink-faint: #838d9e;
+  --line: #d5d9cd;
+  --accent: #a6752b;
+  --accent-ink: #ffffff;
+  --accent-soft: #f3e6d2;
+  --teal: #1f6f63;
+  --teal-soft: #dcefe9;
+  --danger: #b24444;
+  --danger-soft: #f6e1df;
+  --success: #2f7d4f;
+  --success-soft: #dff0e3;
+  --shadow: 0 1px 2px rgba(26,34,51,.06), 0 8px 24px -12px rgba(26,34,51,.18);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Work Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161c;
+    --surface: #1b212b;
+    --surface-2: #232b37;
+    --ink: #edefea;
+    --ink-soft: #a2acbe;
+    --ink-faint: #6e788c;
+    --line: #2c3542;
+    --accent: #d9a24b;
+    --accent-ink: #1a1206;
+    --accent-soft: #3a2d15;
+    --teal: #4fbfae;
+    --teal-soft: #16302c;
+    --danger: #e08585;
+    --danger-soft: #3a2020;
+    --success: #6fcb94;
+    --success-soft: #1c3527;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161c;
+  --surface: #1b212b;
+  --surface-2: #232b37;
+  --ink: #edefea;
+  --ink-soft: #a2acbe;
+  --ink-faint: #6e788c;
+  --line: #2c3542;
+  --accent: #d9a24b;
+  --accent-ink: #1a1206;
+  --accent-soft: #3a2d15;
+  --teal: #4fbfae;
+  --teal-soft: #16302c;
+  --danger: #e08585;
+  --danger-soft: #3a2020;
+  --success: #6fcb94;
+  --success-soft: #1c3527;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+}
+
+/* ---- 2. Reset & base ------------------------------------------ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+a { color: var(--teal); }
+button { font-family: inherit; }
+input, select, textarea { font-family: inherit; font-size: 14px; }
+.icon { width: 1em; height: 1em; display: inline-block; vertical-align: -0.15em; }
+::selection { background: var(--accent-soft); }
+
+/* ---- 3. Layout shell -------------------------------------------- */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 12px 20px;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 700; font-size: 19px; letter-spacing: .01em; }
+.brand .icon { width: 22px; height: 22px; color: var(--accent); }
+.save-indicator { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); min-width: 90px; text-align: right; }
+.save-indicator[data-kind="saving"] { color: var(--ink-soft); }
+.save-indicator[data-kind="error"] { color: var(--danger); }
+.save-indicator[data-kind="readonly"] { color: var(--danger); }
+.save-indicator[data-kind="saved"] { color: var(--success); }
+
+.page { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
+
+/* ---- 4a. Buttons & form controls --------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  border-radius: 999px; padding: 8px 16px; font-size: 13.5px; font-weight: 500;
+  cursor: pointer; transition: border-color .15s, background .15s;
+}
+.btn:hover { border-color: var(--ink-faint); }
+.btn-primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn-primary:hover { opacity: .9; border-color: var(--ink); }
+.btn-accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn-danger { background: transparent; color: var(--danger); border-color: var(--danger-soft); }
+.btn-danger:hover { background: var(--danger-soft); }
+.btn-icon { padding: 7px; border-radius: 8px; }
+.btn-ghost { border-color: transparent; background: transparent; }
+.btn-ghost:hover { background: var(--surface-2); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 4px; }
+input[type="text"], input[type="number"], input[type="date"], input[type="time"], select, textarea {
+  width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink);
+}
+textarea { resize: vertical; min-height: 60px; }
+.field { margin-bottom: 14px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 3px; }
+
+/* ---- 4b. Dashboard ------------------------------------------------ */
+.section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+.section-head h1 { font-size: 26px; }
+.trip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.trip-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px; cursor: pointer; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px;
+  transition: transform .12s;
+}
+.trip-card:hover { transform: translateY(-2px); }
+.trip-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.trip-card h3 { font-size: 18px; }
+.trip-dates { font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); }
+.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+.pill-upcoming { background: var(--teal-soft); color: var(--teal); }
+.pill-ongoing { background: var(--accent-soft); color: var(--accent); }
+.pill-past { background: var(--surface-2); color: var(--ink-faint); }
+.trip-stats { display: flex; gap: 14px; font-size: 12.5px; color: var(--ink-soft); flex-wrap: wrap; }
+.trip-stats b { color: var(--ink); font-family: var(--font-mono); font-weight: 600; }
+.card-actions { display: flex; gap: 4px; }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--ink-soft); border: 1px dashed var(--line); border-radius: var(--radius); }
+.empty-state .icon { width: 34px; height: 34px; color: var(--ink-faint); margin-bottom: 10px; }
+.empty-state h3 { margin-bottom: 6px; color: var(--ink); }
+.empty-state p { max-width: 440px; margin: 0 auto; font-size: 13.5px; }
+.intro-note { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; font-size: 13px; color: var(--ink-soft); }
+.intro-note strong { color: var(--ink); }
+
+/* ---- 4c. Trip header & tabs ---------------------------------------- */
+.trip-header { margin-bottom: 22px; }
+.back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--ink-soft); background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 10px; }
+.back-link .icon { width: 14px; height: 14px; transform: rotate(180deg); }
+.trip-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.trip-title-row h1 { font-size: 28px; }
+.trip-meta { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; font-size: 13px; color: var(--ink-soft); }
+.trip-meta b { font-family: var(--font-mono); color: var(--ink); }
+.warn-link { color: var(--danger); cursor: pointer; background: none; border: none; font-size: 13px; padding: 0; text-decoration: underline; }
+
+.tabbar { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 20px 0 22px; overflow-x: auto; }
+.tab-btn {
+  padding: 9px 14px; background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--ink-soft); font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
+.tab-panel-head h2 { font-size: 18px; }
+
+/* ---- 4d. Item list rows (destinations/activities/transport/etc) ------ */
+.item-list { display: flex; flex-direction: column; gap: 10px; }
+.item-row {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 13px 14px; display: flex; gap: 12px; align-items: flex-start;
+}
+.item-row .item-icon {
+  width: 34px; height: 34px; border-radius: 9px; background: var(--surface-2); color: var(--ink-soft);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.item-row .item-icon .icon { width: 17px; height: 17px; }
+.item-main { flex: 1; min-width: 0; }
+.item-title-row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.item-title { font-weight: 600; font-size: 14.5px; }
+.item-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.item-tags { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.tag { font-size: 11px; font-family: var(--font-mono); color: var(--ink-soft); background: var(--surface-2); border-radius: 6px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 4px; }
+.tag .icon { width: 11px; height: 11px; }
+.tag-cost { color: var(--accent); background: var(--accent-soft); }
+.item-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.copy-btn { background: none; border: none; color: var(--ink-faint); cursor: pointer; padding: 2px; display: inline-flex; }
+.copy-btn:hover { color: var(--ink); }
+.copy-btn .icon { width: 12px; height: 12px; }
+
+/* ---- 4e. Timeline ------------------------------------------------- */
+.day-card { display: flex; gap: 14px; margin-bottom: 22px; }
+.day-rail { display: flex; flex-direction: column; align-items: center; width: 46px; flex-shrink: 0; }
+.day-num { font-family: var(--font-mono); font-weight: 600; font-size: 15px; background: var(--ink); color: var(--surface); width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.day-line { flex: 1; width: 2px; background: var(--line); margin-top: 4px; }
+.day-body { flex: 1; min-width: 0; padding-bottom: 4px; }
+.day-heading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.day-heading h3 { font-size: 15.5px; }
+.day-areas { display: flex; gap: 6px; flex-wrap: wrap; }
+.area-chip { font-size: 11px; background: var(--teal-soft); color: var(--teal); border-radius: 999px; padding: 2px 9px; display: inline-flex; align-items: center; gap: 4px; }
+.day-events { display: flex; flex-direction: column; gap: 8px; }
+.event-row { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
+.event-time { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-soft); width: 44px; flex-shrink: 0; padding-top: 1px; }
+.event-icon { width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.event-icon .icon { width: 14px; height: 14px; }
+.event-icon.k-activity { background: var(--accent-soft); color: var(--accent); }
+.event-icon.k-transport { background: var(--teal-soft); color: var(--teal); }
+.event-icon.k-stay { background: var(--surface-2); color: var(--ink-soft); }
+.event-main { flex: 1; min-width: 0; }
+.event-title { font-weight: 600; font-size: 13.5px; }
+.event-sub { font-size: 12px; color: var(--ink-soft); margin-top: 1px; }
+.overnight-note { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-faint); margin-top: 8px; padding-left: 2px; }
+.overnight-note .icon { width: 13px; height: 13px; }
+.no-day-events { font-size: 12.5px; color: var(--ink-faint); font-style: italic; padding: 4px 0; }
+
+/* ---- 4f. Expenses table ------------------------------------------- */
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 10px; margin-bottom: 18px; }
+.stat-tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; }
+.stat-tile .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-faint); font-weight: 600; }
+.stat-tile .stat-value { font-family: var(--font-mono); font-size: 19px; font-weight: 600; margin-top: 4px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-faint); background: var(--surface-2); font-weight: 600; }
+td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: none; }
+.rate-missing { color: var(--danger); font-size: 11.5px; }
+.rate-table label { margin: 0; }
+.rate-table .field-row { grid-template-columns: 1fr 1fr; align-items: end; }
+
+/* ---- 4g. Modal & toast --------------------------------------------- */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(15,18,24,.5); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 100; }
+.modal { background: var(--surface); border-radius: var(--radius); max-width: 520px; width: 100%; box-shadow: var(--shadow); }
+.modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.modal-head h2 { font-size: 17px; }
+.modal-body { padding: 18px 20px; max-height: 65vh; overflow-y: auto; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line); }
+.confirm-text { font-size: 14px; color: var(--ink-soft); }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 10px 18px; border-radius: 999px; font-size: 13px; box-shadow: var(--shadow); z-index: 200; opacity: 0; transition: opacity .2s; }
+.toast.show { opacity: 1; }
+
+@media (max-width: 640px) {
+  .field-row { grid-template-columns: 1fr; }
+  .trip-title-row h1 { font-size: 23px; }
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-2 6-6 2 2-6z"/></svg>
+    Waypoint
+  </div>
+  <span id="save-indicator" class="save-indicator"></span>
+</div>
+<div class="page">
+  <div id="app"></div>
+</div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+
+<script>
+/* ================================================================
+   WAYPOINT — application logic
+   ----------------------------------------------------------------
+   This file has no build step and no framework: it is plain
+   JavaScript that (a) keeps all trip data in one JS object called
+   `state`, (b) turns that object into HTML strings whenever
+   something changes (the render* functions), and (c) saves the
+   updated object to our own tiny JSON API (see loadInitialState()
+   and persist() below), which stores it in Cloudflare KV — see
+   src/worker.js in this same repo for the server side of that API —
+   so the trips are still here next time you open the page. Sections
+   below are ordered so each one only depends on the ones above it.
+   ================================================================ */
+
+/* ---------- 1. Small constants ---------------------------------- */
+
+var COMMON_CURRENCIES = ['GBP','USD','EUR','JPY','AUD','CAD','CHF','CNY','HKD',
+  'NZD','SGD','THB','VND','INR','MXN','ZAR','AED','TRY','KRW','IDR','MYR',
+  'PHP','BRL','SEK','NOK','DKK','PLN','CZK','HUF','EGP','MAD'];
+
+var WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+var TRANSPORT_MODES = ['Flight','Train','Bus','Car','Ferry','Other'];
+var EXPENSE_CATEGORIES = ['Food & drink','Transport','Accommodation','Activities','Shopping','Other'];
+
+// A curated set of IANA timezone names covering common travel
+// destinations. The destination form's timezone field offers these as
+// suggestions but still accepts any free-text value.
+var COMMON_TIMEZONES = ['UTC','Europe/London','Europe/Dublin','Europe/Lisbon','Europe/Paris','Europe/Madrid',
+  'Europe/Berlin','Europe/Amsterdam','Europe/Zurich','Europe/Rome','Europe/Athens','Europe/Istanbul','Europe/Moscow',
+  'America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Anchorage',
+  'America/Toronto','America/Vancouver','America/Mexico_City','America/Bogota','America/Lima',
+  'America/Sao_Paulo','America/Buenos_Aires','America/Santiago',
+  'Asia/Dubai','Asia/Karachi','Asia/Kolkata','Asia/Dhaka','Asia/Bangkok','Asia/Jakarta','Asia/Singapore',
+  'Asia/Kuala_Lumpur','Asia/Hong_Kong','Asia/Shanghai','Asia/Taipei','Asia/Seoul','Asia/Tokyo',
+  'Asia/Manila','Asia/Ho_Chi_Minh',
+  'Australia/Perth','Australia/Adelaide','Australia/Sydney','Australia/Brisbane',
+  'Pacific/Auckland','Pacific/Fiji','Pacific/Honolulu',
+  'Africa/Cairo','Africa/Johannesburg','Africa/Nairobi','Africa/Lagos','Indian/Maldives'];
+
+// Country names for the destination form's autocomplete. Not an
+// official ISO list — just plain English names a traveller would
+// type — offered as suggestions via a datalist, so any value the
+// viewer actually types is still accepted.
+var COMMON_COUNTRIES = ['Afghanistan','Albania','Algeria','Andorra','Angola','Argentina','Armenia','Australia',
+  'Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan',
+  'Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cambodia',
+  'Cameroon','Canada','Cape Verde','Chad','Chile','China','Colombia','Costa Rica','Croatia','Cuba','Cyprus',
+  'Czech Republic','Democratic Republic of the Congo','Denmark','Djibouti','Dominican Republic','Ecuador','Egypt',
+  'El Salvador','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany',
+  'Ghana','Greece','Greenland','Guatemala','Guinea','Guyana','Haiti','Honduras','Hong Kong','Hungary','Iceland',
+  'India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Ivory Coast','Jamaica','Japan','Jordan',
+  'Kazakhstan','Kenya','Kosovo','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Liberia','Libya','Liechtenstein',
+  'Lithuania','Luxembourg','Macau','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Mauritius',
+  'Mexico','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nepal',
+  'Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Macedonia','Norway','Oman','Pakistan','Panama',
+  'Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Republic of the Congo',
+  'Romania','Russia','Rwanda','Saudi Arabia','Senegal','Serbia','Seychelles','Singapore','Slovakia','Slovenia',
+  'Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden',
+  'Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Trinidad and Tobago',
+  'Tunisia','Turkey','Turkmenistan','Uganda','Ukraine','United Arab Emirates','United Kingdom',
+  'United States','Uruguay','Uzbekistan','Vanuatu','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
+
+/* ---------- 2. Generic utilities --------------------------------- */
+
+// Turns any value into a short random-ish id, unique enough for a
+// personal planner (not a distributed database, so this is plenty).
+function newId() {
+  return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+// Escapes text so it is always safe to drop straight into an HTML
+// template string, whether it ends up as element text or inside a
+// quoted attribute. Without this, a note containing e.g. `<` or `"`
+// could break the page's markup.
+function esc(value) {
+  return String(value === undefined || value === null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function byId(list, id) {
+  return (list || []).find(function (x) { return x.id === id; });
+}
+
+// Deep-clones the app state before we mutate it, so a half-finished
+// edit never leaks into the UI before it's actually saved.
+function cloneState(s) {
+  if (typeof structuredClone === 'function') return structuredClone(s);
+  return JSON.parse(JSON.stringify(s));
+}
+
+function slug(str) {
+  return String(str || 'trip').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'trip';
+}
+
+/* ---- date/time helpers ----
+   All dates are stored as plain "YYYY-MM-DD" strings and combined
+   date+times as "YYYY-MM-DDTHH:MM". We deliberately avoid feeding
+   these into `new Date("YYYY-MM-DD")` for display, because that
+   parses as UTC midnight and then a *local* timezone conversion can
+   silently roll the displayed date backwards a day. Working with
+   the UTC getters keeps every user's timeline showing the date they
+   actually typed in, no matter where they are. */
+
+function addDays(dateStr, n) {
+  var parts = dateStr.split('-').map(Number);
+  var dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+}
+
+function formatDateHeading(dateStr) {
+  var parts = dateStr.split('-').map(Number);
+  var dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  return WEEKDAYS[dt.getUTCDay()] + ' ' + parts[2] + ' ' + MONTHS[parts[1] - 1] + ' ' + parts[0];
+}
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return '';
+  var parts = dateStr.split('-').map(Number);
+  return parts[2] + ' ' + MONTHS[parts[1] - 1] + ' ' + parts[0];
+}
+
+function dateOnly(iso) { return iso ? iso.slice(0, 10) : ''; }
+function timeOnly(iso) { return (iso && iso.length >= 16) ? iso.slice(11, 16) : ''; }
+
+function combineDateTime(date, time) {
+  if (!date) return '';
+  return date + 'T' + (time || '00:00');
+}
+function splitDateTime(iso) {
+  return { date: dateOnly(iso), time: timeOnly(iso) };
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/* ---- currency helpers ---- */
+
+// Converts an amount in `currency` into the trip's home currency.
+// A per-item `rateOverride` always wins; otherwise we fall back to
+// the trip's one fixed rate for that currency (set in Settings).
+// `known` is false when neither is available, so callers can flag
+// the amount instead of silently treating it as zero.
+function homeValue(trip, amount, currency, rateOverride) {
+  var amt = Number(amount) || 0;
+  if (!currency || currency === trip.homeCurrency) return { value: amt, rateUsed: 1, known: true };
+  var rate = (rateOverride !== undefined && rateOverride !== null && rateOverride !== '')
+    ? Number(rateOverride)
+    : trip.currencyRates[currency];
+  if (rate === undefined || rate === null || isNaN(rate)) return { value: 0, rateUsed: null, known: false };
+  return { value: amt * rate, rateUsed: rate, known: true };
+}
+
+function money(amount, currency) {
+  var n = Number(amount) || 0;
+  return (currency || '') + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Turns an IANA timezone name (e.g. "Asia/Bangkok") into a short
+// current UTC-offset label (e.g. "GMT+7") using the browser's own
+// timezone database — no network call involved. Returns '' for a
+// blank or unrecognised timezone rather than throwing, since this is
+// only ever used for a friendly hint next to the name the user typed.
+function tzOffsetLabel(tz) {
+  if (!tz) return '';
+  try {
+    var parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' }).formatToParts(new Date());
+    var part = parts.find(function (p) { return p.type === 'timeZoneName'; });
+    return part ? part.value : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/* ---------- 3. Icons ---------------------------------------------
+   Small inline SVGs built from simple primitives (circles/lines/
+   short paths) so the page needs no icon font or external asset. */
+
+var ICONS = {
+  pin: '<path d="M12 21s7-7.58 7-12A7 7 0 1 0 5 9c0 4.42 7 12 7 12z"/><circle cx="12" cy="9" r="2.3"/>',
+  ticket: '<path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/>',
+  plane: '<path d="M2 13l20-9-9 20-2-8-8-3z"/>',
+  train: '<rect x="5" y="3" width="14" height="13" rx="3"/><circle cx="8.5" cy="19" r="1.2"/><circle cx="15.5" cy="19" r="1.2"/><line x1="5" y1="11" x2="19" y2="11"/>',
+  bus: '<rect x="3" y="5" width="18" height="11" rx="2"/><line x1="3" y1="11" x2="21" y2="11"/><circle cx="7.5" cy="19" r="1.3"/><circle cx="16.5" cy="19" r="1.3"/>',
+  ferry: '<path d="M4 16l1.5 4h13L20 16"/><path d="M6 16V8h12v8"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="12" y1="3" x2="16" y2="5"/>',
+  car: '<path d="M4 16V11l2-5h12l2 5v5"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="7.5" cy="17.5" r="1.4"/><circle cx="16.5" cy="17.5" r="1.4"/>',
+  bed: '<path d="M3 18v-7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7"/><path d="M3 15h18"/><path d="M7 11V8a1 1 0 0 1 1-1h3"/>',
+  user: '<circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+  receipt: '<path d="M6 3h12v18l-2-1.3L14 21l-2-1.3L10 21l-2-1.3L6 21z"/><line x1="8.5" y1="8" x2="15.5" y2="8"/><line x1="8.5" y1="11.5" x2="15.5" y2="11.5"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/>',
+  plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  edit: '<path d="M4 20l1-4.5L15.5 5 19 8.5 8.5 19 4 20z"/>',
+  trash: '<path d="M5 7h14"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/>',
+  close: '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>',
+  arrowRight: '<line x1="4" y1="12" x2="20" y2="12"/><polyline points="14 6 20 12 14 18"/>',
+  back: '<line x1="20" y1="12" x2="4" y2="12"/><polyline points="10 6 4 12 10 18"/>',
+  download: '<path d="M12 3v13"/><polyline points="6 11 12 17 18 11"/><path d="M4 20h16"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>',
+  compass: '<circle cx="12" cy="12" r="9"/><path d="M15 9l-2 6-6 2 2-6z"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
+  map: '<path d="M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z"/><line x1="9" y1="4" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="20"/>',
+  wallet: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16" cy="14" r="1.2"/>',
+  users: '<circle cx="9" cy="8" r="3"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 8.2a3 3 0 1 1 0 5.8"/><path d="M17.5 14.3c2 .5 3.3 2.1 3.3 4.7"/>'
+};
+
+// Returns the icon key that best represents a transport mode, so the
+// timeline and transport list show a plane for flights, a train icon
+// for trains, and so on.
+function transportIconKey(mode) {
+  var m = (mode || '').toLowerCase();
+  if (m === 'flight') return 'plane';
+  if (m === 'train') return 'train';
+  if (m === 'bus') return 'bus';
+  if (m === 'car') return 'car';
+  if (m === 'ferry') return 'ferry';
+  return 'arrowRight';
+}
+
+// One-line label for a transport leg, e.g. "Flight BA15: LHR → HND" or
+// plain "Car: Hotel → Airport" for modes with no flight number. Shared
+// by the Transport tab, the Timeline and the expense ledger so the
+// same leg always reads the same way everywhere.
+function transportLabel(t) {
+  return (t.mode || 'Transport') + (t.flightNumber ? ' ' + t.flightNumber : '') + ': ' + t.fromLocation + ' → ' + t.toLocation;
+}
+
+function icon(name, extraClass) {
+  var body = ICONS[name] || ICONS.pin;
+  return '<svg class="icon ' + (extraClass || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>';
+}
+
+/* ---------- 4. Application state & persistence --------------------
+   `state` holds every trip and is the single source of truth for
+   everything on screen. `currentView` / `currentTripId` / `currentTab`
+   track where the viewer is right now (dashboard vs. a trip, which
+   tab) — that's per-viewer navigation, not trip data, so it is kept
+   out of `state` and never saved into the page. */
+
+var state = { trips: [] };
+var currentView = 'dashboard';
+var currentTripId = null;
+var currentTab = 'timeline';
+
+// Self-hosted version: state no longer lives inside the page's own HTML
+// (that was the Claude Artifact "publish" trick). Instead, the very
+// first thing this page does (see the init() function at the bottom of
+// this file) is fetch() the saved data from our own tiny JSON API,
+// which is backed by Cloudflare KV (see src/worker.js in this repo).
+// This function does the fetching and always resolves to a valid
+// { trips: [...] } object, even if the request fails, so the rest of
+// the app never has to worry about a missing or malformed response.
+async function loadInitialState() {
+  try {
+    var res = await fetch('/WayPoint/api/data', { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error('Server responded with status ' + res.status);
+    var parsed = await res.json();
+    if (!parsed || typeof parsed !== 'object') parsed = {};
+    if (!parsed.trips) parsed.trips = [];
+    return parsed;
+  } catch (e) {
+    console.error('Waypoint: could not load saved data from the server', e);
+    showToastSafe('Could not load your saved trips — starting from a blank slate. Refresh to try again.');
+    return { trips: [] };
+  }
+}
+
+// showToast() itself isn't defined yet at the point loadInitialState()
+// first runs (script order), and toast-root may not exist yet either if
+// something goes very wrong very early — this tiny wrapper just makes
+// sure a failed load never throws a *second*, more confusing error on
+// top of the first one.
+function showToastSafe(message) {
+  try { showToast(message); } catch (e) { console.error(message); }
+}
+
+
+function setSaveStatus(kind, message) {
+  var el = document.getElementById('save-indicator');
+  if (!el) return;
+  el.dataset.kind = kind;
+  var labels = { saving: 'Saving…', saved: 'Saved', error: message || 'Save failed', readonly: 'Read-only', unsaved: message || 'Not saved' };
+  el.textContent = labels[kind] || '';
+}
+
+// Every mutation in the app goes through here: `mutator` receives a
+// deep clone of the current state and edits it in place (push into an
+// array, change a field, etc). We then hand that clone to persist(),
+// which saves it to the server (see below). Using a clone means a save
+// that fails partway through never leaves the on-screen state
+// half-changed.
+function updateState(mutator) {
+  var next = cloneState(state);
+  mutator(next);
+  persist(next);
+}
+
+// Every mutation in the app goes through updateState() -> persist():
+// updateState() hands persist() a full, already-mutated copy of the
+// trips data, and persist() is the only place that talks to the
+// network. It (a) swaps it in as the live `state`, (b) re-renders
+// immediately so the UI feels instant, and (c) saves it to the server
+// in the background, updating the little "Saved" / "Saving…" label in
+// the top bar so you can always tell whether your last change actually
+// made it to the server.
+async function persist(newState) {
+  state = newState;
+  try {
+    sessionStorage.setItem('waypoint-nav', JSON.stringify({ view: currentView, tripId: currentTripId, tab: currentTab }));
+  } catch (e) { /* sessionStorage may be unavailable in some browsers/private modes; nav just won't be restored */ }
+
+  render();
+
+  setSaveStatus('saving');
+  try {
+    var res = await fetch('/WayPoint/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state)
+    });
+    if (!res.ok) throw new Error('Server responded with status ' + res.status);
+    setSaveStatus('saved');
+  } catch (err) {
+    console.error('Waypoint: save failed', err);
+    setSaveStatus('error', 'Could not save');
+    showToast('Could not save your change: ' + (err && err.message ? err.message : 'unknown error') + '. Your edit is only kept in this browser tab until it saves successfully.');
+  }
+}
+
+/* ---------- 5. Toast & confirm dialog ------------------------------ */
+
+function showToast(message) {
+  var root = document.getElementById('toast-root');
+  var div = document.createElement('div');
+  div.className = 'toast';
+  div.textContent = message;
+  root.appendChild(div);
+  requestAnimationFrame(function () { div.classList.add('show'); });
+  setTimeout(function () {
+    div.classList.remove('show');
+    setTimeout(function () { div.remove(); }, 250);
+  }, 3200);
+}
+
+var pendingConfirm = null;
+
+function openConfirm(opts) {
+  pendingConfirm = opts.onConfirm;
+  var root = document.getElementById('modal-root');
+  root.innerHTML =
+    '<div class="modal-backdrop" data-action="close-modal">' +
+      '<div class="modal" onclick="event.stopPropagation()">' +
+        '<div class="modal-head"><h2>' + esc(opts.title || 'Are you sure?') + '</h2>' +
+          '<button class="btn btn-icon btn-ghost" data-action="close-modal">' + icon('close') + '</button></div>' +
+        '<div class="modal-body"><p class="confirm-text">' + esc(opts.message) + '</p></div>' +
+        '<div class="modal-foot">' +
+          '<button class="btn" data-action="close-modal">Cancel</button>' +
+          '<button class="btn btn-danger" data-action="confirm-yes">' + esc(opts.confirmLabel || 'Delete') + '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function closeModal() {
+  document.getElementById('modal-root').innerHTML = '';
+  window.__formConfig = null;
+  pendingConfirm = null;
+}
+
+/* ---------- 6. Generic form-field schemas & modal builder ----------
+   Rather than hand-writing six near-identical forms, every entity
+   (trip, destination, activity, transport, accommodation, contact,
+   expense) describes its fields as a small array. fieldHtml() turns
+   one field description into the right input, and openForm() wires
+   the whole array up into a modal with Cancel/Save buttons. */
+
+function fieldHtml(field, value, trip) {
+  var val = (value === undefined || value === null) ? '' : value;
+  var req = field.required ? 'required' : '';
+  var full = field.wide ? 'style="grid-column:1/-1"' : '';
+  var inputHtml;
+  switch (field.type) {
+    case 'text':
+      inputHtml = '<input type="text" name="' + field.key + '" value="' + esc(val) + '" ' + req +
+        ' placeholder="' + esc(field.placeholder || '') + '">';
+      break;
+    case 'number':
+      inputHtml = '<input type="number" step="0.01" name="' + field.key + '" value="' + esc(val) + '" ' + req + '>';
+      break;
+    case 'date':
+      inputHtml = '<input type="date" name="' + field.key + '" value="' + esc(val) + '" ' + req + '>';
+      break;
+    case 'time':
+      inputHtml = '<input type="time" name="' + field.key + '" value="' + esc(val) + '">';
+      break;
+    case 'textarea':
+      inputHtml = '<textarea name="' + field.key + '" rows="3" placeholder="' + esc(field.placeholder || '') + '">' + esc(val) + '</textarea>';
+      break;
+    case 'select':
+      inputHtml = '<select name="' + field.key + '">' + field.options.map(function (o) {
+        return '<option value="' + esc(o) + '" ' + (o === val ? 'selected' : '') + '>' + esc(o) + '</option>';
+      }).join('') + '</select>';
+      break;
+    case 'currency':
+      inputHtml = '<input type="text" list="currency-list" maxlength="6" style="text-transform:uppercase" ' +
+        'name="' + field.key + '" value="' + esc(val) + '" ' + req + ' placeholder="GBP">';
+      break;
+    case 'country':
+      inputHtml = '<input type="text" list="country-list" maxlength="60" ' +
+        'name="' + field.key + '" value="' + esc(val) + '" ' + req +
+        ' placeholder="' + esc(field.placeholder || '') + '">';
+      break;
+    case 'timezone':
+      inputHtml = '<input type="text" list="timezone-list" maxlength="40" ' +
+        'name="' + field.key + '" value="' + esc(val) + '" ' + req +
+        ' placeholder="' + esc(field.placeholder || '') + '">' +
+        (val ? '<div class="field-hint">Currently ' + esc(tzOffsetLabel(val) || 'unrecognised') + '</div>' : '');
+      break;
+    case 'select-destination':
+      inputHtml = '<select name="' + field.key + '"><option value="">—</option>' + (trip.destinations || []).map(function (d) {
+        return '<option value="' + d.id + '" ' + (d.id === val ? 'selected' : '') + '>' + esc(d.name) + '</option>';
+      }).join('') + '</select>';
+      break;
+    case 'select-contact':
+      inputHtml = '<select name="' + field.key + '"><option value="">—</option>' + (trip.contacts || []).map(function (c) {
+        return '<option value="' + c.id + '" ' + (c.id === val ? 'selected' : '') + '>' + esc(c.name) + '</option>';
+      }).join('') + '</select>';
+      break;
+    default:
+      inputHtml = '';
+  }
+  return '<div class="field" ' + full + '><label>' + esc(field.label) + '</label>' + inputHtml +
+    (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '') + '</div>';
+}
+
+// Groups adjacent short fields into two-column rows so the form
+// doesn't feel like one long single column; textareas and any field
+// marked `wide` always take the full width.
+// Any single-line input type can share a row; only a textarea (or a
+// field explicitly marked `wide`) always takes the full width. Kept
+// as a blacklist rather than a whitelist so a new short-input field
+// type (like "country") doesn't need this list updated too.
+function isPairableField(f) {
+  return f.type !== 'textarea' && !f.wide;
+}
+
+function fieldsHtml(fields, initial, trip) {
+  var out = '';
+  var i = 0;
+  while (i < fields.length) {
+    var f = fields[i];
+    var pairable = isPairableField(f);
+    var next = fields[i + 1];
+    var nextPairable = next && isPairableField(next);
+    if (pairable && nextPairable) {
+      out += '<div class="field-row">' + fieldHtml(f, initial[f.key], trip) + fieldHtml(next, initial[next.key], trip) + '</div>';
+      i += 2;
+    } else {
+      out += fieldHtml(f, initial[f.key], trip);
+      i += 1;
+    }
+  }
+  return out;
+}
+
+// opts.fields is usually a plain array, but can instead be a function
+// of the form's current values — that's how the transport form swaps
+// in flight-only or car-only fields as soon as "Mode" changes. This
+// always resolves it to a plain array.
+function resolveFields(opts, values) {
+  return (typeof opts.fields === 'function') ? opts.fields(values) : opts.fields;
+}
+
+// Reads every field currently in a live <form> into a plain object,
+// so a reactive re-render (see openForm's `change` handling below)
+// can carry over whatever the viewer already typed.
+function currentFormValues(formEl) {
+  var fd = new FormData(formEl);
+  var values = {};
+  fd.forEach(function (v, k) { values[k] = v; });
+  return values;
+}
+
+function openForm(opts) {
+  // opts: { title, fields, initial, trip, submitLabel, onSubmit,
+  //         reactiveKey } — reactiveKey names a field (e.g. "mode")
+  // that, when changed, should recompute a function-valued `fields`
+  // and re-render just the field list, keeping everything else typed.
+  window.__formConfig = opts;
+  var root = document.getElementById('modal-root');
+  var initial = opts.initial || {};
+  root.innerHTML =
+    '<div class="modal-backdrop" data-action="close-modal">' +
+      '<div class="modal" onclick="event.stopPropagation()">' +
+        '<div class="modal-head"><h2>' + esc(opts.title) + '</h2>' +
+          '<button class="btn btn-icon btn-ghost" data-action="close-modal">' + icon('close') + '</button></div>' +
+        '<form id="entity-form">' +
+          '<div class="modal-body" id="modal-fields">' + fieldsHtml(resolveFields(opts, initial), initial, opts.trip || {}) + '</div>' +
+          '<div class="modal-foot">' +
+            '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+            '<button type="submit" class="btn btn-primary">' + esc(opts.submitLabel || 'Save') + '</button>' +
+          '</div>' +
+        '</form>' +
+      '</div>' +
+    '</div>' +
+    '<datalist id="currency-list">' + COMMON_CURRENCIES.map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>' +
+    '<datalist id="timezone-list">' + COMMON_TIMEZONES.map(function (tz) { return '<option value="' + tz + '">'; }).join('') + '</datalist>' +
+    '<datalist id="country-list">' + COMMON_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>';
+}
+
+/* ---------- 7. Entity field schemas --------------------------------- */
+
+var TRIP_FIELDS = [
+  { key: 'name', label: 'Trip name', type: 'text', required: true, placeholder: 'e.g. Southeast Asia loop', wide: true },
+  { key: 'startDate', label: 'Start date', type: 'date' },
+  { key: 'endDate', label: 'End date', type: 'date' },
+  { key: 'homeCurrency', label: 'Home currency (for totals)', type: 'currency', required: true },
+  { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+];
+
+var DESTINATION_FIELDS = [
+  { key: 'country', label: 'Country', type: 'country', placeholder: 'e.g. Thailand' },
+  { key: 'name', label: 'Place / area', type: 'text', required: true, placeholder: 'e.g. Chiang Mai' },
+  { key: 'arriveDate', label: 'Arriving', type: 'date', required: true },
+  { key: 'departDate', label: 'Leaving', type: 'date', required: true },
+  { key: 'timezone', label: 'Local timezone', type: 'timezone', placeholder: 'e.g. Asia/Bangkok', hint: 'Used just as a reference — handy when a trip crosses several timezones.', wide: true },
+  { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+];
+
+var ACTIVITY_FIELDS = [
+  { key: 'title', label: 'Activity', type: 'text', required: true, wide: true },
+  { key: 'destinationId', label: 'Area', type: 'select-destination' },
+  { key: 'date', label: 'Date', type: 'date', required: true },
+  { key: 'startTime', label: 'Start time', type: 'time' },
+  { key: 'endTime', label: 'End time', type: 'time' },
+  { key: 'location', label: 'Venue', type: 'text' },
+  { key: 'address', label: 'Address', type: 'text', wide: true },
+  { key: 'bookingRef', label: 'Booking / confirmation #', type: 'text' },
+  { key: 'contactId', label: 'Contact', type: 'select-contact' },
+  { key: 'costAmount', label: 'Cost amount', type: 'number' },
+  { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
+  { key: 'costRate', label: 'Exchange rate override', type: 'number', hint: 'Optional — home-currency value of 1 unit of this currency. Leave blank to use the trip\'s fixed rate.', wide: true },
+  { key: 'receiptRef', label: 'Receipt reference', type: 'text', placeholder: 'e.g. email confirmation, photo filename', wide: true },
+  { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+];
+
+// Transport fields depend on the chosen mode: a flight needs a flight
+// number, a car rental doesn't (but wants a rental company and plate
+// instead), and so on. transportFieldsForMode() builds the right field
+// list for whichever mode is currently selected in the form; the
+// "Mode" select itself is wired up as the form's `reactiveKey` (see
+// openForm/openTransportForm below) so switching it re-renders the
+// mode-specific fields live, without losing whatever else was typed.
+var TRANSPORT_MODE_FIELDS = {
+  Flight: [
+    { key: 'carrier', label: 'Airline', type: 'text', placeholder: 'e.g. British Airways' },
+    { key: 'flightNumber', label: 'Flight number', type: 'text', placeholder: 'e.g. BA15' },
+    { key: 'seat', label: 'Seat', type: 'text' }
+  ],
+  Train: [
+    { key: 'carrier', label: 'Operator', type: 'text' },
+    { key: 'seat', label: 'Seat / coach', type: 'text' }
+  ],
+  Bus: [
+    { key: 'carrier', label: 'Operator', type: 'text' },
+    { key: 'seat', label: 'Seat', type: 'text' }
+  ],
+  Ferry: [
+    { key: 'carrier', label: 'Operator', type: 'text' },
+    { key: 'seat', label: 'Cabin / seat', type: 'text' }
+  ],
+  Car: [
+    { key: 'carrier', label: 'Rental company', type: 'text' },
+    { key: 'licensePlate', label: 'License plate', type: 'text' }
+  ],
+  Other: [
+    { key: 'carrier', label: 'Operator / provider', type: 'text' },
+    { key: 'seat', label: 'Seat / reference', type: 'text' }
+  ]
+};
+
+function transportFieldsForMode(mode) {
+  var modeFields = TRANSPORT_MODE_FIELDS[mode] || TRANSPORT_MODE_FIELDS.Other;
+  return [{ key: 'mode', label: 'Mode', type: 'select', options: TRANSPORT_MODES }]
+    .concat(modeFields, [
+      { key: 'fromLocation', label: 'From', type: 'text', required: true },
+      { key: 'toLocation', label: 'To', type: 'text', required: true },
+      { key: 'departDate', label: 'Depart date', type: 'date', required: true },
+      { key: 'departTime', label: 'Depart time', type: 'time' },
+      { key: 'arriveDate', label: 'Arrive date', type: 'date', required: true },
+      { key: 'arriveTime', label: 'Arrive time', type: 'time' },
+      { key: 'bookingRef', label: 'Booking reference', type: 'text' },
+      { key: 'contactId', label: 'Contact', type: 'select-contact' },
+      { key: 'costAmount', label: 'Cost amount', type: 'number' },
+      { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
+      { key: 'costRate', label: 'Exchange rate override', type: 'number', hint: 'Optional — overrides the trip\'s fixed rate for this one item.', wide: true },
+      { key: 'receiptRef', label: 'Receipt reference', type: 'text', wide: true },
+      { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+    ]);
+}
+
+var ACCOMMODATION_FIELDS = [
+  { key: 'name', label: 'Property', type: 'text', required: true, wide: true },
+  { key: 'destinationId', label: 'Area', type: 'select-destination' },
+  { key: 'address', label: 'Address', type: 'text' },
+  { key: 'checkInDate', label: 'Check-in date', type: 'date', required: true },
+  { key: 'checkInTime', label: 'Check-in time', type: 'time' },
+  { key: 'checkOutDate', label: 'Check-out date', type: 'date', required: true },
+  { key: 'checkOutTime', label: 'Check-out time', type: 'time' },
+  { key: 'bookingRef', label: 'Booking reference', type: 'text' },
+  { key: 'contactId', label: 'Contact', type: 'select-contact' },
+  { key: 'costAmount', label: 'Total cost amount', type: 'number' },
+  { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
+  { key: 'costRate', label: 'Exchange rate override', type: 'number', wide: true },
+  { key: 'receiptRef', label: 'Receipt reference', type: 'text', wide: true },
+  { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+];
+
+var CONTACT_FIELDS = [
+  { key: 'name', label: 'Name', type: 'text', required: true },
+  { key: 'role', label: 'Role / company', type: 'text', placeholder: 'e.g. hotel front desk, tour guide' },
+  { key: 'phone', label: 'Phone', type: 'text' },
+  { key: 'email', label: 'Email', type: 'text' },
+  { key: 'address', label: 'Address', type: 'text', wide: true },
+  { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+];
+
+var EXPENSE_FIELDS = [
+  { key: 'description', label: 'Description', type: 'text', required: true, wide: true },
+  { key: 'category', label: 'Category', type: 'select', options: EXPENSE_CATEGORIES },
+  { key: 'date', label: 'Date', type: 'date', required: true },
+  { key: 'amount', label: 'Amount', type: 'number', required: true },
+  { key: 'currency', label: 'Currency', type: 'currency', required: true },
+  { key: 'rateOverride', label: 'Exchange rate override', type: 'number', wide: true },
+  { key: 'receiptRef', label: 'Receipt reference', type: 'text' },
+  { key: 'contactId', label: 'Contact', type: 'select-contact' },
+  { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+];
+
+/* ---------- 8. Open-form helpers per entity -------------------------
+   Each of these prepares the right initial values (splitting combined
+   date+times back into separate fields for editing) and defines what
+   happens on submit (recombining them, and pushing/updating the
+   record inside `updateState`). */
+
+function currentTrip() { return byId(state.trips, currentTripId); }
+
+function defaultHomeCurrency() {
+  var last = state.trips[state.trips.length - 1];
+  return (last && last.homeCurrency) || 'GBP';
+}
+
+function openTripForm(existing) {
+  openForm({
+    title: existing ? 'Edit trip' : 'New trip',
+    fields: TRIP_FIELDS,
+    initial: existing || { homeCurrency: defaultHomeCurrency() },
+    submitLabel: existing ? 'Save changes' : 'Create trip',
+    onSubmit: function (v) {
+      updateState(function (next) {
+        if (existing) {
+          var t = byId(next.trips, existing.id);
+          t.name = v.name; t.startDate = v.startDate || ''; t.endDate = v.endDate || '';
+          t.homeCurrency = (v.homeCurrency || 'GBP').toUpperCase(); t.notes = v.notes || '';
+        } else {
+          next.trips.push({
+            id: newId(), name: v.name, startDate: v.startDate || '', endDate: v.endDate || '',
+            homeCurrency: (v.homeCurrency || 'GBP').toUpperCase(), notes: v.notes || '',
+            currencyRates: {}, destinations: [], activities: [], transport: [], accommodation: [], contacts: [], expenses: []
+          });
+          currentTripId = next.trips[next.trips.length - 1].id;
+          currentView = 'trip'; currentTab = 'timeline';
+        }
+      });
+    }
+  });
+}
+
+function openDestinationForm(trip, existing) {
+  openForm({
+    title: existing ? 'Edit destination' : 'Add destination', fields: DESTINATION_FIELDS,
+    initial: existing || {}, trip: trip, submitLabel: 'Save',
+    onSubmit: function (v) {
+      updateState(function (next) {
+        var t = byId(next.trips, trip.id);
+        var rec = { id: existing ? existing.id : newId(), name: v.name, country: v.country || '', arriveDate: v.arriveDate, departDate: v.departDate, timezone: (v.timezone || '').trim(), notes: v.notes || '' };
+        if (existing) t.destinations[t.destinations.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        else t.destinations.push(rec);
+      });
+    }
+  });
+}
+
+function openActivityForm(trip, existing) {
+  openForm({
+    title: existing ? 'Edit activity' : 'Add activity', fields: ACTIVITY_FIELDS,
+    initial: existing || {}, trip: trip, submitLabel: 'Save',
+    onSubmit: function (v) {
+      updateState(function (next) {
+        var t = byId(next.trips, trip.id);
+        var rec = {
+          id: existing ? existing.id : newId(), title: v.title, destinationId: v.destinationId || '',
+          date: v.date, startTime: v.startTime || '', endTime: v.endTime || '',
+          location: v.location || '', address: v.address || '', bookingRef: v.bookingRef || '',
+          contactId: v.contactId || '', costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(),
+          costRate: v.costRate || '', receiptRef: v.receiptRef || '', notes: v.notes || ''
+        };
+        if (existing) t.activities[t.activities.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        else t.activities.push(rec);
+      });
+    }
+  });
+}
+
+function openTransportForm(trip, existing) {
+  var initial = existing ? Object.assign({}, existing, splitDateTime(existing.departDateTime), {
+    arriveDate: dateOnly(existing.arriveDateTime), arriveTime: timeOnly(existing.arriveDateTime)
+  }) : { mode: 'Flight' };
+  if (existing) { initial.departDate = dateOnly(existing.departDateTime); initial.departTime = timeOnly(existing.departDateTime); }
+  openForm({
+    title: existing ? 'Edit transport leg' : 'Add transport leg',
+    // The field list depends on whichever mode is currently selected
+    // (a flight shows a flight-number field, a car shows a rental
+    // company + plate instead) — see transportFieldsForMode() above.
+    fields: function (values) { return transportFieldsForMode(values.mode || 'Flight'); },
+    reactiveKey: 'mode',
+    initial: initial, trip: trip, submitLabel: 'Save',
+    onSubmit: function (v) {
+      updateState(function (next) {
+        var t = byId(next.trips, trip.id);
+        var rec = {
+          id: existing ? existing.id : newId(), mode: v.mode || 'Other', carrier: v.carrier || '',
+          flightNumber: v.flightNumber || '', licensePlate: v.licensePlate || '',
+          fromLocation: v.fromLocation, toLocation: v.toLocation,
+          departDateTime: combineDateTime(v.departDate, v.departTime), arriveDateTime: combineDateTime(v.arriveDate, v.arriveTime),
+          seat: v.seat || '', bookingRef: v.bookingRef || '', contactId: v.contactId || '',
+          costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(), costRate: v.costRate || '',
+          receiptRef: v.receiptRef || '', notes: v.notes || ''
+        };
+        if (existing) t.transport[t.transport.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        else t.transport.push(rec);
+      });
+    }
+  });
+}
+
+function openAccommodationForm(trip, existing) {
+  var initial = existing ? Object.assign({}, existing, {
+    checkInDate: dateOnly(existing.checkIn), checkInTime: timeOnly(existing.checkIn),
+    checkOutDate: dateOnly(existing.checkOut), checkOutTime: timeOnly(existing.checkOut)
+  }) : {};
+  openForm({
+    title: existing ? 'Edit accommodation' : 'Add accommodation', fields: ACCOMMODATION_FIELDS,
+    initial: initial, trip: trip, submitLabel: 'Save',
+    onSubmit: function (v) {
+      updateState(function (next) {
+        var t = byId(next.trips, trip.id);
+        var rec = {
+          id: existing ? existing.id : newId(), name: v.name, destinationId: v.destinationId || '', address: v.address || '',
+          checkIn: combineDateTime(v.checkInDate, v.checkInTime), checkOut: combineDateTime(v.checkOutDate, v.checkOutTime),
+          bookingRef: v.bookingRef || '', contactId: v.contactId || '',
+          costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(), costRate: v.costRate || '',
+          receiptRef: v.receiptRef || '', notes: v.notes || ''
+        };
+        if (existing) t.accommodation[t.accommodation.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        else t.accommodation.push(rec);
+      });
+    }
+  });
+}
+
+function openContactForm(trip, existing) {
+  openForm({
+    title: existing ? 'Edit contact' : 'Add contact', fields: CONTACT_FIELDS,
+    initial: existing || {}, trip: trip, submitLabel: 'Save',
+    onSubmit: function (v) {
+      updateState(function (next) {
+        var t = byId(next.trips, trip.id);
+        var rec = { id: existing ? existing.id : newId(), name: v.name, role: v.role || '', phone: v.phone || '', email: v.email || '', address: v.address || '', notes: v.notes || '' };
+        if (existing) t.contacts[t.contacts.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        else t.contacts.push(rec);
+      });
+    }
+  });
+}
+
+function openExpenseForm(trip, existing) {
+  openForm({
+    title: existing ? 'Edit expense' : 'Add expense', fields: EXPENSE_FIELDS,
+    initial: existing || { category: 'Other' }, trip: trip, submitLabel: 'Save',
+    onSubmit: function (v) {
+      updateState(function (next) {
+        var t = byId(next.trips, trip.id);
+        var rec = {
+          id: existing ? existing.id : newId(), description: v.description, category: v.category || 'Other', date: v.date,
+          amount: v.amount, currency: (v.currency || '').toUpperCase(), rateOverride: v.rateOverride || '',
+          receiptRef: v.receiptRef || '', contactId: v.contactId || '', notes: v.notes || ''
+        };
+        if (existing) t.expenses[t.expenses.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        else t.expenses.push(rec);
+      });
+    }
+  });
+}
+
+function deleteEntity(trip, section, id, label) {
+  openConfirm({
+    title: 'Delete ' + label + '?', message: 'This can\'t be undone.', confirmLabel: 'Delete',
+    onConfirm: function () {
+      updateState(function (next) {
+        var t = byId(next.trips, trip.id);
+        t[section] = t[section].filter(function (x) { return x.id !== id; });
+      });
+    }
+  });
+}
+
+function deleteTrip(id) {
+  var t = byId(state.trips, id);
+  openConfirm({
+    title: 'Delete trip?', message: 'This deletes "' + t.name + '" and everything in it — destinations, activities, transport, accommodation, contacts and expenses. This can\'t be undone.', confirmLabel: 'Delete trip',
+    onConfirm: function () {
+      updateState(function (next) { next.trips = next.trips.filter(function (x) { return x.id !== id; }); });
+      currentView = 'dashboard'; currentTripId = null;
+    }
+  });
+}
+
+/* ---------- 9. Cost / expense aggregation --------------------------
+   Every bookable item (activity, transport leg, accommodation stay)
+   can carry its own cost; on top of that a trip can have standalone
+   expenses (meals, taxis, souvenirs...). allCostLines() flattens all
+   of it into one list so the Expenses tab and the CSV export both
+   work from a single, consistent ledger. */
+
+function allCostLines(trip) {
+  var lines = [];
+  trip.activities.forEach(function (a) {
+    if (a.costAmount) lines.push({ date: a.date, type: 'Activity', desc: a.title, amount: a.costAmount, currency: a.costCurrency, rateOverride: a.costRate, receiptRef: a.receiptRef, bookingRef: a.bookingRef, category: 'Activities' });
+  });
+  trip.transport.forEach(function (t) {
+    if (t.costAmount) lines.push({ date: dateOnly(t.departDateTime), type: 'Transport', desc: transportLabel(t), amount: t.costAmount, currency: t.costCurrency, rateOverride: t.costRate, receiptRef: t.receiptRef, bookingRef: t.bookingRef, category: 'Transport' });
+  });
+  trip.accommodation.forEach(function (ac) {
+    if (ac.costAmount) lines.push({ date: dateOnly(ac.checkIn), type: 'Accommodation', desc: ac.name, amount: ac.costAmount, currency: ac.costCurrency, rateOverride: ac.costRate, receiptRef: ac.receiptRef, bookingRef: ac.bookingRef, category: 'Accommodation' });
+  });
+  trip.expenses.forEach(function (e) {
+    lines.push({ date: e.date, type: 'Expense', desc: e.description, amount: e.amount, currency: e.currency, rateOverride: e.rateOverride, receiptRef: e.receiptRef, bookingRef: '', category: e.category || 'Other' });
+  });
+  lines.sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); });
+  return lines;
+}
+
+function usedCurrencies(trip) {
+  var set = {};
+  allCostLines(trip).forEach(function (l) { if (l.currency && l.currency !== trip.homeCurrency) set[l.currency] = true; });
+  return Object.keys(set).sort();
+}
+
+function csvEscape(v) {
+  var s = String(v === undefined || v === null ? '' : v);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function buildCsv(trip) {
+  var lines = allCostLines(trip);
+  var header = ['Date', 'Type', 'Category', 'Description', 'Amount', 'Currency', 'Rate used', 'Converted (' + trip.homeCurrency + ')', 'Booking ref', 'Receipt ref'];
+  var rows = lines.map(function (l) {
+    var hv = homeValue(trip, l.amount, l.currency, l.rateOverride);
+    return [l.date, l.type, l.category, l.desc, l.amount, l.currency, hv.rateUsed == null ? '' : hv.rateUsed, hv.known ? hv.value.toFixed(2) : 'unknown', l.bookingRef, l.receiptRef];
+  });
+  return [header].concat(rows).map(function (r) { return r.map(csvEscape).join(','); }).join('\r\n');
+}
+
+// Builds the CSV text (see buildCsv() above) and hands it to the
+// browser as a normal file download. This is the standard vanilla-JS
+// download trick: wrap the text in a Blob, make a temporary object URL
+// for it, click a hidden link pointing at that URL, then clean both up
+// straight away. No server round-trip needed for this one.
+function exportCsv(trip) {
+  var csv = buildCsv(trip);
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = slug(trip.name) + '-expenses.csv';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  // Give the browser a moment to actually start the download before we
+  // revoke the URL it's reading from.
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+}
+
+/* ---------- 10. Timeline logic --------------------------------------
+   This is the heart of the "multi-leg, overnight, several areas in a
+   day" requirement: it builds one chronological agenda per trip that
+   folds together destinations, activities, transport and
+   accommodation, and makes overnight travel and multi-night stays
+   visible instead of splitting them awkwardly across days. */
+
+function tripDayList(trip) {
+  var dates = {};
+  function add(d) { if (d) dates[d] = true; }
+  add(trip.startDate); add(trip.endDate);
+  trip.destinations.forEach(function (d) { add(d.arriveDate); add(d.departDate); });
+  trip.activities.forEach(function (a) { add(a.date); });
+  trip.transport.forEach(function (t) { add(dateOnly(t.departDateTime)); add(dateOnly(t.arriveDateTime)); });
+  trip.accommodation.forEach(function (a) { add(dateOnly(a.checkIn)); add(dateOnly(a.checkOut)); });
+  var keys = Object.keys(dates).sort();
+  if (keys.length === 0) return [];
+  var out = []; var cur = keys[0]; var end = keys[keys.length - 1];
+  while (cur <= end) { out.push(cur); cur = addDays(cur, 1); }
+  return out;
+}
+
+function eventsForDay(trip, day) {
+  var events = [];
+  trip.activities.forEach(function (a) {
+    if (a.date === day) events.push({ time: a.startTime || '00:00', kind: 'activity', data: a });
+  });
+  trip.accommodation.forEach(function (ac) {
+    if (dateOnly(ac.checkIn) === day) events.push({ time: timeOnly(ac.checkIn) || '15:00', kind: 'checkin', data: ac });
+    if (dateOnly(ac.checkOut) === day) events.push({ time: timeOnly(ac.checkOut) || '11:00', kind: 'checkout', data: ac });
+  });
+  trip.transport.forEach(function (t) {
+    if (dateOnly(t.departDateTime) === day) events.push({ time: timeOnly(t.departDateTime) || '00:00', kind: 'depart', data: t });
+    if (dateOnly(t.arriveDateTime) === day && dateOnly(t.arriveDateTime) !== dateOnly(t.departDateTime)) {
+      events.push({ time: timeOnly(t.arriveDateTime) || '00:00', kind: 'arrive', data: t });
+    }
+  });
+  events.sort(function (a, b) { return a.time.localeCompare(b.time); });
+  return events;
+}
+
+function overnightStay(trip, day) {
+  var stay = trip.accommodation.find(function (ac) { return dateOnly(ac.checkIn) <= day && day < dateOnly(ac.checkOut); });
+  if (stay) return { kind: 'stay', data: stay };
+  var nextDay = addDays(day, 1);
+  var leg = trip.transport.find(function (t) { return dateOnly(t.departDateTime) === day && dateOnly(t.arriveDateTime) === nextDay; });
+  if (leg) return { kind: 'transit', data: leg };
+  return null;
+}
+
+function areasForDay(trip, day) {
+  return trip.destinations.filter(function (d) { return d.arriveDate <= day && day <= d.departDate; });
+}
+
+/* ---------- 11. Trip-level stats ------------------------------------ */
+
+function tripStatus(trip) {
+  var today = todayStr();
+  if (trip.startDate && trip.endDate) {
+    if (today < trip.startDate) return 'upcoming';
+    if (today > trip.endDate) return 'past';
+    return 'ongoing';
+  }
+  if (trip.startDate && today < trip.startDate) return 'upcoming';
+  if (trip.endDate && today > trip.endDate) return 'past';
+  return 'upcoming';
+}
+
+function tripSpend(trip) {
+  var known = 0, unknownCount = 0;
+  allCostLines(trip).forEach(function (l) {
+    var hv = homeValue(trip, l.amount, l.currency, l.rateOverride);
+    if (hv.known) known += hv.value; else unknownCount++;
+  });
+  return { known: known, unknownCount: unknownCount };
+}
+
+/* ---------- 12. Render: Dashboard ------------------------------------ */
+
+function renderDashboard() {
+  if (state.trips.length === 0) {
+    return (
+      '<div class="section-head"><h1>Your trips</h1>' +
+        '<button class="btn btn-accent" data-write-only data-action="new-trip">' + icon('plus') + ' New trip</button></div>' +
+      '<div class="empty-state">' + icon('compass') +
+        '<h3>No trips yet</h3>' +
+        '<p>Add a trip to start planning destinations, activities, transport and accommodation — with expenses tracked across currencies as you go.</p>' +
+      '</div>'
+    );
+  }
+  var sorted = state.trips.slice().sort(function (a, b) { return (a.startDate || '9999') < (b.startDate || '9999') ? -1 : 1; });
+  var cards = sorted.map(function (trip) {
+    var status = tripStatus(trip);
+    var spend = tripSpend(trip);
+    var statusLabel = status === 'ongoing' ? 'In progress' : (status === 'past' ? 'Past' : 'Upcoming');
+    return (
+      '<div class="trip-card" data-action="open-trip" data-id="' + trip.id + '">' +
+        '<div class="trip-card-top">' +
+          '<div><h3>' + esc(trip.name) + '</h3><div class="trip-dates">' +
+            (trip.startDate ? formatDateShort(trip.startDate) : 'No dates set') +
+            (trip.endDate ? ' – ' + formatDateShort(trip.endDate) : '') + '</div></div>' +
+          '<span class="pill pill-' + status + '">' + statusLabel + '</span>' +
+        '</div>' +
+        '<div class="trip-stats">' +
+          '<span>' + icon('pin') + ' <b>' + trip.destinations.length + '</b> areas</span>' +
+          '<span>' + icon('wallet') + ' <b>' + money(spend.known, trip.homeCurrency) + '</b>' + (spend.unknownCount ? ' <span class="rate-missing">+' + spend.unknownCount + ' need rate</span>' : '') + '</span>' +
+        '</div>' +
+        '<div class="card-actions" data-write-only>' +
+          '<button class="btn btn-icon btn-ghost" data-action="edit-trip" data-id="' + trip.id + '" title="Edit trip">' + icon('edit') + '</button>' +
+          '<button class="btn btn-icon btn-ghost" data-action="delete-trip" data-id="' + trip.id + '" title="Delete trip">' + icon('trash') + '</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+  return (
+    '<div class="intro-note"><strong>Waypoint</strong> keeps every trip\'s destinations, activities, transport and accommodation in one place, with a day-by-day timeline that shows overnight travel and multi-area days clearly, plus expenses tracked across currencies.</div>' +
+    '<div class="section-head"><h1>Your trips</h1>' +
+      '<button class="btn btn-accent" data-write-only data-action="new-trip">' + icon('plus') + ' New trip</button></div>' +
+    '<div class="trip-grid">' + cards + '</div>'
+  );
+}
+
+/* ---------- 13. Render: Trip view shell (header + tabs) -------------- */
+
+var TABS = [
+  { key: 'timeline', label: 'Timeline', icon: 'calendar' },
+  { key: 'destinations', label: 'Destinations', icon: 'pin' },
+  { key: 'activities', label: 'Activities', icon: 'ticket' },
+  { key: 'transport', label: 'Transport', icon: 'plane' },
+  { key: 'accommodation', label: 'Accommodation', icon: 'bed' },
+  { key: 'contacts', label: 'Contacts', icon: 'users' },
+  { key: 'expenses', label: 'Expenses', icon: 'wallet' },
+  { key: 'settings', label: 'Settings', icon: 'gear' }
+];
+
+function renderTripView() {
+  var trip = currentTrip();
+  if (!trip) { currentView = 'dashboard'; return renderDashboard(); }
+  var spend = tripSpend(trip);
+  var status = tripStatus(trip);
+  var tabsHtml = TABS.map(function (t) {
+    return '<button class="tab-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '">' +
+      icon(t.icon) + t.label + '</button>';
+  }).join('');
+  var panel;
+  switch (currentTab) {
+    case 'destinations': panel = renderDestinationsTab(trip); break;
+    case 'activities': panel = renderActivitiesTab(trip); break;
+    case 'transport': panel = renderTransportTab(trip); break;
+    case 'accommodation': panel = renderAccommodationTab(trip); break;
+    case 'contacts': panel = renderContactsTab(trip); break;
+    case 'expenses': panel = renderExpensesTab(trip); break;
+    case 'settings': panel = renderSettingsTab(trip); break;
+    default: panel = renderTimelineTab(trip);
+  }
+  return (
+    '<div class="trip-header">' +
+      '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + ' All trips</button>' +
+      '<div class="trip-title-row">' +
+        '<div><h1>' + esc(trip.name) + '</h1>' +
+          '<div class="trip-meta">' +
+            '<span>' + (trip.startDate ? formatDateShort(trip.startDate) : '?') + ' – ' + (trip.endDate ? formatDateShort(trip.endDate) : '?') + '</span>' +
+            '<span><b>' + money(spend.known, trip.homeCurrency) + '</b> spent so far' +
+              (spend.unknownCount ? ' · <button class="warn-link" data-action="switch-tab" data-tab="settings">' + spend.unknownCount + ' need an exchange rate</button>' : '') +
+            '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="card-actions" data-write-only>' +
+          '<button class="btn btn-icon btn-ghost" data-action="edit-trip" data-id="' + trip.id + '" title="Edit trip">' + icon('edit') + '</button>' +
+          '<button class="btn btn-icon btn-ghost" data-action="delete-trip" data-id="' + trip.id + '" title="Delete trip">' + icon('trash') + '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="tabbar">' + tabsHtml + '</div>' +
+    '<div>' + panel + '</div>'
+  );
+}
+
+/* ---------- 14. Shared row-rendering helpers -------------------------- */
+
+function copyBtn(value, label) {
+  if (!value) return '';
+  return '<button class="copy-btn" data-action="copy-text" data-value="' + esc(value) + '" title="Copy ' + esc(label) + '">' + icon('copy') + '</button>';
+}
+
+function mapsLink(address) {
+  if (!address) return '';
+  var url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address);
+  return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">Open in Maps ' + icon('arrowRight') + '</a>';
+}
+
+function costTag(trip, amount, currency, rateOverride) {
+  if (!amount) return '';
+  var hv = homeValue(trip, amount, currency, rateOverride);
+  var label = money(amount, currency);
+  if (currency && currency !== trip.homeCurrency) {
+    label += hv.known ? ' (≈ ' + money(hv.value, trip.homeCurrency) + ')' : ' (rate needed)';
+  }
+  return '<span class="tag tag-cost">' + icon('wallet') + label + '</span>';
+}
+
+function rowActions(trip, section, item, label) {
+  return '<div class="item-actions" data-write-only>' +
+    '<button class="btn btn-icon btn-ghost" data-action="edit-' + section + '" data-id="' + item.id + '" title="Edit">' + icon('edit') + '</button>' +
+    '<button class="btn btn-icon btn-ghost" data-action="delete-' + section + '" data-id="' + item.id + '" title="Delete">' + icon('trash') + '</button>' +
+  '</div>';
+}
+
+function emptyTab(iconName, title, body, addAction, addLabel) {
+  return '<div class="empty-state">' + icon(iconName) + '<h3>' + esc(title) + '</h3><p>' + esc(body) + '</p>' +
+    '<div style="margin-top:14px" data-write-only><button class="btn btn-accent" data-action="' + addAction + '">' + icon('plus') + ' ' + esc(addLabel) + '</button></div></div>';
+}
+
+function tabHead(title, addAction, addLabel) {
+  return '<div class="tab-panel-head"><h2>' + esc(title) + '</h2>' +
+    '<button class="btn btn-accent" data-write-only data-action="' + addAction + '">' + icon('plus') + ' ' + esc(addLabel) + '</button></div>';
+}
+
+/* ---------- 15. Render: Destinations tab ------------------------------ */
+
+function renderDestinationsTab(trip) {
+  if (trip.destinations.length === 0) return emptyTab('pin', 'No destinations yet', 'Add the places or areas you\'ll be based in — activities and accommodation can then be tagged to them.', 'new-destination', 'Add destination');
+  var sorted = trip.destinations.slice().sort(function (a, b) { return (a.arriveDate || '') < (b.arriveDate || '') ? -1 : 1; });
+  var rows = sorted.map(function (d) {
+    var tzOffset = d.timezone ? tzOffsetLabel(d.timezone) : '';
+    var tzTag = d.timezone ? '<span class="tag">' + icon('clock') + esc(d.timezone) + (tzOffset ? ' (' + esc(tzOffset) + ')' : '') + '</span>' : '';
+    return '<div class="item-row"><div class="item-icon">' + icon('pin') + '</div><div class="item-main">' +
+      '<div class="item-title-row"><span class="item-title">' + esc(d.name) + (d.country ? ', ' + esc(d.country) : '') + '</span></div>' +
+      '<div class="item-sub">' + formatDateShort(d.arriveDate) + ' – ' + formatDateShort(d.departDate) + '</div>' +
+      (tzTag ? '<div class="item-tags">' + tzTag + '</div>' : '') +
+      (d.notes ? '<div class="item-sub">' + esc(d.notes) + '</div>' : '') +
+      '</div>' + rowActions(trip, 'destination', d) + '</div>';
+  }).join('');
+  return tabHead('Destinations', 'new-destination', 'Add destination') + '<div class="item-list">' + rows + '</div>';
+}
+
+/* ---------- 16. Render: Activities tab -------------------------------- */
+
+function renderActivitiesTab(trip) {
+  if (trip.activities.length === 0) return emptyTab('ticket', 'No activities yet', 'Tours, museum visits, dinner reservations — anything with a date and time.', 'new-activity', 'Add activity');
+  var sorted = trip.activities.slice().sort(function (a, b) { return ((a.date || '') + (a.startTime || '')) < ((b.date || '') + (b.startTime || '')) ? -1 : 1; });
+  var rows = sorted.map(function (a) {
+    var dest = a.destinationId ? byId(trip.destinations, a.destinationId) : null;
+    var contact = a.contactId ? byId(trip.contacts, a.contactId) : null;
+    var tags = [];
+    if (a.location) tags.push('<span class="tag">' + esc(a.location) + '</span>');
+    if (dest) tags.push('<span class="tag">' + icon('pin') + esc(dest.name) + '</span>');
+    if (a.bookingRef) tags.push('<span class="tag">' + icon('ticket') + esc(a.bookingRef) + copyBtn(a.bookingRef, 'booking ref') + '</span>');
+    if (contact) tags.push('<span class="tag">' + icon('user') + esc(contact.name) + '</span>');
+    if (a.costAmount) tags.push(costTag(trip, a.costAmount, a.costCurrency, a.costRate));
+    return '<div class="item-row"><div class="item-icon">' + icon('ticket') + '</div><div class="item-main">' +
+      '<div class="item-title-row"><span class="item-title">' + esc(a.title) + '</span><span class="item-sub">' + formatDateShort(a.date) + (a.startTime ? ' · ' + a.startTime : '') + (a.endTime ? '–' + a.endTime : '') + '</span></div>' +
+      (a.address ? '<div class="item-sub">' + esc(a.address) + ' ' + mapsLink(a.address) + '</div>' : '') +
+      '<div class="item-tags">' + tags.join('') + '</div>' +
+      (a.notes ? '<div class="item-sub" style="margin-top:6px">' + esc(a.notes) + '</div>' : '') +
+      '</div>' + rowActions(trip, 'activity', a) + '</div>';
+  }).join('');
+  return tabHead('Activities', 'new-activity', 'Add activity') + '<div class="item-list">' + rows + '</div>';
+}
+
+/* ---------- 17. Render: Transport tab ---------------------------------- */
+
+function renderTransportTab(trip) {
+  if (trip.transport.length === 0) return emptyTab('plane', 'No transport legs yet', 'Flights, trains, buses, ferries or drives — each leg can span overnight, and will show up on both days in the Timeline.', 'new-transport', 'Add transport leg');
+  var sorted = trip.transport.slice().sort(function (a, b) { return (a.departDateTime || '') < (b.departDateTime || '') ? -1 : 1; });
+  var rows = sorted.map(function (t) {
+    var contact = t.contactId ? byId(trip.contacts, t.contactId) : null;
+    var overnight = dateOnly(t.departDateTime) !== dateOnly(t.arriveDateTime);
+    var tags = [];
+    if (t.carrier) tags.push('<span class="tag">' + esc(t.carrier) + '</span>');
+    if (t.flightNumber) tags.push('<span class="tag">' + icon('plane') + esc(t.flightNumber) + copyBtn(t.flightNumber, 'flight number') + '</span>');
+    if (t.licensePlate) tags.push('<span class="tag">' + esc(t.licensePlate) + '</span>');
+    if (t.seat) tags.push('<span class="tag">' + esc(t.seat) + '</span>');
+    if (t.bookingRef) tags.push('<span class="tag">' + icon('ticket') + esc(t.bookingRef) + copyBtn(t.bookingRef, 'booking ref') + '</span>');
+    if (contact) tags.push('<span class="tag">' + icon('user') + esc(contact.name) + '</span>');
+    if (overnight) tags.push('<span class="tag">' + icon('moon') + 'Overnight</span>');
+    if (t.costAmount) tags.push(costTag(trip, t.costAmount, t.costCurrency, t.costRate));
+    return '<div class="item-row"><div class="item-icon">' + icon(transportIconKey(t.mode)) + '</div><div class="item-main">' +
+      '<div class="item-title-row"><span class="item-title">' + esc(t.fromLocation) + ' ' + icon('arrowRight') + ' ' + esc(t.toLocation) + (t.flightNumber ? ' <span class="item-sub" style="display:inline">(' + esc(t.flightNumber) + ')</span>' : '') + '</span></div>' +
+      '<div class="item-sub">' + formatDateShort(dateOnly(t.departDateTime)) + ' ' + timeOnly(t.departDateTime) +
+        ' → ' + formatDateShort(dateOnly(t.arriveDateTime)) + ' ' + timeOnly(t.arriveDateTime) + '</div>' +
+      '<div class="item-tags">' + tags.join('') + '</div>' +
+      (t.notes ? '<div class="item-sub" style="margin-top:6px">' + esc(t.notes) + '</div>' : '') +
+      '</div>' + rowActions(trip, 'transport', t) + '</div>';
+  }).join('');
+  return tabHead('Transport', 'new-transport', 'Add transport leg') + '<div class="item-list">' + rows + '</div>';
+}
+
+/* ---------- 18. Render: Accommodation tab ------------------------------- */
+
+function renderAccommodationTab(trip) {
+  if (trip.accommodation.length === 0) return emptyTab('bed', 'No accommodation yet', 'Hotels, hostels, apartments — check-in and check-out can each carry their own time.', 'new-accommodation', 'Add accommodation');
+  var sorted = trip.accommodation.slice().sort(function (a, b) { return (a.checkIn || '') < (b.checkIn || '') ? -1 : 1; });
+  var rows = sorted.map(function (ac) {
+    var contact = ac.contactId ? byId(trip.contacts, ac.contactId) : null;
+    var tags = [];
+    if (ac.bookingRef) tags.push('<span class="tag">' + icon('ticket') + esc(ac.bookingRef) + copyBtn(ac.bookingRef, 'booking ref') + '</span>');
+    if (contact) tags.push('<span class="tag">' + icon('user') + esc(contact.name) + '</span>');
+    if (ac.costAmount) tags.push(costTag(trip, ac.costAmount, ac.costCurrency, ac.costRate));
+    return '<div class="item-row"><div class="item-icon">' + icon('bed') + '</div><div class="item-main">' +
+      '<div class="item-title-row"><span class="item-title">' + esc(ac.name) + '</span></div>' +
+      '<div class="item-sub">' + formatDateShort(dateOnly(ac.checkIn)) + ' ' + timeOnly(ac.checkIn) +
+        ' → ' + formatDateShort(dateOnly(ac.checkOut)) + ' ' + timeOnly(ac.checkOut) + '</div>' +
+      (ac.address ? '<div class="item-sub">' + esc(ac.address) + ' ' + mapsLink(ac.address) + '</div>' : '') +
+      '<div class="item-tags">' + tags.join('') + '</div>' +
+      (ac.notes ? '<div class="item-sub" style="margin-top:6px">' + esc(ac.notes) + '</div>' : '') +
+      '</div>' + rowActions(trip, 'accommodation', ac) + '</div>';
+  }).join('');
+  return tabHead('Accommodation', 'new-accommodation', 'Add accommodation') + '<div class="item-list">' + rows + '</div>';
+}
+
+/* ---------- 19. Render: Contacts tab -------------------------------------- */
+
+function renderContactsTab(trip) {
+  if (trip.contacts.length === 0) return emptyTab('users', 'No contacts yet', 'Hotel front desks, tour operators, guides — save them here to link from activities, transport and accommodation.', 'new-contact', 'Add contact');
+  var rows = trip.contacts.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
+    var tags = [];
+    if (c.phone) tags.push('<span class="tag">' + esc(c.phone) + copyBtn(c.phone, 'phone') + '</span>');
+    if (c.email) tags.push('<span class="tag">' + esc(c.email) + copyBtn(c.email, 'email') + '</span>');
+    return '<div class="item-row"><div class="item-icon">' + icon('user') + '</div><div class="item-main">' +
+      '<div class="item-title-row"><span class="item-title">' + esc(c.name) + '</span>' + (c.role ? '<span class="item-sub">' + esc(c.role) + '</span>' : '') + '</div>' +
+      (c.address ? '<div class="item-sub">' + esc(c.address) + ' ' + mapsLink(c.address) + '</div>' : '') +
+      '<div class="item-tags">' + tags.join('') + '</div>' +
+      (c.notes ? '<div class="item-sub" style="margin-top:6px">' + esc(c.notes) + '</div>' : '') +
+      '</div>' + rowActions(trip, 'contact', c) + '</div>';
+  }).join('');
+  return tabHead('Contacts', 'new-contact', 'Add contact') + '<div class="item-list">' + rows + '</div>';
+}
+
+/* ---------- 20. Render: Timeline tab ---------------------------------------
+   One card per day: the date heading, chips for any destination whose
+   stay covers that day, every event that falls on it in time order,
+   and — when relevant — a note about where the night is spent (a
+   booked stay, or travelling overnight through to the next day). */
+
+function eventRowHtml(trip, ev) {
+  var kindClass = (ev.kind === 'activity') ? 'k-activity' : (ev.kind === 'depart' || ev.kind === 'arrive') ? 'k-transport' : 'k-stay';
+  var iconName, title, sub;
+  if (ev.kind === 'activity') {
+    iconName = 'ticket'; title = ev.data.title;
+    sub = (ev.data.location || '') + (ev.data.costAmount ? ' · ' + money(ev.data.costAmount, ev.data.costCurrency) : '');
+  } else if (ev.kind === 'checkin') {
+    iconName = 'bed'; title = 'Check in: ' + ev.data.name; sub = ev.data.address || '';
+  } else if (ev.kind === 'checkout') {
+    iconName = 'bed'; title = 'Check out: ' + ev.data.name; sub = ev.data.address || '';
+  } else if (ev.kind === 'depart') {
+    iconName = transportIconKey(ev.data.mode);
+    title = transportLabel(ev.data);
+    var overnight = dateOnly(ev.data.departDateTime) !== dateOnly(ev.data.arriveDateTime);
+    sub = overnight ? 'Arrives ' + formatDateShort(dateOnly(ev.data.arriveDateTime)) + ' at ' + timeOnly(ev.data.arriveDateTime) : ('Arrives ' + timeOnly(ev.data.arriveDateTime));
+  } else { // arrive (overnight continuation, shown on the arrival day)
+    iconName = transportIconKey(ev.data.mode);
+    title = 'Arrive: ' + ev.data.toLocation + ' (from ' + ev.data.fromLocation + ')';
+    sub = 'Overnight ' + (ev.data.mode || 'travel') + (ev.data.flightNumber ? ' ' + ev.data.flightNumber : '') + ' from ' + formatDateShort(dateOnly(ev.data.departDateTime));
+  }
+  return '<div class="event-row"><span class="event-time">' + esc(ev.time) + '</span>' +
+    '<span class="event-icon ' + kindClass + '">' + icon(iconName) + '</span>' +
+    '<div class="event-main"><div class="event-title">' + esc(title) + '</div>' + (sub ? '<div class="event-sub">' + esc(sub) + '</div>' : '') + '</div></div>';
+}
+
+function renderTimelineTab(trip) {
+  var days = tripDayList(trip);
+  if (days.length === 0) {
+    return '<div class="empty-state">' + icon('calendar') + '<h3>Nothing planned yet</h3>' +
+      '<p>Add a destination, activity, transport leg or place to stay and this timeline will lay your trip out day by day — including overnight travel and stays that span several days.</p></div>';
+  }
+  var cards = days.map(function (day, i) {
+    var events = eventsForDay(trip, day);
+    var areas = areasForDay(trip, day);
+    var stay = overnightStay(trip, day);
+    var isLast = i === days.length - 1;
+    var eventsHtml = events.length
+      ? '<div class="day-events">' + events.map(function (ev) { return eventRowHtml(trip, ev); }).join('') + '</div>'
+      : '<div class="no-day-events">Nothing logged for this day.</div>';
+    var overnightHtml = '';
+    if (!isLast) {
+      if (stay && stay.kind === 'stay') overnightHtml = '<div class="overnight-note">' + icon('moon') + 'Sleeping at ' + esc(stay.data.name) + '</div>';
+      else if (stay && stay.kind === 'transit') overnightHtml = '<div class="overnight-note">' + icon('moon') + 'Overnight ' + esc((stay.data.mode || 'travel').toLowerCase()) + ' to ' + esc(stay.data.toLocation) + '</div>';
+      else overnightHtml = '<div class="overnight-note">' + icon('moon') + 'No accommodation logged for tonight</div>';
+    }
+    return '<div class="day-card"><div class="day-rail"><span class="day-num">' + day.slice(8, 10) + '</span>' + (isLast ? '' : '<span class="day-line"></span>') + '</div>' +
+      '<div class="day-body"><div class="day-heading"><h3>' + formatDateHeading(day) + '</h3>' +
+        (areas.length ? '<div class="day-areas">' + areas.map(function (a) {
+          var off = a.timezone ? tzOffsetLabel(a.timezone) : '';
+          return '<span class="area-chip">' + icon('pin') + esc(a.name) + (off ? ' · ' + esc(off) : '') + '</span>';
+        }).join('') + '</div>' : '') +
+      '</div>' + eventsHtml + overnightHtml + '</div></div>';
+  }).join('');
+  return cards;
+}
+
+/* ---------- 21. Render: Expenses tab ---------------------------------------- */
+
+function renderExpensesTab(trip) {
+  var lines = allCostLines(trip);
+  var spend = tripSpend(trip);
+  var byCategory = {};
+  lines.forEach(function (l) {
+    var hv = homeValue(trip, l.amount, l.currency, l.rateOverride);
+    if (!hv.known) return;
+    byCategory[l.category] = (byCategory[l.category] || 0) + hv.value;
+  });
+  var catTiles = Object.keys(byCategory).sort(function (a, b) { return byCategory[b] - byCategory[a]; }).map(function (cat) {
+    return '<div class="stat-tile"><div class="stat-label">' + esc(cat) + '</div><div class="stat-value">' + money(byCategory[cat], trip.homeCurrency) + '</div></div>';
+  }).join('');
+  var head = '<div class="tab-panel-head"><h2>Expenses</h2>' +
+    '<div style="display:flex;gap:8px"><button class="btn" data-action="export-csv">' + icon('download') + ' Export CSV</button>' +
+    '<button class="btn btn-accent" data-write-only data-action="new-expense">' + icon('plus') + ' Add expense</button></div></div>';
+
+  if (lines.length === 0) {
+    return head + '<div class="empty-state">' + icon('wallet') + '<h3>No expenses logged yet</h3>' +
+      '<p>Costs added to activities, transport and accommodation show up here automatically — use "Add expense" for everything else, like meals, taxis and souvenirs.</p></div>';
+  }
+
+  var rows = lines.map(function (l) {
+    var hv = homeValue(trip, l.amount, l.currency, l.rateOverride);
+    return '<tr><td>' + formatDateShort(l.date) + '</td><td>' + esc(l.type) + '</td><td>' + esc(l.desc) +
+      (l.receiptRef ? '<div class="item-sub">' + esc(l.receiptRef) + '</div>' : '') + '</td>' +
+      '<td class="num">' + money(l.amount, l.currency) + '</td>' +
+      '<td class="num">' + (hv.known ? money(hv.value, trip.homeCurrency) : '<span class="rate-missing">rate needed</span>') + '</td></tr>';
+  }).join('');
+
+  return head +
+    '<div class="stat-row"><div class="stat-tile"><div class="stat-label">Total (' + trip.homeCurrency + ')</div><div class="stat-value">' + money(spend.known, trip.homeCurrency) + '</div></div>' + catTiles + '</div>' +
+    (spend.unknownCount ? '<div class="intro-note" style="border-color:var(--danger-soft)"><strong>' + spend.unknownCount + ' item(s)</strong> are in a currency with no exchange rate set — <button class="warn-link" data-action="switch-tab" data-tab="settings">set one in Settings</button> to include them in the total.</div>' : '') +
+    '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount</th><th class="num">' + esc(trip.homeCurrency) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+/* ---------- 22. Render: Settings tab ------------------------------------------ */
+
+function renderSettingsTab(trip) {
+  var currencies = usedCurrencies(trip);
+  var rateRows = currencies.map(function (cur) {
+    var rate = trip.currencyRates[cur];
+    return '<div class="field-row"><div class="field"><label>1 ' + esc(cur) + ' =</label>' +
+      '<input type="number" step="0.0001" name="rate_' + cur + '" value="' + (rate !== undefined ? esc(rate) : '') + '" placeholder="e.g. 0.79"></div>' +
+      '<div class="field"><label>&nbsp;</label><div class="field-hint" style="margin-top:11px">' + esc(trip.homeCurrency) + ' per 1 ' + esc(cur) + '</div></div></div>';
+  }).join('');
+  return (
+    '<div class="tab-panel-head"><h2>Settings</h2></div>' +
+    '<form id="rates-form" data-write-only>' +
+      '<div class="field"><label>Home currency</label>' +
+      '<input type="text" list="currency-list" maxlength="6" style="text-transform:uppercase;max-width:140px" name="homeCurrency" value="' + esc(trip.homeCurrency) + '">' +
+      '<div class="field-hint">Every total on this trip converts into this currency.</div></div>' +
+      (currencies.length
+        ? '<div class="field"><label>Fixed exchange rates for this trip</label><div class="field-hint" style="margin-bottom:10px">Used whenever an item in that currency doesn\'t have its own rate override. One rate per currency for the whole trip, as you set up.</div><div class="rate-table">' + rateRows + '</div></div>'
+        : '<p class="field-hint">No foreign-currency costs logged yet — rates will appear here once you add one.</p>') +
+      '<datalist id="currency-list">' + COMMON_CURRENCIES.map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>' +
+      '<button type="submit" class="btn btn-primary">Save currency settings</button>' +
+    '</form>' +
+    '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)" data-write-only>' +
+      '<h3 style="font-size:15px;margin-bottom:8px">Danger zone</h3>' +
+      '<button class="btn btn-danger" data-action="delete-trip" data-id="' + trip.id + '">' + icon('trash') + ' Delete this trip</button>' +
+    '</div>'
+  );
+}
+
+/* ---------- 23. Top-level render dispatcher ------------------------------------ */
+
+function render() {
+  var app = document.getElementById('app');
+  app.innerHTML = (currentView === 'trip' && currentTripId) ? renderTripView() : renderDashboard();
+}
+
+/* ---------- 24. Event delegation ------------------------------------------------
+   One click listener and one submit listener handle every interaction
+   in the app, keyed off `data-action` attributes. This means we never
+   have to re-attach listeners after re-rendering a panel's HTML. */
+
+document.addEventListener('click', function (e) {
+  var el = e.target.closest('[data-action]');
+  if (!el) return;
+  var action = el.dataset.action;
+  var trip = currentTripId ? currentTrip() : null;
+
+  if (action === 'close-modal') { closeModal(); return; }
+  if (action === 'confirm-yes') { var fn = pendingConfirm; closeModal(); if (fn) fn(); return; }
+  if (action === 'copy-text') {
+    var value = el.dataset.value;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value).then(function () { showToast('Copied'); }).catch(function () { showToast('Could not copy'); });
+    }
+    return;
+  }
+  if (action === 'open-trip') { currentView = 'trip'; currentTripId = el.dataset.id; currentTab = 'timeline'; render(); return; }
+  if (action === 'back-to-dashboard') { currentView = 'dashboard'; currentTripId = null; render(); return; }
+  if (action === 'switch-tab') { currentTab = el.dataset.tab; render(); return; }
+  if (action === 'new-trip') { openTripForm(); return; }
+  if (action === 'edit-trip') { openTripForm(byId(state.trips, el.dataset.id)); return; }
+  if (action === 'delete-trip') { deleteTrip(el.dataset.id); return; }
+  if (action === 'export-csv') { exportCsv(trip); return; }
+
+  if (!trip) return;
+  if (action === 'new-destination') { openDestinationForm(trip); return; }
+  if (action === 'edit-destination') { openDestinationForm(trip, byId(trip.destinations, el.dataset.id)); return; }
+  if (action === 'delete-destination') { deleteEntity(trip, 'destinations', el.dataset.id, 'destination'); return; }
+  if (action === 'new-activity') { openActivityForm(trip); return; }
+  if (action === 'edit-activity') { openActivityForm(trip, byId(trip.activities, el.dataset.id)); return; }
+  if (action === 'delete-activity') { deleteEntity(trip, 'activities', el.dataset.id, 'activity'); return; }
+  if (action === 'new-transport') { openTransportForm(trip); return; }
+  if (action === 'edit-transport') { openTransportForm(trip, byId(trip.transport, el.dataset.id)); return; }
+  if (action === 'delete-transport') { deleteEntity(trip, 'transport', el.dataset.id, 'transport leg'); return; }
+  if (action === 'new-accommodation') { openAccommodationForm(trip); return; }
+  if (action === 'edit-accommodation') { openAccommodationForm(trip, byId(trip.accommodation, el.dataset.id)); return; }
+  if (action === 'delete-accommodation') { deleteEntity(trip, 'accommodation', el.dataset.id, 'accommodation'); return; }
+  if (action === 'new-contact') { openContactForm(trip); return; }
+  if (action === 'edit-contact') { openContactForm(trip, byId(trip.contacts, el.dataset.id)); return; }
+  if (action === 'delete-contact') { deleteEntity(trip, 'contacts', el.dataset.id, 'contact'); return; }
+  if (action === 'new-expense') { openExpenseForm(trip); return; }
+  if (action === 'edit-expense') { openExpenseForm(trip, byId(trip.expenses, el.dataset.id)); return; }
+  if (action === 'delete-expense') { deleteEntity(trip, 'expenses', el.dataset.id, 'expense'); return; }
+});
+
+// Powers "reactive" forms (currently just Transport's Mode select):
+// when the field named by the open form's `reactiveKey` changes, we
+// recompute the field list from the form's own current values and
+// re-render only #modal-fields, so switching e.g. Flight → Car swaps
+// in the right fields without discarding From/To, dates, cost, etc.
+document.addEventListener('change', function (e) {
+  var cfg = window.__formConfig;
+  if (!cfg || !cfg.reactiveKey) return;
+  var form = e.target.closest('#entity-form');
+  if (!form || e.target.name !== cfg.reactiveKey) return;
+  var values = currentFormValues(form);
+  var container = document.getElementById('modal-fields');
+  if (container) container.innerHTML = fieldsHtml(resolveFields(cfg, values), values, cfg.trip || {});
+});
+
+document.addEventListener('submit', function (e) {
+  if (e.target.id === 'entity-form') {
+    e.preventDefault();
+    var cfg = window.__formConfig;
+    if (!cfg) return;
+    // Read every field actually present in the form right now — for a
+    // reactive form (e.g. Transport) that's whichever mode-specific
+    // fields are currently shown, not a fixed list.
+    var values = currentFormValues(e.target);
+    cfg.onSubmit(values);
+    closeModal();
+    return;
+  }
+  if (e.target.id === 'rates-form') {
+    e.preventDefault();
+    var fd2 = new FormData(e.target);
+    updateState(function (next) {
+      var t = byId(next.trips, currentTripId);
+      t.homeCurrency = (fd2.get('homeCurrency') || t.homeCurrency).toUpperCase();
+      var rates = {};
+      usedCurrencies(t).forEach(function (cur) {
+        var v = fd2.get('rate_' + cur);
+        if (v !== null && v !== '') rates[cur] = Number(v);
+      });
+      t.currencyRates = rates;
+    });
+    showToast('Currency settings saved');
+  }
+});
+
+/* ---------- 25. Init ------------------------------------------------------------
+   Restore whatever trip/tab the viewer was last looking at (stashed in
+   sessionStorage right before a save-triggered reload), then draw the
+   page for the first time. */
+
+(async function init() {
+  // Load whatever was last saved (or a blank { trips: [] } if this is
+  // the very first visit, or the load failed) before we draw anything.
+  state = await loadInitialState();
+
+  try {
+    var nav = JSON.parse(sessionStorage.getItem('waypoint-nav') || 'null');
+    if (nav && nav.view === 'trip' && byId(state.trips, nav.tripId)) {
+      currentView = 'trip'; currentTripId = nav.tripId; currentTab = nav.tab || 'timeline';
+    }
+  } catch (e) { /* ignore malformed/unavailable sessionStorage */ }
+  render();
+})();
+</script>
+</body>
+</html>
