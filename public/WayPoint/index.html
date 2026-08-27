@@ -162,6 +162,8 @@ textarea { resize: vertical; min-height: 60px; }
 .flight-lookup-status { font-size: 11.5px; color: var(--ink-faint); margin-top: 6px; min-height: 14px; }
 .flight-lookup-status.is-error { color: var(--danger); }
 .flight-lookup-status.is-ok { color: var(--ink-soft); }
+.airport-resolve-hint.is-ok { color: var(--success); }
+.airport-resolve-hint.is-unresolved { color: var(--ink-faint); }
 
 /* ---- 4b. Dashboard ------------------------------------------------ */
 .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
@@ -357,6 +359,12 @@ tr:last-child td { border-bottom: none; }
 <script src="/WayPoint/data/countries.js"></script>
 <script src="/WayPoint/data/cities.js"></script>
 <script src="/WayPoint/data/airports.js"></script>
+<!-- `defer`, unlike the data/*.js tags above: this file (~550KB, ~7,900
+     airports) is a coordinate-lookup fallback only touched when a
+     Flight leg is saved, never needed for the very first form's
+     <datalist> the way the others above are — see the comment at the
+     top of data/airports-full.js for the full reasoning. -->
+<script defer src="/WayPoint/data/airports-full.js"></script>
 <script>
 /* ================================================================
    WAYPOINT — application logic
@@ -769,9 +777,33 @@ function fieldHtml(field, value, trip, allValues) {
       // value to match that shape — typing just the 3-letter code (or
       // a city name for a mode where a full airport isn't really the
       // right concept) is equally valid.
+      //
+      // The airport-list datalist starts out seeded with just
+      // COMMON_AIRPORTS' curated ~126 major hubs (see openForm()), and
+      // widens live as you type to search the full ~7,900-airport
+      // AIRPORT_DB instead — see refreshAirportSuggestions(), wired up
+      // via the 'input' listener near it. That keeps this fast (nothing
+      // renders thousands of suggestion rows into the page up front)
+      // while still finding a smaller/regional airport by code or city
+      // once you start typing one.
+      //
+      // The hint underneath is a live, honest signal of whether
+      // whatever's typed so far actually resolves to a real coordinate
+      // — checked against the SAME two sources (COMMON_AIRPORTS, then
+      // AIRPORT_DB) that openTransportForm()'s onSubmit uses when the
+      // leg is actually saved, via airportCoordsFromText(). Computed
+      // once here for whatever the field already contains (e.g.
+      // editing an existing leg, or the field list re-rendering after
+      // a mode switch), then kept live after that by the same 'input'
+      // listener that widens the suggestions above.
+      var airportResolved = airportCoordsFromText(val);
+      var airportHintText = !val ? ''
+        : (airportResolved ? '✓ Mapped precisely for the Map tab' : 'No exact airport match yet — the map will try to search by name instead.');
+      var airportHintClass = 'field-hint airport-resolve-hint' + (val ? (airportResolved ? ' is-ok' : ' is-unresolved') : '');
       inputHtml = '<input type="text" list="airport-list" maxlength="80" ' +
         'name="' + field.key + '" value="' + esc(val) + '" ' + req +
-        ' placeholder="' + esc(field.placeholder || 'e.g. LHR or Heathrow') + '">';
+        ' placeholder="' + esc(field.placeholder || 'e.g. LHR or Heathrow') + '">' +
+        '<div class="' + airportHintClass + '" id="' + field.key + '-resolve-hint">' + esc(airportHintText) + '</div>';
       break;
     case 'flight-lookup':
       // A text input, a date input, and a "Look up" button — clicking
@@ -1411,15 +1443,31 @@ function airportDisplay(airport) {
   return place ? (codeName + ', ' + place) : codeName;
 }
 
-// Looks up a real, known coordinate for an IATA-style airport code from
-// COMMON_AIRPORTS (data/airports.js) — the actual fix for routes like
-// SFO–ICN not showing up on the Map tab. Returns null for anything not
-// in that curated shortlist (smaller/regional airports), which is the
-// signal to fall back to Nominatim text geocoding instead — see
-// openTransportForm()'s onSubmit, where this is tried first.
+// Looks up a real, known coordinate for an IATA-style airport code —
+// the actual fix for routes like SFO–ICN not showing up on the Map
+// tab. Tries two sources, in order:
+//   1. COMMON_AIRPORTS (data/airports.js) — the curated ~126 major
+//      hubs, checked first since it's tiny and always already loaded.
+//   2. AIRPORT_DB (data/airports-full.js) — ~7,900 airports worldwide,
+//      loaded with `defer` so it may (very briefly, on a first-ever
+//      page load) not be ready yet; that's fine, since this only ever
+//      runs when a Flight leg is actually saved, well after page load
+//      finishes. Guarded with `typeof AIRPORT_DB !== 'undefined'`
+//      purely as a defensive fallback in case that file ever fails to
+//      load at all (e.g. briefly offline) — everything still works,
+//      just without this tier.
+// Returns null if neither has it, which is the signal for the caller
+// (openTransportForm()'s onSubmit) to fall back further — to
+// AeroDataBox's own location data if a "Look up" was done, and after
+// that to Nominatim text geocoding, exactly as before.
 function airportCoordsForCode(code) {
   var found = COMMON_AIRPORTS.filter(function (a) { return a.code === code; })[0];
-  return (found && typeof found.lat === 'number' && typeof found.lng === 'number') ? { lat: found.lat, lng: found.lng } : null;
+  if (found && typeof found.lat === 'number' && typeof found.lng === 'number') return { lat: found.lat, lng: found.lng };
+  if (typeof AIRPORT_DB !== 'undefined' && AIRPORT_DB[code]) {
+    var entry = AIRPORT_DB[code]; // [name, city, countryCode, lat, lng]
+    return { lat: entry[3], lng: entry[4] };
+  }
+  return null;
 }
 
 // Pulls the leading 3-letter airport code off a "CODE — Name, City,
@@ -1433,6 +1481,87 @@ function airportCoordsFromText(text) {
   var m = /^([A-Za-z]{3})\b/.exec((text || '').trim());
   return m ? airportCoordsForCode(m[1].toUpperCase()) : null;
 }
+
+var MAX_AIRPORT_SUGGESTIONS = 30;
+var MIN_AIRPORT_SEARCH_LENGTH = 2;
+
+// Rebuilds the #airport-list datalist's <option>s to match whatever's
+// currently typed into a Flight leg's "From"/"To" field — searched
+// against the FULL ~7,900-airport AIRPORT_DB, not just COMMON_AIRPORTS'
+// curated ~126, so typing e.g. "birmingham" or "bhx" finds a secondary
+// airport too, the same way typing "london" already found LHR/LGW/STN/
+// LTN among the curated hubs (a native <datalist> matches anywhere in
+// each option's text, not just the start — this just widens the pool
+// it's matching against).
+//
+// This deliberately does NOT pre-render all ~7,900 options into the
+// page up front — openForm() still seeds the datalist with just the
+// curated 126 on open (see its own comment), and this only swaps in a
+// small, freshly-filtered subset (capped at MAX_AIRPORT_SUGGESTIONS)
+// once there's enough typed to search on. Scanning all ~7,900 entries
+// in memory on every keystroke is cheap (a plain object loop, no DOM
+// work) — it's rendering thousands of DOM nodes that would actually be
+// slow, especially on a phone/tablet, so that's the part this avoids.
+function refreshAirportSuggestions(query) {
+  var list = document.getElementById('airport-list');
+  if (!list) return;
+  var q = (query || '').trim();
+  if (q.length < MIN_AIRPORT_SEARCH_LENGTH) {
+    list.innerHTML = COMMON_AIRPORTS.map(function (a) { return '<option value="' + esc(airportDisplay(a)) + '">'; }).join('');
+    return;
+  }
+  if (typeof AIRPORT_DB === 'undefined') return; // still loading (it's `defer`red) — curated list stays as-is until it's ready
+
+  var qUpper = q.toUpperCase();
+  var qLower = q.toLowerCase();
+  var matches = [];
+  for (var code in AIRPORT_DB) {
+    if (!Object.prototype.hasOwnProperty.call(AIRPORT_DB, code)) continue;
+    var entry = AIRPORT_DB[code]; // [name, city, countryCode, lat, lng]
+    var name = entry[0], city = entry[1];
+    var score = 0;
+    // Ranked so an exact/prefix code match (what a frequent flyer types)
+    // always beats a name/city text match (what someone browsing by
+    // place typed) — both are useful, but shouldn't compete evenly.
+    if (code === qUpper) score = 4;
+    else if (code.indexOf(qUpper) === 0) score = 3;
+    else if (city && city.toLowerCase().indexOf(qLower) === 0) score = 2;
+    else if ((name && name.toLowerCase().indexOf(qLower) !== -1) || (city && city.toLowerCase().indexOf(qLower) !== -1)) score = 1;
+    if (score > 0) matches.push({ code: code, name: name, city: city, score: score });
+  }
+  matches.sort(function (a, b) { return (b.score - a.score) || a.code.localeCompare(b.code); });
+  matches = matches.slice(0, MAX_AIRPORT_SUGGESTIONS);
+  list.innerHTML = matches.map(function (m) {
+    return '<option value="' + esc(airportDisplay({ code: m.code, name: m.name, city: m.city })) + '">';
+  }).join('');
+}
+
+// Updates the live "resolved to a real coordinate or not" hint under a
+// Flight leg's "From"/"To" field (see fieldHtml's 'airport' case for
+// the initial render of the same hint) as the viewer types.
+function updateAirportResolveHint(input) {
+  var hintEl = document.getElementById(input.name + '-resolve-hint');
+  if (!hintEl) return;
+  var val = input.value.trim();
+  if (!val) { hintEl.textContent = ''; hintEl.className = 'field-hint airport-resolve-hint'; return; }
+  var resolved = airportCoordsFromText(val);
+  hintEl.textContent = resolved ? '✓ Mapped precisely for the Map tab' : 'No exact airport match yet — the map will try to search by name instead.';
+  hintEl.className = 'field-hint airport-resolve-hint' + (resolved ? ' is-ok' : ' is-unresolved');
+}
+
+// Debounced so a fast typist doesn't trigger a datalist rebuild on
+// every single keystroke — 120ms is short enough to still feel
+// immediate, long enough to skip the in-between keystrokes of a normal
+// typing burst. The resolve-hint update is cheap enough (no DOM list
+// rebuild, just one lookup) to run on every keystroke without this.
+var airportSuggestionDebounce = null;
+document.addEventListener('input', function (e) {
+  if (!e.target.getAttribute || e.target.getAttribute('list') !== 'airport-list') return;
+  var input = e.target;
+  updateAirportResolveHint(input);
+  clearTimeout(airportSuggestionDebounce);
+  airportSuggestionDebounce = setTimeout(function () { refreshAirportSuggestions(input.value); }, 120);
+});
 
 // Holds whatever real coordinates the most recent successful flight
 // lookup (in the currently-open transport form) returned for its
