@@ -237,8 +237,15 @@ async function handleFlightLookup(url, env) {
 
   let upstreamResponse;
   try {
+    // withLocation=true asks AeroDataBox to include each airport's
+    // lat/lon — the frontend uses that as a fallback source of real map
+    // coordinates for airports outside its own curated shortlist (see
+    // COMMON_AIRPORTS in data/airports.js, and index.html's
+    // airportCoordsFromText()/lastFlightLookupCoords). Everything else
+    // stays off (aircraft image, flight plan) since nothing here uses
+    // them and there's no reason to make AeroDataBox do the extra work.
     const apiUrl = "https://" + AERODATABOX_HOST + "/flights/Number/" + encodeURIComponent(flightNumber) +
-      "/" + encodeURIComponent(date) + "?withLocation=false&withAircraftImage=false&withFlightPlan=false";
+      "/" + encodeURIComponent(date) + "?withLocation=true&withAircraftImage=false&withFlightPlan=false";
     upstreamResponse = await fetch(apiUrl, {
       signal: controller.signal,
       headers: {
@@ -308,15 +315,27 @@ async function handleFlightLookup(url, env) {
 // rather than throwing if neither is present. Worst case it's just an
 // empty string, same as if this whole field didn't exist — the
 // frontend's airportDisplay() (index.html) already treats a missing
-// country as optional, it just makes the geocoded "From"/"To" value a
-// little less specific.
+// country as optional.
+//
+// `location` (present since the request now passes withLocation=true)
+// is this airport's real lat/lon — reshaped to {lat, lng} to match
+// what the frontend's Map tab expects everywhere else (Leaflet/
+// Nominatim both use "lng", AeroDataBox uses "lon"). This is what lets
+// index.html fall back to a real coordinate for an airport OUTSIDE its
+// own curated COMMON_AIRPORTS shortlist (see lastFlightLookupCoords in
+// index.html) instead of asking Nominatim to guess at free text like
+// "XYZ — Some Airport, Some City, Some Country" — which is exactly the
+// kind of query Nominatim sometimes can't resolve at all.
 function airportSummary(airport) {
-  if (!airport) return { code: "", name: "", municipality: "", country: "" };
+  if (!airport) return { code: "", name: "", municipality: "", country: "", location: null };
   return {
     code: airport.iata || airport.icao || "",
     name: airport.name || "",
     municipality: airport.municipalityName || "",
     country: (airport.country && airport.country.name) || airport.countryCode || "",
+    location: (airport.location && typeof airport.location.lat === "number" && typeof airport.location.lon === "number")
+      ? { lat: airport.location.lat, lng: airport.location.lon }
+      : null,
   };
 }
 
