@@ -194,6 +194,22 @@ textarea { resize: vertical; min-height: 60px; }
 .trip-meta b { font-family: var(--font-mono); color: var(--ink); }
 .warn-link { color: var(--danger); cursor: pointer; background: none; border: none; font-size: 13px; padding: 0; text-decoration: underline; }
 
+/* The two "big picture" views (Timeline, Map) — larger and more prominent
+   than the regular data-entry tabs below, since they're the main thing
+   most people open a trip to look at. */
+.hero-row { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+.hero-btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 22px; border-radius: var(--radius); border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow);
+  font-family: var(--font-display); font-weight: 600; font-size: 16px; cursor: pointer;
+  transition: transform .12s, border-color .15s;
+}
+.hero-btn .icon { width: 20px; height: 20px; color: var(--accent); }
+.hero-btn:hover { transform: translateY(-1px); }
+.hero-btn.active { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.hero-btn.active .icon { color: var(--accent); }
+
 .tabbar { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 20px 0 22px; overflow-x: auto; }
 .tab-btn {
   padding: 9px 14px; background: none; border: none; border-bottom: 2px solid transparent;
@@ -1350,13 +1366,27 @@ function renderDashboard() {
 
 /* ---------- 13. Render: Trip view shell (header + tabs) -------------- */
 
-var TABS = [
+// The two "big picture" views of a trip — see the day-by-day agenda, or
+// see it on a map — are surfaced as large HERO_TABS buttons above the
+// regular tab bar rather than being just another tab among the data-entry
+// ones below, since they're what most people actually want to look at
+// most of the time. Everything else (adding/editing the underlying data)
+// lives in TABS, in the order requested: Destinations, Transport,
+// Accommodation, Activities, then Contacts, with Expenses and Settings
+// kept at the end as before. Both arrays share the exact same "switch-tab"
+// data-action/click handler (see the click listener further down) — a
+// hero button and a regular tab button are just two different looks for
+// the same underlying currentTab switch.
+var HERO_TABS = [
   { key: 'timeline', label: 'Timeline', icon: 'calendar' },
+  { key: 'map', label: 'Map', icon: 'map' }
+];
+
+var TABS = [
   { key: 'destinations', label: 'Destinations', icon: 'pin' },
-  { key: 'activities', label: 'Activities', icon: 'ticket' },
   { key: 'transport', label: 'Transport', icon: 'plane' },
   { key: 'accommodation', label: 'Accommodation', icon: 'bed' },
-  { key: 'map', label: 'Map', icon: 'map' },
+  { key: 'activities', label: 'Activities', icon: 'ticket' },
   { key: 'contacts', label: 'Contacts', icon: 'users' },
   { key: 'expenses', label: 'Expenses', icon: 'wallet' },
   { key: 'settings', label: 'Settings', icon: 'gear' }
@@ -1367,6 +1397,10 @@ function renderTripView() {
   if (!trip) { currentView = 'dashboard'; return renderDashboard(); }
   var spend = tripSpend(trip);
   var status = tripStatus(trip);
+  var heroHtml = HERO_TABS.map(function (t) {
+    return '<button class="hero-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '">' +
+      icon(t.icon) + t.label + '</button>';
+  }).join('');
   var tabsHtml = TABS.map(function (t) {
     return '<button class="tab-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '">' +
       icon(t.icon) + t.label + '</button>';
@@ -1401,6 +1435,7 @@ function renderTripView() {
         '</div>' +
       '</div>' +
     '</div>' +
+    '<div class="hero-row">' + heroHtml + '</div>' +
     '<div class="tabbar">' + tabsHtml + '</div>' +
     '<div>' + panel + '</div>'
   );
