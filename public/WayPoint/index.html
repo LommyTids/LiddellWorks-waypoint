@@ -352,6 +352,11 @@ tr:last-child td { border-bottom: none; }
 <div id="toast-root"></div>
 
 <script src="/WayPoint/vendor/leaflet/leaflet.js"></script>
+<script src="/WayPoint/data/currencies.js"></script>
+<script src="/WayPoint/data/timezones.js"></script>
+<script src="/WayPoint/data/countries.js"></script>
+<script src="/WayPoint/data/cities.js"></script>
+<script src="/WayPoint/data/airports.js"></script>
 <script>
 /* ================================================================
    WAYPOINT — application logic
@@ -369,110 +374,24 @@ tr:last-child td { border-bottom: none; }
 
 /* ---------- 1. Small constants ---------------------------------- */
 
-var COMMON_CURRENCIES = ['GBP','USD','EUR','JPY','AUD','CAD','CHF','CNY','HKD',
-  'NZD','SGD','THB','VND','INR','MXN','ZAR','AED','TRY','KRW','IDR','MYR',
-  'PHP','BRL','SEK','NOK','DKK','PLN','CZK','HUF','EGP','MAD'];
+// COMMON_CURRENCIES, COMMON_TIMEZONES, COMMON_COUNTRIES, COMMON_CITIES
+// and COMMON_AIRPORTS used to be defined right here as big inline
+// arrays. They're now loaded from separate files under
+// /WayPoint/data/ (see the <script> tags near the top of this file,
+// just after leaflet.js) — purely to keep this file smaller, since a
+// few thousand lines of airport/city/country names made this file
+// unwieldy to upload/edit as a single piece. Nothing about how they're
+// used changed: they're still plain globals by the time any of the
+// code below runs. See data/airports.js specifically for why
+// COMMON_AIRPORTS is shaped differently from the others (objects with
+// city/country, not flat strings) — it's about the Map tab's
+// geocoding, not just tidiness.
 
 var WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 var TRANSPORT_MODES = ['Flight','Train','Bus','Car','Ferry','Other'];
 var EXPENSE_CATEGORIES = ['Food & drink','Transport','Accommodation','Activities','Shopping','Other'];
-
-// A curated set of IANA timezone names covering common travel
-// destinations. The destination form's timezone field offers these as
-// suggestions but still accepts any free-text value.
-var COMMON_TIMEZONES = ['UTC','Europe/London','Europe/Dublin','Europe/Lisbon','Europe/Paris','Europe/Madrid',
-  'Europe/Berlin','Europe/Amsterdam','Europe/Zurich','Europe/Rome','Europe/Athens','Europe/Istanbul','Europe/Moscow',
-  'America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Anchorage',
-  'America/Toronto','America/Vancouver','America/Mexico_City','America/Bogota','America/Lima',
-  'America/Sao_Paulo','America/Buenos_Aires','America/Santiago',
-  'Asia/Dubai','Asia/Karachi','Asia/Kolkata','Asia/Dhaka','Asia/Bangkok','Asia/Jakarta','Asia/Singapore',
-  'Asia/Kuala_Lumpur','Asia/Hong_Kong','Asia/Shanghai','Asia/Taipei','Asia/Seoul','Asia/Tokyo',
-  'Asia/Manila','Asia/Ho_Chi_Minh',
-  'Australia/Perth','Australia/Adelaide','Australia/Sydney','Australia/Brisbane',
-  'Pacific/Auckland','Pacific/Fiji','Pacific/Honolulu',
-  'Africa/Cairo','Africa/Johannesburg','Africa/Nairobi','Africa/Lagos','Indian/Maldives'];
-
-// Country names for the destination form's autocomplete. Not an
-// official ISO list — just plain English names a traveller would
-// type — offered as suggestions via a datalist, so any value the
-// viewer actually types is still accepted.
-var COMMON_COUNTRIES = ['Afghanistan','Albania','Algeria','Andorra','Angola','Argentina','Armenia','Australia',
-  'Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan',
-  'Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cambodia',
-  'Cameroon','Canada','Cape Verde','Chad','Chile','China','Colombia','Costa Rica','Croatia','Cuba','Cyprus',
-  'Czech Republic','Democratic Republic of the Congo','Denmark','Djibouti','Dominican Republic','Ecuador','Egypt',
-  'El Salvador','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany',
-  'Ghana','Greece','Greenland','Guatemala','Guinea','Guyana','Haiti','Honduras','Hong Kong','Hungary','Iceland',
-  'India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Ivory Coast','Jamaica','Japan','Jordan',
-  'Kazakhstan','Kenya','Kosovo','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Liberia','Libya','Liechtenstein',
-  'Lithuania','Luxembourg','Macau','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Mauritius',
-  'Mexico','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nepal',
-  'Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Macedonia','Norway','Oman','Pakistan','Panama',
-  'Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Republic of the Congo',
-  'Romania','Russia','Rwanda','Saudi Arabia','Senegal','Serbia','Seychelles','Singapore','Slovakia','Slovenia',
-  'Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden',
-  'Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Trinidad and Tobago',
-  'Tunisia','Turkey','Turkmenistan','Uganda','Ukraine','United Arab Emirates','United Kingdom',
-  'United States','Uruguay','Uzbekistan','Vanuatu','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
-
-// A few hundred well-known cities, for the same kind of "type-ahead
-// suggestion, but anything is still accepted" datalist as countries
-// above. This isn't (and can't realistically be) every city in the
-// world — it's a helpful shortlist of common travel destinations, so
-// typing "Chia" or "Bang" surfaces the obvious match without forcing
-// the viewer to pick from a closed list. Any place name a viewer
-// actually types is saved exactly as typed, list or no list.
-var COMMON_CITIES = ['Amsterdam','Athens','Auckland','Bali (Denpasar)','Bangkok','Barcelona','Beijing','Beirut',
-  'Belgrade','Berlin','Bogota','Bologna','Boston','Brisbane','Brussels','Bucharest','Budapest','Buenos Aires',
-  'Cairo','Cancun','Cape Town','Casablanca','Chiang Mai','Chicago','Christchurch','Copenhagen','Dallas',
-  'Da Nang','Delhi','Denver','Dhaka','Doha','Dubai','Dublin','Dubrovnik','Edinburgh','Florence','Frankfurt',
-  'Fukuoka','Geneva','Genoa','Glasgow','Gothenburg','Guangzhou','Hanoi','Ha Long Bay','Havana','Helsinki',
-  'Ho Chi Minh City','Hong Kong','Honolulu','Houston','Istanbul','Jaipur','Jakarta','Johannesburg','Kathmandu',
-  'Kigali','Krabi','Kraków','Kuala Lumpur','Kyoto','Lagos','Las Vegas','Lima','Lisbon','Liverpool','Ljubljana',
-  'London','Los Angeles','Luang Prabang','Luxor','Lyon','Madrid','Malaga','Male','Manchester','Manila','Marrakech',
-  'Marseille','Melbourne','Mexico City','Miami','Milan','Montevideo','Montreal','Moscow','Mumbai','Munich',
-  'Nairobi','Naples','New Delhi','New Orleans','New York','Nice','Osaka','Oslo','Panama City','Paris','Penang',
-  'Perth','Phnom Penh','Phuket','Porto','Prague','Queenstown','Quito','Reykjavik','Rio de Janeiro','Riyadh',
-  'Rome','Rotterdam','Salvador','San Diego','San Francisco','San Sebastian','Santiago','Santorini','Sao Paulo',
-  'Sapporo','Seattle','Seoul','Seville','Shanghai','Siem Reap','Singapore','Split','Stockholm','Sydney','Taipei',
-  'Tallinn','Tbilisi','Tel Aviv','Tokyo','Toronto','Tunis','Ubud','Vancouver','Venice','Vienna','Vientiane',
-  'Warsaw','Washington DC','Wellington','Xi\'an','Yangon','Zagreb','Zanzibar City','Zurich'];
-
-// Major international/hub airports, offered the same way — shown as
-// "CODE — City, Airport name" so it's easy to spot the right one, but
-// what actually gets saved is whatever the viewer picked or typed
-// (usually just the code, since that's what most people type once
-// they've seen the suggestion). Covers the busiest hubs on each
-// continent rather than every airport that exists.
-var COMMON_AIRPORTS = ['LHR — London Heathrow','LGW — London Gatwick','STN — London Stansted','LTN — London Luton',
-  'MAN — Manchester','EDI — Edinburgh','DUB — Dublin','CDG — Paris Charles de Gaulle','ORY — Paris Orly',
-  'AMS — Amsterdam Schiphol','FRA — Frankfurt','MUC — Munich','BER — Berlin Brandenburg','MAD — Madrid Barajas',
-  'BCN — Barcelona El Prat','FCO — Rome Fiumicino','MXP — Milan Malpensa','VCE — Venice Marco Polo',
-  'ZRH — Zurich','GVA — Geneva','VIE — Vienna','CPH — Copenhagen','ARN — Stockholm Arlanda','OSL — Oslo',
-  'HEL — Helsinki','WAW — Warsaw Chopin','PRG — Prague','BUD — Budapest','ATH — Athens','LIS — Lisbon',
-  'OPO — Porto','DUB — Dublin','IST — Istanbul','SAW — Istanbul Sabiha Gökçen','SVO — Moscow Sheremetyevo',
-  'DME — Moscow Domodedovo',
-  'JFK — New York JFK','EWR — Newark','LGA — New York LaGuardia','BOS — Boston Logan','ORD — Chicago O\'Hare',
-  'ATL — Atlanta','DFW — Dallas/Fort Worth','DEN — Denver','LAS — Las Vegas','LAX — Los Angeles',
-  'SFO — San Francisco','SEA — Seattle-Tacoma','MIA — Miami','MCO — Orlando','IAH — Houston','PHX — Phoenix',
-  'YYZ — Toronto Pearson','YVR — Vancouver','YUL — Montreal','MEX — Mexico City','CUN — Cancun',
-  'GRU — Sao Paulo Guarulhos','GIG — Rio de Janeiro Galeão','EZE — Buenos Aires Ezeiza','SCL — Santiago',
-  'LIM — Lima','BOG — Bogota',
-  'DXB — Dubai','AUH — Abu Dhabi','DOH — Doha','RUH — Riyadh','JED — Jeddah','TLV — Tel Aviv','CAI — Cairo',
-  'CMN — Casablanca','JNB — Johannesburg','CPT — Cape Town','NBO — Nairobi','LOS — Lagos','ADD — Addis Ababa',
-  'DEL — Delhi','BOM — Mumbai','BLR — Bengaluru','MAA — Chennai','CCU — Kolkata','KTM — Kathmandu',
-  'DAC — Dhaka','CMB — Colombo','MLE — Malé',
-  'BKK — Bangkok Suvarnabhumi','DMK — Bangkok Don Mueang','HKT — Phuket','CNX — Chiang Mai','SGN — Ho Chi Minh City',
-  'HAN — Hanoi','DAD — Da Nang','PNH — Phnom Penh','REP — Siem Reap','VTE — Vientiane','LPQ — Luang Prabang',
-  'RGN — Yangon','KUL — Kuala Lumpur','PEN — Penang','SIN — Singapore','CGK — Jakarta','DPS — Bali Denpasar',
-  'MNL — Manila','CEB — Cebu',
-  'HKG — Hong Kong','MFM — Macau','TPE — Taipei Taoyuan','PVG — Shanghai Pudong','PEK — Beijing Capital',
-  'PKX — Beijing Daxing','CAN — Guangzhou','ICN — Seoul Incheon','GMP — Seoul Gimpo','NRT — Tokyo Narita',
-  'HND — Tokyo Haneda','KIX — Osaka Kansai','FUK — Fukuoka','CTS — Sapporo New Chitose',
-  'SYD — Sydney','MEL — Melbourne','BNE — Brisbane','PER — Perth','AKL — Auckland','CHC — Christchurch',
-  'ZQN — Queenstown','NAN — Nadi (Fiji)','HNL — Honolulu'];
 
 /* ---------- 2. Generic utilities --------------------------------- */
 
@@ -795,7 +714,12 @@ function closeModal() {
    one field description into the right input, and openForm() wires
    the whole array up into a modal with Cancel/Save buttons. */
 
-function fieldHtml(field, value, trip) {
+function fieldHtml(field, value, trip, allValues) {
+  // allValues (optional): every value currently in the form (initial
+  // values, or the live values on a reactive re-render — see
+  // fieldsHtml() below), so a field can peek at a sibling field's
+  // value while building its own HTML. Only the 'flight-lookup' case
+  // uses this today (to default its date input from "Depart date").
   var val = (value === undefined || value === null) ? '' : value;
   var req = field.required ? 'required' : '';
   var full = field.wide ? 'style="grid-column:1/-1"' : '';
@@ -850,24 +774,37 @@ function fieldHtml(field, value, trip) {
         ' placeholder="' + esc(field.placeholder || 'e.g. LHR or Heathrow') + '">';
       break;
     case 'flight-lookup':
-      // Just a text input plus a "Look up" button — clicking it calls
-      // our /WayPoint/api/flight-lookup endpoint (see the click
-      // delegation handler's 'lookup-flight' branch) and, on success,
-      // fills in Airline/From/To/times right in this same open form.
-      // AeroDataBox looks flights up by number AND date, so it also
-      // reads whatever's in "Depart date" (further down this same
-      // form) at click time — hence the hint below, since that field
-      // isn't visible yet at the point someone's just typed a flight
-      // number. The status line underneath reports what happened
-      // (looking up / not found / filled in), since there's nowhere
-      // else in a modal form to show that feedback.
+      // A text input, a date input, and a "Look up" button — clicking
+      // it calls our /WayPoint/api/flight-lookup endpoint (see the
+      // click delegation handler's 'lookup-flight' branch) and, on
+      // success, fills in Airline/From/To/times right in this same
+      // open form. AeroDataBox looks flights up by number AND date;
+      // that date used to only come from "Depart date" further down
+      // this same form (not visible yet at the point someone's just
+      // typed a flight number, which was awkward — see
+      // performFlightLookup()'s comment for the full story). The date
+      // input right here is deliberately NOT a named form field (no
+      // `name` attribute, so it isn't submitted with the rest of the
+      // form) — it's just a convenient place to type/confirm the date
+      // for the lookup itself; performFlightLookup() falls back to the
+      // real "Depart date" field if this one's left blank, and copies
+      // whichever date was actually used back into "Depart date" on a
+      // successful lookup, so the two never end up disagreeing. It's
+      // pre-filled from "Depart date" here (via the 4th `allValues`
+      // argument fieldHtml() gets — see fieldsHtml()) when editing an
+      // existing leg or when the mode was just switched to Flight with
+      // a date already typed. The status line underneath reports what
+      // happened (looking up / not found / filled in), since there's
+      // nowhere else in a modal form to show that feedback.
+      var lookupDateDefault = (allValues && allValues.departDate) || '';
       inputHtml = '<div class="flight-lookup-row">' +
         '<input type="text" maxlength="10" style="text-transform:uppercase" ' +
         'name="' + field.key + '" value="' + esc(val) + '" ' + req +
         ' placeholder="' + esc(field.placeholder || '') + '">' +
+        '<input type="date" id="flight-lookup-date" style="flex:0 0 150px" value="' + esc(lookupDateDefault) + '">' +
         '<button type="button" class="btn" data-action="lookup-flight">Look up</button>' +
         '</div>' +
-        '<div class="field-hint">Fill in "Depart date" below first — flight schedules are looked up per date.</div>' +
+        '<div class="field-hint">Pick the date to look up right here — defaults to "Depart date" below once that\'s filled in, and fills it back in for you either way.</div>' +
         '<div class="flight-lookup-status" id="flight-lookup-status"></div>';
       break;
     case 'timezone':
@@ -913,10 +850,10 @@ function fieldsHtml(fields, initial, trip) {
     var next = fields[i + 1];
     var nextPairable = next && isPairableField(next);
     if (pairable && nextPairable) {
-      out += '<div class="field-row">' + fieldHtml(f, initial[f.key], trip) + fieldHtml(next, initial[next.key], trip) + '</div>';
+      out += '<div class="field-row">' + fieldHtml(f, initial[f.key], trip, initial) + fieldHtml(next, initial[next.key], trip, initial) + '</div>';
       i += 2;
     } else {
-      out += fieldHtml(f, initial[f.key], trip);
+      out += fieldHtml(f, initial[f.key], trip, initial);
       i += 1;
     }
   }
@@ -967,7 +904,7 @@ function openForm(opts) {
     '<datalist id="timezone-list">' + COMMON_TIMEZONES.map(function (tz) { return '<option value="' + tz + '">'; }).join('') + '</datalist>' +
     '<datalist id="country-list">' + COMMON_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
     '<datalist id="city-list">' + COMMON_CITIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
-    '<datalist id="airport-list">' + COMMON_AIRPORTS.map(function (a) { return '<option value="' + esc(a) + '">'; }).join('') + '</datalist>';
+    '<datalist id="airport-list">' + COMMON_AIRPORTS.map(function (a) { return '<option value="' + esc(airportDisplay(a)) + '">'; }).join('') + '</datalist>';
 }
 
 /* ---------- 7. Entity field schemas --------------------------------- */
@@ -1225,26 +1162,42 @@ function openTransportForm(trip, existing) {
 // proxies AeroDataBox (via RapidAPI) — see src/worker.js's
 // handleFlightLookup() for why that's a server-side call rather than
 // one made straight from here. AeroDataBox looks flights up by number
-// AND date, so this reads whatever's currently in the form's "Depart
-// date" field and sends that along — on success it fills in
-// Airline/From/To/times directly in the still-open form (not through
-// updateState()/render() — the form is mid-edit, and a full re-render
-// would discard anything else typed and reset field focus/scroll).
+// AND date.
+//
+// The date used to come ONLY from the real "Depart date" field further
+// down the form — awkward, since that field isn't even visible yet at
+// the point someone's just typed a flight number, so the natural first
+// click just bounced off a "fill in Depart date first" message. Now
+// there's a dedicated date input right next to the flight number (see
+// fieldHtml's 'flight-lookup' case) — this prefers that one, and only
+// falls back to "Depart date" if it's left blank, so editing an
+// existing leg (which already prefilled both) still works exactly as
+// before. Either way, once a lookup succeeds, the date actually used
+// gets written back into "Depart date" too, so the two fields can't
+// end up disagreeing regardless of which one someone actually typed
+// into.
+//
+// On success this fills in Airline/From/To/times directly in the
+// still-open form (not through updateState()/render() — the form is
+// mid-edit, and a full re-render would discard anything else typed and
+// reset field focus/scroll).
 function performFlightLookup(button) {
   var form = document.getElementById('entity-form');
   if (!form) return;
   var flightInput = form.querySelector('[name="flightNumber"]');
+  var quickDateInput = document.getElementById('flight-lookup-date');
   var departDateInput = form.querySelector('[name="departDate"]');
   var statusEl = document.getElementById('flight-lookup-status');
   var flightNumber = (flightInput && flightInput.value || '').trim();
-  var departDate = (departDateInput && departDateInput.value || '').trim();
+  var quickDate = (quickDateInput && quickDateInput.value || '').trim();
+  var departDate = quickDate || (departDateInput && departDateInput.value || '').trim();
 
   if (!flightNumber) {
     if (statusEl) { statusEl.textContent = 'Type a flight number first.'; statusEl.className = 'flight-lookup-status is-error'; }
     return;
   }
   if (!departDate) {
-    if (statusEl) { statusEl.textContent = 'Fill in "Depart date" first — flight schedules are looked up per date.'; statusEl.className = 'flight-lookup-status is-error'; }
+    if (statusEl) { statusEl.textContent = 'Pick a date first (either right here, or in "Depart date" below) — flight schedules are looked up per date.'; statusEl.className = 'flight-lookup-status is-error'; }
     return;
   }
 
@@ -1284,11 +1237,15 @@ function performFlightLookup(button) {
       if (carrierInput && data.airline) carrierInput.value = data.airline;
       if (fromInput && data.origin) fromInput.value = airportDisplay(data.origin);
       if (toInput && data.destination) toInput.value = airportDisplay(data.destination);
-      // Depart date is what we searched with, so it's already right —
-      // only the time is new. Arrival date DOES get filled in fresh
-      // (not just the time): a flight can land the next calendar day,
-      // and AeroDataBox tells us the real arrival date rather than us
-      // having to guess or leave it defaulted to the depart date.
+      // The date searched with (whichever field it came from — see
+      // this function's opening comment) is written into "Depart
+      // date" here so it's always right there, even if someone typed
+      // it only into the quick date input next to the flight number.
+      // Arrival date DOES get filled in fresh (not just the time): a
+      // flight can land the next calendar day, and AeroDataBox tells
+      // us the real arrival date rather than us having to guess or
+      // leave it defaulted to the depart date.
+      if (departDateField) departDateField.value = departDate;
       if (departTimeField && data.departure && data.departure.time) departTimeField.value = data.departure.time;
       if (arriveDateField && data.arrival && data.arrival.date) arriveDateField.value = data.arrival.date;
       if (arriveTimeField && data.arrival && data.arrival.time) arriveTimeField.value = data.arrival.time;
@@ -1318,14 +1275,42 @@ function performFlightLookup(button) {
     });
 }
 
-// Formats one of handleFlightLookup()'s airport objects the same way
-// the airport-list datalist options look ("CODE — Name"), so a
-// looked-up value reads consistently with one a viewer picked by hand
-// — and geocodes just as well on the Map tab.
+// Builds the display/saved string for one airport, from EITHER shape
+// this app deals with: a COMMON_AIRPORTS entry (data/airports.js —
+// { code, name, city, country }), or one of handleFlightLookup()'s
+// reshaped airport objects (src/worker.js's airportSummary() —
+// { code, name, municipality, country }). Both are used the same way:
+// as the value typed/saved into a transport leg's "From"/"To" field, so
+// a looked-up value reads consistently with one a viewer picked by
+// hand from the airport-list datalist (see openForm()).
+//
+// The result looks like "LHR — London Heathrow, London, United
+// Kingdom" — deliberately fuller than the old "CODE — Name" alone.
+// "From"/"To" feed straight into the Map tab's Nominatim geocoding
+// (see geocodeLookup()/mapLegsForTrip()), and a bare code or airport
+// name is often too little for Nominatim to place reliably, especially
+// for smaller/regional airports — city + country give it real address
+// context to work with, which is the whole point of splitting
+// COMMON_AIRPORTS into { code, name, city, country } in the first
+// place (see the comment atop data/airports.js).
+//
+// City is skipped from the "place" part when it's already embedded in
+// the airport name (e.g. "London Heathrow" already says "London"), so
+// the common case doesn't read as "LHR — London Heathrow, London,
+// United Kingdom" with London twice — just "...London Heathrow, United
+// Kingdom".
 function airportDisplay(airport) {
-  if (!airport.code && !airport.name) return '';
-  if (airport.code && airport.name) return airport.code + ' — ' + airport.name;
-  return airport.code || airport.name;
+  if (!airport) return '';
+  var codeName = (airport.code && airport.name) ? (airport.code + ' — ' + airport.name)
+    : (airport.code || airport.name || '');
+  var city = airport.city || airport.municipality || '';
+  var cityIsRedundant = city && airport.name && airport.name.toLowerCase().indexOf(city.toLowerCase()) !== -1;
+  var placeParts = [];
+  if (city && !cityIsRedundant) placeParts.push(city);
+  if (airport.country) placeParts.push(airport.country);
+  var place = placeParts.join(', ');
+  if (!codeName) return place;
+  return place ? (codeName + ', ' + place) : codeName;
 }
 
 function openAccommodationForm(trip, existing) {
