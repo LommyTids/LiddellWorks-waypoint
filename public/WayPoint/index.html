@@ -6,6 +6,16 @@
 <title>Waypoint</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Leaflet (the Map tab's mapping library) is vendored locally under
+     vendor/leaflet/ rather than pulled from a CDN, so the Map tab still
+     works even if some external CDN happens to be unreachable. Only the
+     map tiles themselves and the place-name lookups (see the Map section
+     of the main script below) need the open internet at runtime.
+     Deliberately an absolute path (starting with /WayPoint/), not a
+     relative one — a relative path here resolves differently depending
+     on whether the visited URL ends in "/WayPoint" or "/WayPoint/", and
+     would silently 404 in the no-trailing-slash case. -->
+<link rel="stylesheet" href="/WayPoint/vendor/leaflet/leaflet.css">
 <style>
 /* ============================================================
    WAYPOINT — a multi-trip travel planner
@@ -275,6 +285,19 @@ tr:last-child td { border-bottom: none; }
   .field-row { grid-template-columns: 1fr; }
   .trip-title-row h1 { font-size: 23px; }
 }
+
+/* ---- 4h. Map tab ----------------------------------------------------- */
+.map-toggles { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.map-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); cursor: pointer; user-select: none; }
+.map-toggle input { margin: 0; cursor: pointer; }
+.map-toggle-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.map-canvas { height: 480px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface-2); }
+.map-status { font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
+/* Leaflet's popup chrome is styled inline by the library; these few rules
+   just make it sit comfortably against the app's own card/surface look
+   instead of Leaflet's plain-white default. */
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
+.leaflet-popup-content { font-family: var(--font-body); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -291,6 +314,7 @@ tr:last-child td { border-bottom: none; }
 <div id="modal-root"></div>
 <div id="toast-root"></div>
 
+<script src="/WayPoint/vendor/leaflet/leaflet.js"></script>
 <script>
 /* ================================================================
    WAYPOINT — application logic
@@ -969,7 +993,13 @@ function openTripForm(existing) {
           next.trips.push({
             id: newId(), name: v.name, startDate: v.startDate || '', endDate: v.endDate || '',
             homeCurrency: (v.homeCurrency || 'GBP').toUpperCase(), notes: v.notes || '',
-            currencyRates: {}, destinations: [], activities: [], transport: [], accommodation: [], contacts: [], expenses: []
+            currencyRates: {}, destinations: [], activities: [], transport: [], accommodation: [], contacts: [], expenses: [],
+            // A cache of place-name -> {lat,lng} lookups for the Map tab (see
+            // the Map section further down), so the same place is only ever
+            // looked up once, not re-fetched on every visit. {} for a new
+            // trip; older trips just get one lazily the first time they need
+            // it (see initMap()).
+            geocodeCache: {}
           });
           currentTripId = next.trips[next.trips.length - 1].id;
           currentView = 'trip'; currentTab = 'timeline';
@@ -1326,6 +1356,7 @@ var TABS = [
   { key: 'activities', label: 'Activities', icon: 'ticket' },
   { key: 'transport', label: 'Transport', icon: 'plane' },
   { key: 'accommodation', label: 'Accommodation', icon: 'bed' },
+  { key: 'map', label: 'Map', icon: 'map' },
   { key: 'contacts', label: 'Contacts', icon: 'users' },
   { key: 'expenses', label: 'Expenses', icon: 'wallet' },
   { key: 'settings', label: 'Settings', icon: 'gear' }
@@ -1346,6 +1377,7 @@ function renderTripView() {
     case 'activities': panel = renderActivitiesTab(trip); break;
     case 'transport': panel = renderTransportTab(trip); break;
     case 'accommodation': panel = renderAccommodationTab(trip); break;
+    case 'map': panel = renderMapTab(trip); break;
     case 'contacts': panel = renderContactsTab(trip); break;
     case 'expenses': panel = renderExpensesTab(trip); break;
     case 'settings': panel = renderSettingsTab(trip); break;
@@ -1525,6 +1557,252 @@ function renderContactsTab(trip) {
   return tabHead('Contacts', 'new-contact', 'Add contact') + '<div class="item-list">' + rows + '</div>';
 }
 
+/* ---------- 19b. Map tab ---------------------------------------------------
+   Plots everything with a name/address/country onto one interactive map,
+   using Leaflet (a JS mapping library, vendored under vendor/leaflet/ — see
+   the <link>/<script> tags near the top of this file) for the map itself,
+   OpenStreetMap for the map tiles, and OpenStreetMap's free "Nominatim"
+   service to turn a place name/address into a latitude/longitude, since
+   none of our own data has coordinates in it.
+
+   The tricky part is that this app normally redraws #app from scratch (see
+   render() near the bottom of this file) every time anything changes —
+   great for plain HTML, but a map needs to be built once with a JS library
+   call (L.map(...)) and then updated in place, not thrown away and rebuilt
+   constantly, or it would flicker and forget its zoom/pan position. So this
+   section keeps its own little bit of state (`mapState`, below) outside of
+   the normal `state`/render() pipeline, mounts the actual Leaflet map
+   itself imperatively (see initMap()) whenever the Map tab's HTML has just
+   been drawn, and updates it directly (see the "toggle-map-layer" handler
+   in the click listener) for anything — like a layer checkbox — that
+   doesn't need a full re-render.
+   ---------------------------------------------------------------------- */
+
+// One layer group per category, so the checkboxes in the tab can show/hide
+// each kind of pin independently. `color` is used both for each category's
+// map markers and for the little dot next to its checkbox label.
+var MAP_LAYER_META = [
+  { key: 'destinations', label: 'Destinations', color: '#1f6f63' },
+  { key: 'activities', label: 'Activities', color: '#a6752b' },
+  { key: 'transport', label: 'Transport', color: '#3b6fa0' },
+  { key: 'accommodation', label: 'Accommodation', color: '#56607a' }
+];
+
+// Everything the Map tab needs to remember between renders that ISN'T part
+// of the saved trip data — which Leaflet map/layers are currently mounted,
+// which layers are currently checked on, and a `generation` counter (see
+// initMap() for what that guards against). None of this is saved or
+// shared — it just resets to the defaults below on a fresh page load.
+var mapState = {
+  instance: null,
+  layers: null,
+  generation: 0,
+  visibility: { destinations: true, activities: true, transport: true, accommodation: true }
+};
+
+// Nominatim (OpenStreetMap's free geocoder) asks that callers make no more
+// than about one request per second. This tracks when the last lookup
+// happened so geocodeLookup() can wait out the rest of that second first.
+var lastGeocodeCallAt = 0;
+var GEOCODE_MIN_INTERVAL_MS = 1100;
+
+// Turns a free-text place name/address into { lat, lng }, or null if
+// Nominatim couldn't find a match (or the request failed) — either way,
+// the caller (see initMap()) caches whatever comes back so this is never
+// called twice for the same text.
+async function geocodeLookup(query) {
+  var waitFor = Math.max(0, GEOCODE_MIN_INTERVAL_MS - (Date.now() - lastGeocodeCallAt));
+  if (waitFor > 0) await new Promise(function (resolve) { setTimeout(resolve, waitFor); });
+  lastGeocodeCallAt = Date.now();
+  try {
+    var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(query);
+    var res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return null;
+    var results = await res.json();
+    if (!results || !results.length) return null;
+    return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Gathers every destination/activity/accommodation entry that has enough
+// text to plot: destinations use "name, country"; activities prefer their
+// own address/venue but fall back to their linked destination's location
+// (many activities are only ever tagged to an area, not given their own
+// address); accommodation prefers its address, falling back to its name.
+// Anything with no usable text at all is simply left off the map.
+function mapPointsForTrip(trip) {
+  var points = [];
+  (trip.destinations || []).forEach(function (d) {
+    var query = [d.name, d.country].filter(Boolean).join(', ');
+    if (query) points.push({ category: 'destinations', query: query, label: d.name, sub: d.country });
+  });
+  (trip.activities || []).forEach(function (a) {
+    var query = a.address || a.location || '';
+    if (!query && a.destinationId) {
+      var dest = byId(trip.destinations, a.destinationId);
+      if (dest) query = [dest.name, dest.country].filter(Boolean).join(', ');
+    }
+    if (query) points.push({ category: 'activities', query: query, label: a.title, sub: a.location || a.address });
+  });
+  (trip.accommodation || []).forEach(function (ac) {
+    var query = ac.address || ac.name || '';
+    if (query) points.push({ category: 'accommodation', query: query, label: ac.name, sub: ac.address });
+  });
+  return points;
+}
+
+// Transport legs become lines rather than pins — one per leg with both a
+// from- and a to-location filled in. There's no fallback for a missing
+// location here (unlike activities above) since a transport leg with only
+// one end known can't usefully be drawn as a line.
+function mapLegsForTrip(trip) {
+  return (trip.transport || []).filter(function (t) { return t.fromLocation && t.toLocation; }).map(function (t) {
+    return { fromQuery: t.fromLocation, toQuery: t.toLocation, label: transportLabel(t), mode: t.mode };
+  });
+}
+
+function renderMapTab(trip) {
+  var points = mapPointsForTrip(trip);
+  var legs = mapLegsForTrip(trip);
+  var toggles = MAP_LAYER_META.map(function (m) {
+    var checked = mapState.visibility[m.key] ? 'checked' : '';
+    return '<label class="map-toggle"><input type="checkbox" data-action="toggle-map-layer" data-layer="' + m.key + '" ' + checked + '>' +
+      '<span class="map-toggle-dot" style="background:' + m.color + '"></span>' + esc(m.label) + '</label>';
+  }).join('');
+
+  if (!points.length && !legs.length) {
+    return '<div class="tab-panel-head"><h2>Map</h2></div><div class="empty-state">' + icon('map') +
+      '<h3>Nothing to show yet</h3>' +
+      '<p>Add a destination, activity, transport leg or place of accommodation with a name, address or country, and it\'ll appear here automatically.</p></div>';
+  }
+
+  return (
+    '<div class="tab-panel-head"><h2>Map</h2></div>' +
+    '<div class="map-toggles">' + toggles + '</div>' +
+    '<div id="map-canvas" class="map-canvas"></div>' +
+    '<div id="map-status" class="map-status">Loading map…</div>' +
+    '<p class="field-hint" style="margin-top:8px">Locations are found automatically from the names/addresses/countries you\'ve entered, using OpenStreetMap — this is a best-effort match, not a guaranteed-accurate one.</p>'
+  );
+}
+
+// Builds (or rebuilds) the actual Leaflet map inside #map-canvas and fills
+// it in with markers/lines, geocoding anything not already in the trip's
+// geocodeCache. Called from render() (see near the bottom of this file)
+// every time the Map tab's HTML has just been drawn.
+async function initMap(trip) {
+  var canvas = document.getElementById('map-canvas');
+  if (!canvas) return; // the Map tab isn't the one currently on screen
+
+  // A guard against a slow, still-running geocoding pass from an EARLIER
+  // call to this function finishing after a NEWER call has already taken
+  // over (e.g. the viewer switched away from the Map tab and back again
+  // while lookups were still in flight). Every await below re-checks this
+  // before touching mapState or the DOM, so a stale call just quietly
+  // stops instead of clobbering whatever the newer call already built.
+  mapState.generation++;
+  var myGeneration = mapState.generation;
+
+  if (mapState.instance) { mapState.instance.remove(); mapState.instance = null; mapState.layers = null; }
+
+  var map = L.map('map-canvas', { scrollWheelZoom: true }).setView([20, 0], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  var layers = { destinations: L.layerGroup(), activities: L.layerGroup(), transport: L.layerGroup(), accommodation: L.layerGroup() };
+  Object.keys(layers).forEach(function (key) { if (mapState.visibility[key]) layers[key].addTo(map); });
+
+  mapState.instance = map;
+  mapState.layers = layers;
+
+  var cache = trip.geocodeCache || {};
+  var newEntries = {}; // newly-looked-up coordinates (or confirmed misses) to save once we're done
+  var bounds = [];
+
+  // Looks a query up in the trip's saved cache first, then in whatever
+  // we've already resolved earlier in THIS pass, and only calls out to
+  // Nominatim if it's genuinely never been looked up before.
+  async function resolve(query) {
+    var key = query.trim();
+    if (Object.prototype.hasOwnProperty.call(cache, key)) return cache[key];
+    if (Object.prototype.hasOwnProperty.call(newEntries, key)) return newEntries[key];
+    var result = await geocodeLookup(key);
+    newEntries[key] = result; // cache a miss (null) too, so we don't retry it forever
+    return result;
+  }
+
+  function addPoint(category, coords, label, sub) {
+    if (!coords) return;
+    var meta = MAP_LAYER_META.filter(function (m) { return m.key === category; })[0];
+    L.circleMarker([coords.lat, coords.lng], { radius: 7, color: meta.color, weight: 2, fillColor: meta.color, fillOpacity: 0.75 })
+      .bindPopup('<strong>' + esc(label) + '</strong>' + (sub ? '<br>' + esc(sub) : ''))
+      .addTo(layers[category]);
+    bounds.push([coords.lat, coords.lng]);
+  }
+
+  var points = mapPointsForTrip(trip);
+  var legs = mapLegsForTrip(trip);
+  var totalLookups = points.length + legs.length * 2;
+  var done = 0, missing = 0;
+  var statusEl = document.getElementById('map-status');
+
+  function updateStatus() {
+    if (!statusEl) return;
+    if (done < totalLookups) statusEl.textContent = 'Locating places on the map… (' + done + ' of ' + totalLookups + ')';
+    else if (missing > 0) statusEl.textContent = (totalLookups - missing) + ' of ' + totalLookups + ' locations placed on the map. ' + missing + ' couldn\'t be found automatically — try refining the name/address.';
+    else statusEl.textContent = 'All locations placed on the map.';
+  }
+  updateStatus();
+
+  for (var i = 0; i < points.length; i++) {
+    var p = points[i];
+    var coords = await resolve(p.query);
+    if (myGeneration !== mapState.generation) return; // superseded — stop here
+    done++;
+    if (coords) addPoint(p.category, coords, p.label, p.sub); else missing++;
+    updateStatus();
+    if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+  }
+
+  for (var j = 0; j < legs.length; j++) {
+    var leg = legs[j];
+    var fromCoords = await resolve(leg.fromQuery);
+    if (myGeneration !== mapState.generation) return;
+    done++; updateStatus();
+    var toCoords = await resolve(leg.toQuery);
+    if (myGeneration !== mapState.generation) return;
+    done++; updateStatus();
+    if (fromCoords && toCoords) {
+      var lineMeta = MAP_LAYER_META.filter(function (m) { return m.key === 'transport'; })[0];
+      L.polyline([[fromCoords.lat, fromCoords.lng], [toCoords.lat, toCoords.lng]], {
+        color: lineMeta.color, weight: 3, opacity: 0.85, dashArray: leg.mode === 'Flight' ? '6 6' : null
+      }).bindPopup('<strong>' + esc(leg.label) + '</strong>').addTo(layers.transport);
+      bounds.push([fromCoords.lat, fromCoords.lng], [toCoords.lat, toCoords.lng]);
+    } else {
+      missing++;
+    }
+    if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+  }
+
+  if (Object.keys(newEntries).length) {
+    updateState(function (next) {
+      var t = byId(next.trips, trip.id);
+      if (!t) return;
+      t.geocodeCache = t.geocodeCache || {};
+      Object.keys(newEntries).forEach(function (k) { t.geocodeCache[k] = newEntries[k]; });
+    });
+    // updateState() -> persist() -> render() will call initMap() again
+    // straight away (we're still on the Map tab) — and since every place
+    // looked up just now is in the cache, that second pass resolves
+    // everything instantly with no further network calls. That's the
+    // simplest way to both save what we just learned AND end up with one
+    // clean, fully-drawn map, so we don't bother finishing this pass.
+  }
+}
+
 /* ---------- 20. Render: Timeline tab ---------------------------------------
    One card per day: the date heading, chips for any destination whose
    stay covers that day, every event that falls on it in time order,
@@ -1658,6 +1936,22 @@ function renderSettingsTab(trip) {
 function render() {
   var app = document.getElementById('app');
   app.innerHTML = (currentView === 'trip' && currentTripId) ? renderTripView() : renderDashboard();
+
+  if (currentView === 'trip' && currentTab === 'map') {
+    // The Map tab's HTML (including a fresh, empty #map-canvas div) was
+    // just drawn above — mount the actual Leaflet map into it. See the Map
+    // section (19b) for why this can't just be part of the HTML string
+    // like everything else on the page.
+    var trip = currentTrip();
+    if (trip) initMap(trip);
+  } else if (mapState.instance) {
+    // Left the Map tab (or the trip): tear down the Leaflet instance
+    // rather than leaving it running against a #map-canvas element that
+    // innerHTML just replaced out from under it.
+    mapState.instance.remove();
+    mapState.instance = null;
+    mapState.layers = null;
+  }
 }
 
 /* ---------- 24. Event delegation ------------------------------------------------
@@ -1683,6 +1977,19 @@ document.addEventListener('click', function (e) {
   if (action === 'open-trip') { currentView = 'trip'; currentTripId = el.dataset.id; currentTab = 'timeline'; render(); return; }
   if (action === 'back-to-dashboard') { currentView = 'dashboard'; currentTripId = null; render(); return; }
   if (action === 'switch-tab') { currentTab = el.dataset.tab; render(); return; }
+  if (action === 'toggle-map-layer') {
+    // Handled directly against the live Leaflet map/layers rather than
+    // through updateState()/render() — this is a view preference, not
+    // trip data, and re-rendering would tear down and rebuild the whole
+    // map (see initMap()) just to flip one layer's visibility.
+    var layerKey = el.dataset.layer;
+    mapState.visibility[layerKey] = el.checked;
+    if (mapState.instance && mapState.layers && mapState.layers[layerKey]) {
+      if (el.checked) mapState.layers[layerKey].addTo(mapState.instance);
+      else mapState.instance.removeLayer(mapState.layers[layerKey]);
+    }
+    return;
+  }
   if (action === 'new-trip') { openTripForm(); return; }
   if (action === 'edit-trip') { openTripForm(byId(state.trips, el.dataset.id)); return; }
   if (action === 'delete-trip') { deleteTrip(el.dataset.id); return; }
