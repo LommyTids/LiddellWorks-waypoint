@@ -14,12 +14,14 @@
  *      (a simple key/value store, think of it like a single shared file)
  *      and send them back as JSON, or take a JSON body from the page and
  *      write it into KV so it's there next time.
- *   2. `/WayPoint/api/flight-lookup` proxies a flight number (e.g. "BA15")
- *      to the free adsbdb.com public API and hands back just its usual
- *      carrier and origin/destination airports — used to auto-fill the
- *      transport form when adding a flight. See handleFlightLookup() below
- *      for why this is a small server-side proxy rather than the page
- *      calling adsbdb directly.
+ *   2. `/WayPoint/api/flight-lookup` proxies a flight number + date (e.g.
+ *      "BA15" on 2026-09-03) to the AeroDataBox API (via RapidAPI) and
+ *      hands back its carrier, origin/destination airports, and scheduled
+ *      local departure/arrival date+time — used to auto-fill the transport
+ *      form when adding a flight. Requires the `AERODATABOX_API_KEY`
+ *      secret (see handleFlightLookup() below for setup and for why this
+ *      is a small server-side proxy rather than the page calling
+ *      AeroDataBox directly with the key embedded in its public JS).
  *   3. For every other request (loading the page itself, any future CSS/JS/
  *      image files), just hand it off to Cloudflare's static asset serving
  *      (the `env.ASSETS` binding below) — that's what actually serves
@@ -105,7 +107,7 @@ export default {
           headers: { Allow: "GET" },
         });
       }
-      return handleFlightLookup(url);
+      return handleFlightLookup(url, env);
     }
 
     // ---- Everything else: hand off to the static file server --------------
@@ -171,52 +173,79 @@ async function handlePost(request, env) {
   });
 }
 
-// Only ever forward something that looks like a real flight/callsign
-// number to the upstream service — letters and digits only, a
-// sensible length. This isn't really a security boundary (the value
-// gets URL-encoded either way) so much as a cheap way to fail fast
-// with a clear message instead of sending obvious junk out to a
-// third party and waiting on its response.
+// Only ever forward something that looks like a real flight number to
+// the upstream service — letters and digits only, a sensible length —
+// and a real calendar date. Neither check is really a security
+// boundary (both values get URL-encoded either way) so much as a
+// cheap way to fail fast with a clear message instead of sending
+// obvious junk out to a third party and waiting on its response.
 const FLIGHT_NUMBER_PATTERN = /^[A-Z0-9]{2,8}$/;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+// AeroDataBox is accessed the same way for everyone who signs up
+// through RapidAPI: this fixed host, plus their own personal API key.
+const AERODATABOX_HOST = "aerodatabox.p.rapidapi.com";
 
 /**
- * Reverse-looks-up a flight number (e.g. "BA15") into its operating
- * airline and usual origin/destination airports, by proxying to the
- * free, keyless adsbdb.com public API (https://www.adsbdb.com/). This
- * lives server-side rather than being called straight from the page
- * for two reasons: it keeps every outbound call to a third party in
- * one place (so it's easy to swap providers later without touching
- * the frontend), and it means a flaky/slow upstream response can be
- * turned into a clean, friendly error instead of a raw browser fetch
- * failure landing in the form.
+ * Reverse-looks-up a flight number + date (e.g. "BA15" on 2026-09-03)
+ * into its operating airline, origin/destination airports, and
+ * scheduled local departure/arrival date+time, by proxying to the
+ * AeroDataBox API (https://aerodatabox.com/) via RapidAPI. This lives
+ * server-side — rather than being called straight from the page — for
+ * three reasons: it's the only place the RapidAPI key ever needs to
+ * exist (see AERODATABOX_API_KEY below — the page's JavaScript is
+ * fully public, so a key embedded there would be visible to anyone
+ * who opened dev tools); it keeps every outbound call to a third
+ * party in one place, so it's easy to swap providers later without
+ * touching the frontend; and it means a flaky/slow upstream response,
+ * or a plan/quota problem, can be turned into a clean, friendly error
+ * instead of a raw browser fetch failure landing in the form.
  *
- * Note this only returns the flight's *usual* route — adsbdb builds
- * it from real ADS-B traffic it has observed, not from an airline's
- * official schedule — so there's no date parameter here, and no
- * guarantee a specific day's flight matches exactly (codeshares,
- * seasonal route changes, etc. can differ). Good enough for
- * auto-filling "carrier" and "from/to" as a starting point that's
- * still easy to correct by hand.
+ * Requires the WAYPOINT_PASSWORD-style secret `AERODATABOX_API_KEY`
+ * to be set in the Cloudflare dashboard (Workers & Pages →
+ * waypoint-app → Settings → Variables and Secrets) — this file never
+ * contains the actual key. Sign up free at
+ * https://rapidapi.com/aedbx-aedbx/api/aerodatabox to get one; the
+ * free tier is generous enough for personal, occasional use (a
+ * handful of flights per trip is nowhere near its monthly allowance).
  */
-async function handleFlightLookup(url) {
-  const raw = (url.searchParams.get("flightNumber") || "").trim().toUpperCase();
-  if (!raw) {
+async function handleFlightLookup(url, env) {
+  const flightNumber = (url.searchParams.get("flightNumber") || "").trim().toUpperCase();
+  const date = (url.searchParams.get("date") || "").trim();
+
+  if (!flightNumber) {
     return jsonError(400, "No flight number given.");
   }
-  if (!FLIGHT_NUMBER_PATTERN.test(raw)) {
+  if (!FLIGHT_NUMBER_PATTERN.test(flightNumber)) {
     return jsonError(400, "That doesn't look like a flight number (letters and digits only, e.g. BA15).");
   }
+  if (!date) {
+    return jsonError(400, "No date given — flight schedules are looked up per date.");
+  }
+  if (!DATE_PATTERN.test(date)) {
+    return jsonError(400, "That doesn't look like a date (expected YYYY-MM-DD).");
+  }
 
-  // adsbdb occasionally takes a moment to respond; don't let a slow
-  // upstream hang the Worker (and the person's form) indefinitely.
+  if (!env.AERODATABOX_API_KEY) {
+    return jsonError(501, "Flight lookup isn't set up yet — add the AERODATABOX_API_KEY secret in the Cloudflare dashboard first.");
+  }
+
+  // AeroDataBox occasionally takes a moment to respond; don't let a
+  // slow upstream hang the Worker (and the person's form) indefinitely.
   const controller = new AbortController();
   const timeout = setTimeout(function () { controller.abort(); }, 8000);
 
   let upstreamResponse;
   try {
-    upstreamResponse = await fetch("https://api.adsbdb.com/v0/callsign/" + encodeURIComponent(raw), {
+    const apiUrl = "https://" + AERODATABOX_HOST + "/flights/Number/" + encodeURIComponent(flightNumber) +
+      "/" + encodeURIComponent(date) + "?withLocation=false&withAircraftImage=false&withFlightPlan=false";
+    upstreamResponse = await fetch(apiUrl, {
       signal: controller.signal,
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "X-RapidAPI-Key": env.AERODATABOX_API_KEY,
+        "X-RapidAPI-Host": AERODATABOX_HOST,
+      },
     });
   } catch (err) {
     return jsonError(502, "Couldn't reach the flight lookup service — try again in a moment.");
@@ -225,32 +254,45 @@ async function handleFlightLookup(url) {
   }
 
   if (upstreamResponse.status === 404) {
-    return jsonError(404, "No route found for that flight number.");
+    return jsonError(404, "No flight found for that number and date.");
+  }
+  if (upstreamResponse.status === 401 || upstreamResponse.status === 403) {
+    return jsonError(502, "AeroDataBox rejected the request — double-check the API key, and that your RapidAPI plan includes this endpoint.");
+  }
+  if (upstreamResponse.status === 429) {
+    return jsonError(429, "Hit the AeroDataBox rate/quota limit — wait a moment (or check your RapidAPI usage) and try again.");
   }
   if (!upstreamResponse.ok) {
     return jsonError(502, "The flight lookup service had a problem — try again in a moment.");
   }
 
-  let data;
+  let flights;
   try {
-    data = await upstreamResponse.json();
+    flights = await upstreamResponse.json();
   } catch (err) {
     return jsonError(502, "The flight lookup service returned something unexpected.");
   }
 
-  const route = data && data.response && data.response.flightroute;
-  if (!route || !route.origin || !route.destination) {
-    return jsonError(404, "No route found for that flight number.");
+  if (!Array.isArray(flights) || !flights.length) {
+    return jsonError(404, "No flight found for that number and date.");
   }
 
-  // Reshape into just what the form needs, rather than passing
-  // adsbdb's full response straight through — keeps the frontend
-  // decoupled from the exact shape of whichever provider is behind
-  // this endpoint.
+  // A flight number can occasionally match more than one actual flight
+  // on the same date (codeshares, or a number reused later that day) —
+  // AeroDataBox returns all of them. There's no good way to guess
+  // which one the viewer meant, so this just uses the first and says
+  // how many others there were, so a wrong pick is at least visible
+  // rather than silently swallowed.
+  const flight = flights[0];
+
   const result = {
-    airline: (route.airline && route.airline.name) || "",
-    origin: airportSummary(route.origin),
-    destination: airportSummary(route.destination),
+    airline: (flight.airline && flight.airline.name) || "",
+    aircraft: (flight.aircraft && flight.aircraft.model) || "",
+    origin: airportSummary(flight.departure && flight.departure.airport),
+    destination: airportSummary(flight.arrival && flight.arrival.airport),
+    departure: movementSummary(flight.departure),
+    arrival: movementSummary(flight.arrival),
+    matchCount: flights.length,
   };
 
   return new Response(JSON.stringify(result), {
@@ -260,10 +302,34 @@ async function handleFlightLookup(url) {
 }
 
 function airportSummary(airport) {
+  if (!airport) return { code: "", name: "", municipality: "" };
   return {
-    code: airport.iata_code || airport.icao_code || "",
+    code: airport.iata || airport.icao || "",
     name: airport.name || "",
-    municipality: airport.municipality || "",
+    municipality: airport.municipalityName || "",
+  };
+}
+
+// Pulls the scheduled local date+time and terminal/gate out of one
+// side (departure or arrival) of an AeroDataBox flight. AeroDataBox's
+// "local" time strings look like "2026-09-03 14:35+01:00" (a space,
+// not a "T", before the time, plus a UTC-offset suffix) — rather than
+// trust every browser's Date parser to handle that non-standard
+// format consistently (Safari in particular is fussy about this), the
+// date and time-of-day are pulled out directly with a simple pattern
+// match, and just those two plain strings are sent to the frontend —
+// they drop straight into a <input type="date">/<input type="time">
+// with no parsing needed on that end at all.
+function movementSummary(movement) {
+  var empty = { date: "", time: "", terminal: "", gate: "" };
+  if (!movement) return empty;
+  var timeInfo = movement.scheduledTime || movement.revisedTime;
+  var match = timeInfo && timeInfo.local && /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/.exec(timeInfo.local);
+  return {
+    date: match ? match[1] : "",
+    time: match ? match[2] : "",
+    terminal: movement.terminal || "",
+    gate: movement.gate || "",
   };
 }
 
