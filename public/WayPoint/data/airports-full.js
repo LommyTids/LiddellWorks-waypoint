@@ -39,7 +39,7 @@
 // Loaded with `defer` (see the <script> tag near the top of
 // index.html, unlike the other data/*.js files) since — unlike
 // COMMON_CURRENCIES/COMMON_AIRPORTS/etc., which the very first form a
-// viewer opens needs for its <datalist> suggestions — this file is
+// viewer opens needs for its suggestion dropdown — this file is
 // only ever touched later, when a Flight leg is actually saved. Not
 // blocking on it during initial page parse keeps first load faster,
 // with no behavioural difference: it's guaranteed to have finished
