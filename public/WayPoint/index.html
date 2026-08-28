@@ -156,6 +156,8 @@ textarea { resize: vertical; min-height: 60px; }
 .field { margin-bottom: 14px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 3px; }
+.checkbox-field { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+.checkbox-field input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
 .flight-lookup-row { display: flex; gap: 8px; }
 .flight-lookup-row input { flex: 1; }
 .flight-lookup-row .btn { flex-shrink: 0; white-space: nowrap; }
@@ -417,6 +419,11 @@ var WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 var TRANSPORT_MODES = ['Flight','Train','Bus','Car','Ferry','Other'];
+// How a transport leg was paid for — drives which cost-related fields
+// show up on the form (see transportFieldsForMode()): Cash shows a
+// currency+amount, Points shows a program+points-count, Combo shows
+// both, and Free shows neither (nothing to record).
+var TRANSPORT_PAYMENT_TYPES = ['Cash', 'Points', 'Combo', 'Free'];
 var EXPENSE_CATEGORIES = ['Food & drink','Transport','Accommodation','Activities','Shopping','Other'];
 
 /* ---------- 2. Generic utilities --------------------------------- */
@@ -566,6 +573,7 @@ var ICONS = {
   copy: '<rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
   map: '<path d="M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z"/><line x1="9" y1="4" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="20"/>',
   wallet: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16" cy="14" r="1.2"/>',
+  star: '<path d="M12 3l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.9 6.4 20.1l1.4-6.3L3 9.5l6.4-.6z"/>',
   users: '<circle cx="9" cy="8" r="3"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 8.2a3 3 0 1 1 0 5.8"/><path d="M17.5 14.3c2 .5 3.3 2.1 3.3 4.7"/>'
 };
 
@@ -749,6 +757,19 @@ function fieldHtml(field, value, trip, allValues) {
   var val = (value === undefined || value === null) ? '' : value;
   var req = field.required ? 'required' : '';
   var full = field.wide ? 'style="grid-column:1/-1"' : '';
+
+  // Rendered separately from every other type below: a checkbox reads
+  // naturally with its label right next to it on one line ("[x] Use a
+  // different exchange rate for this leg"), not the standard pattern
+  // of a block label sitting above the input. Always full-width (see
+  // callers, which mark every checkbox field `wide: true`) so it never
+  // gets paired into a two-column row next to an unrelated field.
+  if (field.type === 'checkbox') {
+    return '<div class="field" ' + full + '><label class="checkbox-field">' +
+      '<input type="checkbox" name="' + field.key + '"' + (val ? ' checked' : '') + '> ' + esc(field.label) + '</label>' +
+      (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '') + '</div>';
+  }
+
   var inputHtml;
   switch (field.type) {
     case 'text':
@@ -941,9 +962,10 @@ function currentFormValues(formEl) {
 
 function openForm(opts) {
   // opts: { title, fields, initial, trip, submitLabel, onSubmit,
-  //         reactiveKey } — reactiveKey names a field (e.g. "mode")
-  // that, when changed, should recompute a function-valued `fields`
-  // and re-render just the field list, keeping everything else typed.
+  //         reactiveKey } — reactiveKey names a field (e.g. "mode"), or
+  // an array of them, that when changed should recompute a
+  // function-valued `fields` and re-render just the field list,
+  // keeping everything else typed.
   window.__formConfig = opts;
   var root = document.getElementById('modal-root');
   var initial = opts.initial || {};
@@ -1010,39 +1032,79 @@ var ACTIVITY_FIELDS = [
 // Transport fields depend on the chosen mode: a flight needs a flight
 // number, a car rental doesn't (but wants a rental company and plate
 // instead), and so on. transportFieldsForMode() builds the right field
-// list for whichever mode is currently selected in the form; the
-// "Mode" select itself is wired up as the form's `reactiveKey` (see
-// openForm/openTransportForm below) so switching it re-renders the
-// mode-specific fields live, without losing whatever else was typed.
+// list for whichever mode/payment-type is currently selected in the
+// form; "Mode", "Paid with", and the exchange-rate checkbox are all
+// wired up as the form's `reactiveKey` (see openForm/openTransportForm
+// below, and the 'change' listener that reads it) so changing any of
+// them re-renders the field list live, without losing whatever else
+// was typed. (Seat/coach numbers used to live here too — dropped as
+// unwanted clutter; carrier/flight-number/plate still do, they're
+// worth keeping.)
 var TRANSPORT_MODE_FIELDS = {
   Flight: [
     { key: 'carrier', label: 'Airline', type: 'text', placeholder: 'e.g. British Airways' },
-    { key: 'flightNumber', label: 'Flight number', type: 'flight-lookup', placeholder: 'e.g. BA15', wide: true },
-    { key: 'seat', label: 'Seat', type: 'text' }
+    { key: 'flightNumber', label: 'Flight number', type: 'flight-lookup', placeholder: 'e.g. BA15', wide: true }
   ],
   Train: [
-    { key: 'carrier', label: 'Operator', type: 'text' },
-    { key: 'seat', label: 'Seat / coach', type: 'text' }
+    { key: 'carrier', label: 'Operator', type: 'text' }
   ],
   Bus: [
-    { key: 'carrier', label: 'Operator', type: 'text' },
-    { key: 'seat', label: 'Seat', type: 'text' }
+    { key: 'carrier', label: 'Operator', type: 'text' }
   ],
   Ferry: [
-    { key: 'carrier', label: 'Operator', type: 'text' },
-    { key: 'seat', label: 'Cabin / seat', type: 'text' }
+    { key: 'carrier', label: 'Operator', type: 'text' }
   ],
   Car: [
     { key: 'carrier', label: 'Rental company', type: 'text' },
     { key: 'licensePlate', label: 'License plate', type: 'text' }
   ],
   Other: [
-    { key: 'carrier', label: 'Operator / provider', type: 'text' },
-    { key: 'seat', label: 'Seat / reference', type: 'text' }
+    { key: 'carrier', label: 'Operator / provider', type: 'text' }
   ]
 };
 
-function transportFieldsForMode(mode) {
+// Builds the cost/points portion of the form for whichever "Paid with"
+// option is currently selected — the only part of this form that
+// varies by something other than Mode. Cash and Points are each a
+// self-contained pair of fields; Combo is literally both sections one
+// after another; Free contributes nothing past the selector itself,
+// since there's nothing to record. Every field here is either part of
+// an even-numbered pair (so fieldsHtml()'s automatic adjacent-pairing
+// puts them on one row, e.g. currency+amount) or marked `wide` (so it
+// always stands alone) — that's what keeps this laid out correctly
+// however the branches combine, with no extra layout logic needed
+// beyond ordering things right below.
+function transportPaymentFields(values) {
+  var paymentType = values.paymentType || 'Free';
+  var showCash = paymentType === 'Cash' || paymentType === 'Combo';
+  var showPoints = paymentType === 'Points' || paymentType === 'Combo';
+  // Unchecked checkboxes are simply absent from form data (see
+  // currentFormValues()/FormData), so "on"/true both mean checked and
+  // anything else — including undefined — means not checked.
+  var rateOverrideOn = values.costRateOverrideEnabled === 'on' || values.costRateOverrideEnabled === true;
+
+  var fields = [{ key: 'paymentType', label: 'Paid with', type: 'select', options: TRANSPORT_PAYMENT_TYPES, wide: true }];
+  if (showCash) {
+    fields = fields.concat([
+      { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
+      { key: 'costAmount', label: 'Cost amount', type: 'number' },
+      { key: 'costRateOverrideEnabled', label: 'Use a different exchange rate for this leg', type: 'checkbox', wide: true }
+    ]);
+    if (rateOverrideOn) {
+      fields.push({ key: 'costRate', label: 'Exchange rate override', type: 'number', wide: true, hint: 'Home-currency value of 1 unit of this currency.' });
+    }
+  }
+  if (showPoints) {
+    fields = fields.concat([
+      { key: 'pointsProgram', label: 'Points program', type: 'text', placeholder: 'e.g. Avios, United MileagePlus' },
+      { key: 'pointsAmount', label: 'Points used', type: 'number' }
+    ]);
+  }
+  return fields;
+}
+
+function transportFieldsForMode(values) {
+  var mode = values.mode || 'Flight';
   var modeFields = TRANSPORT_MODE_FIELDS[mode] || TRANSPORT_MODE_FIELDS.Other;
   // Flights go between airports, so "From"/"To" suggest airports for
   // that mode; every other mode (train, bus, car, ferry, ...) suggests
@@ -1056,14 +1118,12 @@ function transportFieldsForMode(mode) {
       { key: 'fromLocation', label: 'From', type: placeType, required: true, placeholder: mode === 'Flight' ? 'e.g. LHR or Heathrow' : 'e.g. Chiang Mai' },
       { key: 'toLocation', label: 'To', type: placeType, required: true, placeholder: mode === 'Flight' ? 'e.g. JFK or JFK Airport' : 'e.g. Bangkok' },
       { key: 'departDate', label: 'Depart date', type: 'date', required: true },
-      { key: 'departTime', label: 'Depart time', type: 'time' },
       { key: 'arriveDate', label: 'Arrive date', type: 'date', required: true },
-      { key: 'arriveTime', label: 'Arrive time', type: 'time' },
+      { key: 'departTime', label: 'Depart time', type: 'time' },
+      { key: 'arriveTime', label: 'Arrive time', type: 'time' }
+    ], transportPaymentFields(values), [
       { key: 'bookingRef', label: 'Booking reference', type: 'text' },
       { key: 'contactId', label: 'Contact', type: 'select-contact' },
-      { key: 'costAmount', label: 'Cost amount', type: 'number' },
-      { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
-      { key: 'costRate', label: 'Exchange rate override', type: 'number', hint: 'Optional — overrides the trip\'s fixed rate for this one item.', wide: true },
       { key: 'receiptRef', label: 'Receipt reference', type: 'text', wide: true },
       { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
     ]);
@@ -1213,10 +1273,30 @@ function resolveLegCoords(text, lookupCoords, existing, textKey, latKey, lngKey)
 }
 
 function openTransportForm(trip, existing) {
+  // A brand-new leg needs paymentType set explicitly to 'Free' here,
+  // not left undefined — a <select> with nothing marked `selected`
+  // just shows its first listed option ("Cash") regardless of what
+  // transportPaymentFields() treats as the default internally, which
+  // would show "Cash" selected while still rendering NO cost fields
+  // (since that function separately defaults an undefined paymentType
+  // to 'Free'). Setting it here keeps the visible selection and the
+  // fields actually shown in agreement from the very first render.
   var initial = existing ? Object.assign({}, existing, splitDateTime(existing.departDateTime), {
     arriveDate: dateOnly(existing.arriveDateTime), arriveTime: timeOnly(existing.arriveDateTime)
-  }) : { mode: 'Flight' };
+  }) : { mode: 'Flight', paymentType: 'Free' };
   if (existing) { initial.departDate = dateOnly(existing.departDateTime); initial.departTime = timeOnly(existing.departDateTime); }
+  if (existing) {
+    // Older saved legs predate "Paid with" — infer a starting value
+    // from what they already have (a cost amount means Cash; nothing
+    // means Free) rather than defaulting blank, so editing one doesn't
+    // make its existing cost data vanish behind a payment type that
+    // hides it. costRateOverrideEnabled is real boolean state (not a
+    // saved field) purely so the checkbox starts checked when a rate
+    // override was already saved — see transportPaymentFields()'s
+    // comment on how it reads this same key back off live form data.
+    if (!initial.paymentType) initial.paymentType = existing.costAmount ? 'Cash' : 'Free';
+    initial.costRateOverrideEnabled = !!existing.costRate;
+  }
   // A fresh form session shouldn't inherit a coordinate from whatever
   // leg was last looked up (possibly minutes ago, possibly a
   // completely different leg) — see lastFlightLookupCoords' own
@@ -1224,11 +1304,15 @@ function openTransportForm(trip, existing) {
   lastFlightLookupCoords = { from: null, to: null };
   openForm({
     title: existing ? 'Edit transport leg' : 'Add transport leg',
-    // The field list depends on whichever mode is currently selected
-    // (a flight shows a flight-number field, a car shows a rental
-    // company + plate instead) — see transportFieldsForMode() above.
-    fields: function (values) { return transportFieldsForMode(values.mode || 'Flight'); },
-    reactiveKey: 'mode',
+    // The field list depends on whichever mode AND payment type are
+    // currently selected (a flight shows a flight-number field, Cash
+    // shows a currency+amount, etc.) — see transportFieldsForMode().
+    fields: function (values) { return transportFieldsForMode(values); },
+    // Three fields drive a live re-render, not just Mode: switching
+    // "Paid with" swaps in the right cost/points fields, and toggling
+    // the exchange-rate checkbox shows/hides the override input right
+    // underneath it — see the 'change' listener that reads this array.
+    reactiveKey: ['mode', 'paymentType', 'costRateOverrideEnabled'],
     initial: initial, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
@@ -1243,6 +1327,16 @@ function openTransportForm(trip, existing) {
           fromCoords = resolveLegCoords(v.fromLocation, lastFlightLookupCoords.from, existing, 'fromLocation', 'fromLat', 'fromLng');
           toCoords = resolveLegCoords(v.toLocation, lastFlightLookupCoords.to, existing, 'toLocation', 'toLat', 'toLng');
         }
+        // Only keep cost/points data for whichever section "Paid with"
+        // actually shows right now — e.g. switching an already-priced
+        // leg to Free clears its cost rather than silently keeping a
+        // cash amount nothing on screen still shows. This mirrors
+        // exactly what transportPaymentFields() decided to render, so
+        // nothing gets dropped that was still visible on save.
+        var paymentType = v.paymentType || 'Free';
+        var showCash = paymentType === 'Cash' || paymentType === 'Combo';
+        var showPoints = paymentType === 'Points' || paymentType === 'Combo';
+        var rateOverrideOn = v.costRateOverrideEnabled === 'on' || v.costRateOverrideEnabled === true;
         var rec = {
           id: existing ? existing.id : newId(), mode: v.mode || 'Other', carrier: v.carrier || '',
           flightNumber: v.flightNumber || '', licensePlate: v.licensePlate || '',
@@ -1250,8 +1344,13 @@ function openTransportForm(trip, existing) {
           fromLat: fromCoords ? fromCoords.lat : '', fromLng: fromCoords ? fromCoords.lng : '',
           toLat: toCoords ? toCoords.lat : '', toLng: toCoords ? toCoords.lng : '',
           departDateTime: combineDateTime(v.departDate, v.departTime), arriveDateTime: combineDateTime(v.arriveDate, v.arriveTime),
-          seat: v.seat || '', bookingRef: v.bookingRef || '', contactId: v.contactId || '',
-          costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(), costRate: v.costRate || '',
+          bookingRef: v.bookingRef || '', contactId: v.contactId || '',
+          paymentType: paymentType,
+          costAmount: showCash ? (v.costAmount || '') : '',
+          costCurrency: showCash ? (v.costCurrency || '').toUpperCase() : '',
+          costRate: (showCash && rateOverrideOn) ? (v.costRate || '') : '',
+          pointsProgram: showPoints ? (v.pointsProgram || '') : '',
+          pointsAmount: showPoints ? (v.pointsAmount || '') : '',
           receiptRef: v.receiptRef || '', notes: v.notes || ''
         };
         if (existing) t.transport[t.transport.findIndex(function (x) { return x.id === existing.id; })] = rec;
@@ -2181,11 +2280,11 @@ function renderTransportTab(trip) {
     if (t.carrier) tags.push('<span class="tag">' + esc(t.carrier) + '</span>');
     if (t.flightNumber) tags.push('<span class="tag">' + icon('plane') + esc(t.flightNumber) + copyBtn(t.flightNumber, 'flight number') + '</span>');
     if (t.licensePlate) tags.push('<span class="tag">' + esc(t.licensePlate) + '</span>');
-    if (t.seat) tags.push('<span class="tag">' + esc(t.seat) + '</span>');
     if (t.bookingRef) tags.push('<span class="tag">' + icon('ticket') + esc(t.bookingRef) + copyBtn(t.bookingRef, 'booking ref') + '</span>');
     if (contact) tags.push('<span class="tag">' + icon('user') + esc(contact.name) + '</span>');
     if (overnight) tags.push('<span class="tag">' + icon('moon') + 'Overnight</span>');
     if (t.costAmount) tags.push(costTag(trip, t.costAmount, t.costCurrency, t.costRate));
+    if (t.pointsAmount) tags.push('<span class="tag">' + icon('star') + esc(t.pointsAmount) + (t.pointsProgram ? ' ' + esc(t.pointsProgram) : ' points') + '</span>');
     return '<div class="item-row"><div class="item-icon">' + icon(transportIconKey(t.mode)) + '</div><div class="item-main">' +
       '<div class="item-title-row"><span class="item-title">' + esc(t.fromLocation) + ' ' + icon('arrowRight') + ' ' + esc(t.toLocation) + (t.flightNumber ? ' <span class="item-sub" style="display:inline">(' + esc(t.flightNumber) + ')</span>' : '') + '</span></div>' +
       '<div class="item-sub">' + formatDateShort(dateOnly(t.departDateTime)) + ' ' + timeOnly(t.departDateTime) +
@@ -2769,16 +2868,21 @@ document.addEventListener('click', function (e) {
   if (action === 'delete-expense') { deleteEntity(trip, 'expenses', el.dataset.id, 'expense'); return; }
 });
 
-// Powers "reactive" forms (currently just Transport's Mode select):
-// when the field named by the open form's `reactiveKey` changes, we
-// recompute the field list from the form's own current values and
-// re-render only #modal-fields, so switching e.g. Flight → Car swaps
-// in the right fields without discarding From/To, dates, cost, etc.
+// Powers "reactive" forms: when a field named by the open form's
+// `reactiveKey` changes, we recompute the field list from the form's
+// own current values and re-render only #modal-fields, so e.g.
+// switching Flight → Car swaps in the right fields without discarding
+// From/To, dates, cost, etc. `reactiveKey` can be a single field name
+// (most forms) or an array of names — Transport's form watches three:
+// "Mode" (swaps in flight-number vs. license-plate etc.), "Paid with"
+// (swaps in the Cash/Points/Combo fields), and the exchange-rate
+// checkbox (shows/hides its override input) — see openTransportForm().
 document.addEventListener('change', function (e) {
   var cfg = window.__formConfig;
   if (!cfg || !cfg.reactiveKey) return;
+  var keys = Array.isArray(cfg.reactiveKey) ? cfg.reactiveKey : [cfg.reactiveKey];
   var form = e.target.closest('#entity-form');
-  if (!form || e.target.name !== cfg.reactiveKey) return;
+  if (!form || keys.indexOf(e.target.name) === -1) return;
   var values = currentFormValues(form);
   var container = document.getElementById('modal-fields');
   if (container) container.innerHTML = fieldsHtml(resolveFields(cfg, values), values, cfg.trip || {});
