@@ -1,15 +1,42 @@
 const { chromium } = require('playwright');
-const path = require('path');
+const { spawn } = require('child_process');
+
+// This used to load index.html straight off disk via a file:// URL.
+// That stopped working once the big COMMON_CURRENCIES/COMMON_COUNTRIES/
+// etc. lists moved out of index.html into separate files loaded via
+// <script src="/WayPoint/data/...">  (see data/*.js) — an absolute
+// path like that has nowhere to resolve to under file://, so those
+// scripts silently failed to load and every form depending on them
+// (new trip, new destination, ...) broke. Spinning up the same tiny
+// mock server the newer tests (test-deploy.js etc.) use gives this
+// page a real /WayPoint/ origin those absolute paths resolve against,
+// same as the real deployment — everything else about this test is
+// unchanged.
+const PORT = 8794;
+
+function waitForServer(url, tries) {
+  return new Promise((resolve, reject) => {
+    const attempt = (n) => {
+      require('http').get(url, () => resolve()).on('error', () => {
+        if (n <= 0) return reject(new Error('server never came up'));
+        setTimeout(() => attempt(n - 1), 150);
+      });
+    };
+    attempt(tries || 30);
+  });
+}
 
 (async () => {
+  const server = spawn('node', ['mock-server.js', String(PORT)], { cwd: __dirname + '/../..', stdio: 'inherit' });
+  try {
+  await waitForServer('http://localhost:' + PORT + '/WayPoint');
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
   const page = await browser.newPage();
   const consoleErrors = [];
   page.on('pageerror', (err) => consoleErrors.push('PAGEERROR: ' + err.message));
   page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push('CONSOLE: ' + msg.text()); });
 
-  const filePath = 'file://' + path.resolve(__dirname, '../../public/WayPoint/index.html');
-  await page.goto(filePath);
+  await page.goto('http://localhost:' + PORT + '/WayPoint');
 
   // ---- 1. Dashboard empty state ----
   let emptyVisible = await page.locator('.empty-state').isVisible();
@@ -134,4 +161,7 @@ const path = require('path');
   else consoleErrors.forEach(e => console.log(e));
 
   await browser.close();
+  } finally {
+    server.kill();
+  }
 })();
