@@ -1,13 +1,35 @@
 const { chromium } = require('playwright');
-const path = require('path');
+const { spawn } = require('child_process');
+
+// See test.js in this same folder for why this loads via a local mock
+// server instead of a file:// URL — the short version: index.html's
+// datalist source lists (COMMON_CURRENCIES etc.) now load from
+// /WayPoint/data/*.js, an absolute path that only resolves against a
+// real HTTP origin.
+const PORT = 8795;
+
+function waitForServer(url, tries) {
+  return new Promise((resolve, reject) => {
+    const attempt = (n) => {
+      require('http').get(url, () => resolve()).on('error', () => {
+        if (n <= 0) return reject(new Error('server never came up'));
+        setTimeout(() => attempt(n - 1), 150);
+      });
+    };
+    attempt(tries || 30);
+  });
+}
 
 (async () => {
+  const server = spawn('node', ['mock-server.js', String(PORT)], { cwd: __dirname + '/../..', stdio: 'inherit' });
+  try {
+  await waitForServer('http://localhost:' + PORT + '/WayPoint');
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
-  await page.goto('file://' + path.resolve(__dirname, '../../public/WayPoint/index.html'));
+  await page.goto('http://localhost:' + PORT + '/WayPoint');
 
   await page.evaluate(() => {
     updateState(next => {
@@ -99,4 +121,7 @@ const path = require('path');
 
   console.log('\nErrors:', errors.length ? errors : 'NONE');
   await browser.close();
+  } finally {
+    server.kill();
+  }
 })();
