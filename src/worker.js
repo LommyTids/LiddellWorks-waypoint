@@ -1078,7 +1078,13 @@ async function handleLogin(request, env) {
   if (!passwordOk) return genericError();
 
   const token = await signSession({ uid: user.id, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }, env);
-  return new Response(JSON.stringify({ status: "ok", id: user.id, username: user.username }), {
+  // isUberUser is included here (and in handleWhoami/handleSetup below)
+  // deliberately, unlike publicUser() further down — this response only
+  // ever describes the CALLER'S OWN account, never anyone else's, so
+  // there's no "undisclosed uber-user" leak to worry about. The frontend
+  // needs this one bit to decide whether to show the "Manage accounts"
+  // button (see applyAuthUI() in public/WayPoint/index.html).
+  return new Response(JSON.stringify({ status: "ok", id: user.id, username: user.username, isUberUser: !!user.isUberUser }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Set-Cookie": buildSessionCookieHeader(token) },
   });
@@ -1106,7 +1112,7 @@ async function handleWhoami(request, env) {
     const usersDoc = await loadUsers(env);
     return new Response(JSON.stringify({ loggedIn: false, setupNeeded: usersDoc.users.length === 0 }), { status: 200, headers: { "Content-Type": "application/json" } });
   }
-  return new Response(JSON.stringify({ loggedIn: true, id: user.id, username: user.username }), {
+  return new Response(JSON.stringify({ loggedIn: true, id: user.id, username: user.username, isUberUser: !!user.isUberUser }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
@@ -1153,7 +1159,7 @@ async function handleSetup(request, env) {
   await saveUsers(env, usersDoc);
 
   const token = await signSession({ uid: user.id, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }, env);
-  return new Response(JSON.stringify({ status: "ok", id: user.id, username: user.username }), {
+  return new Response(JSON.stringify({ status: "ok", id: user.id, username: user.username, isUberUser: true }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Set-Cookie": buildSessionCookieHeader(token) },
   });
