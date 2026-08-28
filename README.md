@@ -117,7 +117,10 @@ there the next time you visit.
   (GET to read your saved trips — filtered per trip and, for a scoped
   grant, per item, see "Accounts and permissions" below — POST to save
   them, via a safe per-trip merge rather than a plain overwrite) by
-  reading/writing a single JSON blob in Cloudflare KV; answers
+  reading/writing a lightweight trip index plus one Cloudflare KV entry
+  per trip (see "How trip data is stored" below) — the request/response
+  shape the browser sees hasn't changed at all, only what happens on
+  this end when it does; answers
   `/WayPoint/api/login`, `/api/logout`, `/api/whoami`, `/api/setup` and
   `/api/users*` — the account/session system; `/api/trip-grants` and
   `/api/trip-grants/revoke` — sharing a trip, see "Accounts and
@@ -204,7 +207,115 @@ ever letting one account's request affect a trip or item outside what
 they're actually allowed to touch) — worth a read before touching any of
 it.
 
+## How trip data is stored
+
+Earlier versions kept every trip in one single KV value under the key
+`state` — the whole thing read on every visit and rewritten on every
+save, no matter how small the change. That has two real problems as the
+number (and size) of trips grows: Cloudflare KV caps a single value at
+25 MiB, and it allows at most **one write per second to the same key** —
+so two people saving two *different* trips within the same second could
+still silently collide on that one shared key, even though neither of
+them touched what the other was editing. That was a real correctness
+gap, not just a future scaling worry.
+
+Trip data now lives in two kinds of KV entry instead of one:
+
+- **`trip_index`** — one small document listing every trip that exists:
+  just enough to render the dashboard (name, dates, currency) and
+  resolve permissions (`ownerId`, `grants`) without loading any trip's
+  actual content. This is the only place `ownerId`/`grants` are stored.
+- **`trip:<tripId>`** — one KV key *per trip*, holding that trip's own
+  content (destinations, activities, transport, accommodation, contacts,
+  expenses, companions, notes, currency rates, geocode cache).
+
+Saving a trip now only reads/writes that trip's own `trip:<id>` key — a
+save to Trip A never touches Trip B's key at all, so two people saving
+different trips at the same moment can no longer collide. The trip
+index is still one shared key, so renaming a trip or changing who it's
+shared with (both of which touch the index) keeps a much narrower
+version of the old collision window — see the comment on
+`saveTripIndex()` in `src/worker.js` for why that's an accepted,
+much-smaller trade-off rather than something worth over-engineering away
+for an app this size.
+
+### Two guards against losing trips
+
+Because a trip is deleted by being **left out** of what the browser sends
+back (there's no separate delete endpoint — see "SAVING SAFELY" in
+`src/worker.js`), anything that makes the browser's copy of your trips
+incomplete is dangerous: the next save would tell the server to delete
+whatever's missing. For the site owner's account, which can see every
+trip, that's potentially the whole site's data — from one failed request
+followed by one ordinary click. Two independent guards now prevent that,
+either of which is enough on its own:
+
+1. **The browser refuses to save data it never loaded.** If the initial
+   load fails for any reason, the app marks its own state untrustworthy,
+   shows "Not saved — refresh" in the top bar, and blocks every save
+   until you reload. Previously it silently fell back to "no trips at
+   all" and would happily save that over the top.
+2. **The server refuses a save that would delete more than one trip at
+   once.** The app only ever deletes one trip at a time, behind a
+   confirmation dialog — so a request that would remove two or more is
+   never something the real UI produces, and is rejected wholesale with
+   nothing changed. It also never treats a trip whose stored content it
+   couldn't read as "deleted", since that trip was left out of the
+   response the browser was working from in the first place (Cloudflare
+   KV is eventually consistent, so a just-written key genuinely can read
+   as missing for a moment).
+
+`test-storage-safety.js` covers both, and — importantly — has been
+checked to actually fail when either guard is removed.
+
+**Upgrading from an older deploy: nothing to do.** The very first time
+the Worker runs after this update ships, it checks for `trip_index`; if
+it isn't there yet, it reads the old `state` key, splits it into the new
+shape, and writes it out — automatically, once, on that first request.
+The old `state` key is left in place afterwards, untouched, purely as an
+inert backup (nothing reads it again once the index exists) — safe to
+ignore, and safe to delete later once you've confirmed everything looks
+right, though there's no need to.
+
+**Schema rename.** Every item's own id field used to just be called
+`id` — fine deep inside one item's own object, confusing the moment
+you're looking at raw JSON with several item types mixed together
+(exactly the situation hand-editing a KV value in the Cloudflare
+dashboard puts you in). Each item type now has its own clearly-named id
+field instead:
+
+| Item | Old field | New field |
+| --- | --- | --- |
+| Trip | `id` | `tripId` |
+| Destination | `id` | `destinationId` |
+| Activity | `id` | `activityId` |
+| Transport leg | `id` | `transportId` |
+| Accommodation | `id` | `accommodationId` |
+| Contact | `id` | `contactId` |
+| Expense | `id` | `expenseId` |
+| Companion | `id` | `companionId` |
+
+Fields that already *referenced* one of these (an activity's
+`destinationId`, a booking's `contactId`, a grant's `companionId`)
+didn't change at all — they already used exactly this naming, which is
+what this rename brings everything else in line with. **Account/login
+records are deliberately left alone** — still a plain `id` — to avoid
+touching the auth/session system again right after it went through its
+first real production incident. If you ever hand-edit a trip's KV value
+directly in the Cloudflare dashboard again (as you did once already,
+reassigning a trip's owner), use the new field names above and remember
+you're now editing the `trip:<tripId>` key for that one trip, not a
+`state` blob with every trip in it.
+
 ## One-time setup in the Cloudflare dashboard
+
+**If you already completed all five steps below for an earlier version
+of Waypoint, there's nothing new to do here** — this update reuses the
+same `waypoint-data` KV namespace and the same three secrets
+(`WAYPOINT_PASSWORD`, `WAYPOINT_SESSION_SECRET`, `AERODATABOX_API_KEY`).
+Just push the updated code (step 1's auto-deploy picks it up) and the
+storage migration above happens on its own. These steps are kept here
+for a fresh install.
 
 None of this repo's code can do these steps for you — they're dashboard
 actions Cloudflare requires a person to click through:
@@ -354,7 +465,7 @@ A handful of Playwright suites live outside this repo's deployed contents
   via the "tag-picker" checkbox row, the tag showing up on that item's
   card, editing an item re-showing its saved tags checked correctly,
   renaming a companion updating their tag everywhere it appears (tags
-  are stored as an id and resolved to a name at render time), and
+  are stored as a companionId and resolved to a name at render time), and
   deleting a tagged companion leaving the item itself intact with the
   tag just quietly gone (no crash, no stale reference).
 - A dedicated test for the per-trip ownership + grants permission system
@@ -393,11 +504,40 @@ A handful of Playwright suites live outside this repo's deployed contents
 against, standing in for the real Worker/KV) implements this same
 per-trip permission-resolution and safe-merge-save logic in parallel to
 `src/worker.js` — same endpoints, same request/response shapes, same
-rules — since `src/worker.js` is written as a Cloudflare Worker module
-(Web Crypto, KV bindings) and isn't meant to run under plain Node. Its
-own comment block spells out the two deliberate differences (no `Secure`
-cookie attribute, since it runs over plain local http; plain-text
-password comparison instead of PBKDF2, since there's no real secret at
-stake in a throwaway in-memory test server) — neither is a bug, both are
-there so nobody "fixes" this file to match `worker.js` exactly and
-breaks every test.
+rules, same index-plus-per-trip-content storage split and the same
+renamed id fields (`tripId`/`destinationId`/etc.) — since `src/worker.js`
+is written as a Cloudflare Worker module (Web Crypto, KV bindings) and
+isn't meant to run under plain Node. Its own comment block spells out
+the deliberate differences from the real Worker (no `Secure` cookie
+attribute, since it runs over plain local http; plain-text password
+comparison instead of PBKDF2, since there's no real secret at stake in a
+throwaway in-memory test server; and it never runs the old-format
+migration, since an in-memory test server has no old data to migrate) —
+none of these are bugs, they're there so nobody "fixes" this file to
+match `worker.js` exactly and breaks every test.
+
+- A dedicated test for the per-trip storage split and its safety guards
+  (`test-storage-safety.js`) — checks that editing one trip writes only
+  that trip's storage key and leaves every other trip's alone (the whole
+  point of the restructuring, and otherwise invisible from outside, so
+  `mock-server.js` keeps write counters and exposes them at a test-only
+  `/api/__writes` endpoint); that re-saving unchanged data writes nothing
+  at all; that renaming a trip does update the shared index; that
+  deleting a single trip still works; that a save which would delete
+  every trip is rejected with a 409 and changes nothing; that omitting
+  exactly one trip still deletes just that one; that a failed data load
+  leaves the app refusing to save rather than overwriting real data; and
+  that a trip whose stored content can't be read is hidden rather than
+  destroyed, coming back intact once the content is readable again
+  (simulated via a second test-only endpoint, `/api/__hide-content`).
+  Both `/api/__*` endpoints exist only in the mock — the real Worker has
+  no equivalent and needs none.
+
+Every suite above has been run against the per-trip storage restructuring
+and schema rename described in "How trip data is stored" and passes (166
+assertions across 11 suites) — including a full end-to-end pass of the
+permissions test's hostile `fetch()` attack scenario against the new
+`trip_index`/`trip:<id>` shape. The two data-loss guards were each
+verified by deliberately removing them and confirming the relevant test
+fails: with both removed, one failed load followed by creating a single
+trip destroys every existing trip while the UI reports "Saved".
