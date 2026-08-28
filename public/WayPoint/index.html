@@ -166,24 +166,29 @@ textarea { resize: vertical; min-height: 60px; }
 .flight-lookup-status.is-ok { color: var(--ink-soft); }
 .airport-resolve-hint.is-ok { color: var(--success); }
 .airport-resolve-hint.is-unresolved { color: var(--ink-faint); }
-/* Custom airport-suggestion dropdown (replaces a native <datalist> —
-   see the long comment above openAirportSuggestions() in the JS for
-   why: a native datalist popup can't be repositioned by CSS at all,
-   and rebuilding its options while it's open was interrupting typing
-   on some devices/browsers). `.airport-input-wrap` is the positioning
-   anchor for the dropdown, scoped to just the input so the dropdown's
-   `top: 100%` sits right under the input itself, not under the hint
-   text below it. */
-.airport-input-wrap { position: relative; }
-.airport-suggest-list {
+/* Generic suggestion dropdown — shared by EVERY field with app-managed
+   suggestions (currency, country, city, timezone, airport; see
+   suggestInputHtml() and the "Generic suggestion dropdown" section in
+   the JS further down), so they all look and behave identically. It
+   replaces what used to be a native <datalist> for these fields (a
+   couple of real problems drove that: a native datalist popup can't be
+   repositioned by CSS at all, and rebuilding its options while it's
+   open was interrupting typing on some devices/browsers — see the JS
+   comment for the full story). `.suggest-input-wrap` is the
+   positioning anchor for the dropdown, scoped to just the input so the
+   dropdown's `top: 100%` sits right under the input itself, not under
+   any hint text below it (airport's resolve-hint, timezone's offset
+   hint). */
+.suggest-input-wrap { position: relative; }
+.suggest-list {
   display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
   box-shadow: var(--shadow); max-height: 220px; overflow-y: auto; z-index: 50;
 }
-.airport-suggest-list.is-open { display: block; }
-.airport-suggest-item { padding: 8px 10px; font-size: 13px; cursor: pointer; }
-.airport-suggest-item.is-active, .airport-suggest-item:hover { background: var(--surface-2); }
-.airport-suggest-empty { padding: 8px 10px; font-size: 12.5px; color: var(--ink-faint); }
+.suggest-list.is-open { display: block; }
+.suggest-item { padding: 8px 10px; font-size: 13px; cursor: pointer; }
+.suggest-item.is-active, .suggest-item:hover { background: var(--surface-2); }
+.suggest-empty { padding: 8px 10px; font-size: 12.5px; color: var(--ink-faint); }
 
 /* ---- 4b. Dashboard ------------------------------------------------ */
 .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
@@ -382,8 +387,8 @@ tr:last-child td { border-bottom: none; }
 <!-- `defer`, unlike the data/*.js tags above: this file (~550KB, ~7,900
      airports) is a coordinate-lookup fallback only touched when a
      Flight leg is saved, never needed for the very first form's
-     <datalist> the way the others above are — see the comment at the
-     top of data/airports-full.js for the full reasoning. -->
+     suggestion dropdown the way the others above are — see the comment
+     at the top of data/airports-full.js for the full reasoning. -->
 <script defer src="/WayPoint/data/airports-full.js"></script>
 <script>
 /* ================================================================
@@ -748,6 +753,26 @@ function closeModal() {
    one field description into the right input, and openForm() wires
    the whole array up into a modal with Cancel/Save buttons. */
 
+// Shared markup for every field with app-rendered suggestions
+// (currency, country, city, timezone, airport) — see the "Generic
+// suggestion dropdown" section further down for the JS that actually
+// drives it. `suggestType` names one of SUGGEST_SOURCES' keys, written
+// as `data-suggest-type` so the generic event listeners know which
+// search/display functions to use without caring which specific field
+// this is. `extraAttrs` is a raw attribute string for whatever a given
+// field type needs beyond the basics (maxlength, uppercase styling,
+// ...); `placeholderFallback` is used only when the field itself
+// didn't specify one.
+function suggestInputHtml(field, val, req, suggestType, extraAttrs, placeholderFallback) {
+  var placeholder = field.placeholder || placeholderFallback || '';
+  return '<div class="suggest-input-wrap">' +
+    '<input type="text" autocomplete="off" data-suggest-type="' + suggestType + '" ' + (extraAttrs || '') +
+    ' name="' + field.key + '" value="' + esc(val) + '" ' + req +
+    ' placeholder="' + esc(placeholder) + '">' +
+    '<div class="suggest-list" id="' + field.key + '-suggest"></div>' +
+    '</div>';
+}
+
 function fieldHtml(field, value, trip, allValues) {
   // allValues (optional): every value currently in the form (initial
   // values, or the live values on a reactive re-render — see
@@ -794,65 +819,42 @@ function fieldHtml(field, value, trip, allValues) {
       }).join('') + '</select>';
       break;
     case 'currency':
-      inputHtml = '<input type="text" list="currency-list" maxlength="6" style="text-transform:uppercase" ' +
-        'name="' + field.key + '" value="' + esc(val) + '" ' + req + ' placeholder="GBP">';
+      inputHtml = suggestInputHtml(field, val, req, 'currency', 'maxlength="6" style="text-transform:uppercase"', 'GBP');
       break;
     case 'country':
-      inputHtml = '<input type="text" list="country-list" maxlength="60" ' +
-        'name="' + field.key + '" value="' + esc(val) + '" ' + req +
-        ' placeholder="' + esc(field.placeholder || '') + '">';
+      inputHtml = suggestInputHtml(field, val, req, 'country', 'maxlength="60"');
       break;
     case 'city':
-      // Same idea as 'country' — a datalist of common cities as
-      // suggestions, but the input still happily accepts anything
-      // typed (a smaller town that isn't in the shortlist, a
-      // neighbourhood name, etc).
-      inputHtml = '<input type="text" list="city-list" maxlength="80" ' +
-        'name="' + field.key + '" value="' + esc(val) + '" ' + req +
-        ' placeholder="' + esc(field.placeholder || '') + '">';
+      // Same idea as 'country' — a suggestion list of common cities,
+      // but the input still happily accepts anything typed (a smaller
+      // town that isn't in the shortlist, a neighbourhood name, etc).
+      inputHtml = suggestInputHtml(field, val, req, 'city', 'maxlength="80"');
       break;
     case 'airport':
       // Suggestions are shown as "CODE — Name" but nothing forces the
       // value to match that shape — typing just the 3-letter code (or
       // a city name for a mode where a full airport isn't really the
-      // right concept) is equally valid.
+      // right concept) is equally valid. Uses the same suggestInputHtml()
+      // dropdown as currency/country/city/timezone (see the "Generic
+      // suggestion dropdown" section further down) — airport was the
+      // first field converted from a native <datalist> to this, for the
+      // reasons explained there, and the rest followed for consistency.
       //
-      // This used to be a native <input list="airport-list"> wired to a
-      // shared <datalist>. Real-world use turned up two problems with
-      // that: the browser's own suggestion popup can't be repositioned
-      // by CSS, so on a narrow modal it ends up covering part of the
-      // input it belongs to; and rebuilding the datalist's <option>s
-      // live (needed to widen from the curated ~126 to the full
-      // ~7,900-airport AIRPORT_DB) was interrupting mid-word typing on
-      // at least one real device — the browser seemingly fights with
-      // itself over the popup while you're still typing into it. A
-      // custom, app-rendered dropdown (openAirportSuggestions() et al,
-      // near MIN_AIRPORT_SEARCH_LENGTH below) replaces it: same search
-      // behavior, but the suggestion list is just a normal positioned
-      // <div> we fully control, so it can sit flush under the input
-      // (never over it) and never interferes with the input's own
-      // typing. `.airport-input-wrap` is what the dropdown's absolute
-      // position is anchored to — see its CSS rule.
-      //
-      // The hint underneath is a live, honest signal of whether
-      // whatever's typed so far actually resolves to a real coordinate
-      // — checked against the SAME two sources (COMMON_AIRPORTS, then
-      // AIRPORT_DB) that openTransportForm()'s onSubmit uses when the
-      // leg is actually saved, via airportCoordsFromText(). Computed
-      // once here for whatever the field already contains (e.g.
-      // editing an existing leg, or the field list re-rendering after
-      // a mode switch), then kept live after that by the same 'input'
-      // listener that drives the dropdown above.
+      // The hint underneath is airport-specific, on top of the shared
+      // dropdown: a live, honest signal of whether whatever's typed so
+      // far actually resolves to a real coordinate — checked against
+      // the SAME two sources (COMMON_AIRPORTS, then AIRPORT_DB) that
+      // openTransportForm()'s onSubmit uses when the leg is actually
+      // saved, via airportCoordsFromText(). Computed once here for
+      // whatever the field already contains (e.g. editing an existing
+      // leg, or the field list re-rendering after a mode switch), then
+      // kept live after that by the shared 'input' listener (see its
+      // airport-specific branch).
       var airportResolved = airportCoordsFromText(val);
       var airportHintText = !val ? ''
         : (airportResolved ? '✓ Mapped precisely for the Map tab' : 'No exact airport match yet — the map will try to search by name instead.');
       var airportHintClass = 'field-hint airport-resolve-hint' + (val ? (airportResolved ? ' is-ok' : ' is-unresolved') : '');
-      inputHtml = '<div class="airport-input-wrap">' +
-        '<input type="text" autocomplete="off" maxlength="80" ' +
-        'name="' + field.key + '" value="' + esc(val) + '" ' + req +
-        ' placeholder="' + esc(field.placeholder || 'e.g. LHR or Heathrow') + '">' +
-        '<div class="airport-suggest-list" id="' + field.key + '-suggest"></div>' +
-        '</div>' +
+      inputHtml = suggestInputHtml(field, val, req, 'airport', 'maxlength="80"', 'e.g. LHR or Heathrow') +
         '<div class="' + airportHintClass + '" id="' + field.key + '-resolve-hint">' + esc(airportHintText) + '</div>';
       break;
     case 'flight-lookup':
@@ -890,9 +892,7 @@ function fieldHtml(field, value, trip, allValues) {
         '<div class="flight-lookup-status" id="flight-lookup-status"></div>';
       break;
     case 'timezone':
-      inputHtml = '<input type="text" list="timezone-list" maxlength="40" ' +
-        'name="' + field.key + '" value="' + esc(val) + '" ' + req +
-        ' placeholder="' + esc(field.placeholder || '') + '">' +
+      inputHtml = suggestInputHtml(field, val, req, 'timezone', 'maxlength="40"') +
         (val ? '<div class="field-hint">Currently ' + esc(tzOffsetLabel(val) || 'unrecognised') + '</div>' : '');
       break;
     case 'select-destination':
@@ -982,15 +982,12 @@ function openForm(opts) {
           '</div>' +
         '</form>' +
       '</div>' +
-    '</div>' +
-    '<datalist id="currency-list">' + COMMON_CURRENCIES.map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>' +
-    '<datalist id="timezone-list">' + COMMON_TIMEZONES.map(function (tz) { return '<option value="' + tz + '">'; }).join('') + '</datalist>' +
-    '<datalist id="country-list">' + COMMON_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
-    '<datalist id="city-list">' + COMMON_CITIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>';
-  // No datalist for airport fields — that's now a custom dropdown (see
-  // the 'airport' case in fieldHtml() and openAirportSuggestions()
-  // near MIN_AIRPORT_SEARCH_LENGTH below), built per-field on demand
-  // rather than seeded once here.
+    '</div>';
+  // No <datalist> elements to seed here — every suggestible field
+  // (currency, country, city, timezone, airport) renders its own
+  // app-managed dropdown via suggestInputHtml(), built on demand as
+  // each field is focused/typed into rather than seeded once here. See
+  // the "Generic suggestion dropdown" section further down.
 }
 
 /* ---------- 7. Entity field schemas --------------------------------- */
@@ -1539,7 +1536,7 @@ function performFlightLookup(button) {
 // { code, name, municipality, country }). Both are used the same way:
 // as the value typed/saved into a transport leg's "From"/"To" field, so
 // a looked-up value reads consistently with one a viewer picked by
-// hand from the airport suggestion dropdown (see openAirportSuggestions()).
+// hand from the airport suggestion dropdown (see openSuggestions()).
 //
 // The result looks like "LHR — London Heathrow, London, United
 // Kingdom" — deliberately fuller than the old "CODE — Name" alone.
@@ -1687,96 +1684,147 @@ function updateAirportResolveHint(input) {
   hintEl.className = 'field-hint airport-resolve-hint' + (resolved ? ' is-ok' : ' is-unresolved');
 }
 
-// ---- Custom airport-suggestion dropdown -----------------------------
+// ---- Generic suggestion dropdown -------------------------------------
 //
-// Replaces what used to be a native <input list="..."> wired to a
-// <datalist>. Two real problems with that showed up in actual use:
-// the browser's own suggestion popup renders wherever the browser
-// decides, with no CSS hook to move it, so on a field near the edge of
-// a narrow modal it can end up covering the very input it's attached
-// to; and swapping the datalist's <option>s live (needed to widen from
-// the curated ~126 to the full AIRPORT_DB) was interrupting mid-word
-// typing on at least one real device/browser — the native popup
-// appears to fight with the input over the keystroke that triggered
-// the rebuild. A plain, app-rendered <div> (`.airport-suggest-list`,
-// positioned by the `.airport-input-wrap` CSS rule right under its
+// EVERY free-text field with suggestions — currency, timezone, country,
+// city, and airport — shares this one mechanism, so they all look and
+// behave identically. It replaces what used to be a native
+// <input list="..."> wired to a <datalist> (airport was converted
+// first, when real-world use turned up two problems with datalist that
+// the others all had too: the browser's own suggestion popup renders
+// wherever the browser decides, with no CSS hook to move it, so on a
+// field near the edge of a narrow modal it can end up covering the very
+// input it's attached to; and swapping the datalist's <option>s live —
+// needed for airport's search-as-you-type widening — was interrupting
+// mid-word typing on at least one real device/browser, the native
+// popup seemingly fighting with the input over the keystroke that
+// triggered the rebuild). A plain, app-rendered <div> (`.suggest-list`,
+// positioned by the `.suggest-input-wrap` CSS rule right under its
 // input) sidesteps both: we choose exactly where it sits, and
 // rebuilding it is just an ordinary DOM update the input itself is
 // never involved in, so it can never interrupt what's being typed.
 //
-// airportDropdownState tracks whichever ONE airport field currently
-// has its dropdown open — a Flight leg has two ("From" and "To"), but
-// only one can be focused/typed-into at a time, so a single shared
-// state object (rather than one per field) is enough, and keeps the
-// keyboard-navigation handlers below simple.
-var airportDropdownState = { input: null, items: [], activeIndex: -1 };
+// A field opts in by rendering its input inside `.suggest-input-wrap`
+// with a `data-suggest-type="..."` attribute naming one of the sources
+// below (see fieldHtml()'s 'currency'/'country'/'city'/'timezone'/
+// 'airport' cases) — everything past that is handled here, generically,
+// for every field the same way.
+//
+// Each source is just { search(query) -> array of items,
+// display(item) -> the string shown in the dropdown AND written into
+// the field on selection }. The plain-string fields (currency/timezone/
+// country/city) share one small substring search; airport keeps its
+// own richer one (code/city/name scoring across ~7,900 entries — see
+// searchAirports() above) since it has real search work to do that the
+// others don't.
+function searchStringList(list, query) {
+  var q = (query || '').trim().toLowerCase();
+  if (!q) return list;
+  // Ranked so a "starts with" match (what most people are typing
+  // towards) surfaces before a mere "contains" match, same spirit as
+  // searchAirports()'s scoring, just for plain string lists.
+  var starts = [], contains = [];
+  for (var i = 0; i < list.length; i++) {
+    var lower = list[i].toLowerCase();
+    if (lower.indexOf(q) === 0) starts.push(list[i]);
+    else if (lower.indexOf(q) !== -1) contains.push(list[i]);
+  }
+  return starts.concat(contains);
+}
 
-function airportSuggestEl(input) {
+var SUGGEST_SOURCES = {
+  currency: { search: function (q) { return searchStringList(COMMON_CURRENCIES, q); }, display: function (item) { return item; } },
+  timezone: { search: function (q) { return searchStringList(COMMON_TIMEZONES, q); }, display: function (item) { return item; } },
+  country: { search: function (q) { return searchStringList(COMMON_COUNTRIES, q); }, display: function (item) { return item; } },
+  city: { search: function (q) { return searchStringList(COMMON_CITIES, q); }, display: function (item) { return item; } },
+  airport: { search: searchAirports, display: airportDisplay }
+};
+
+// suggestDropdownState tracks whichever ONE field currently has its
+// dropdown open — a form can have several suggestible fields (a
+// Flight leg has two airport fields, say), but only one can be
+// focused/typed-into at a time, so a single shared state object
+// (rather than one per field) is enough, and keeps the
+// keyboard-navigation handlers below simple.
+var suggestDropdownState = { input: null, items: [], activeIndex: -1, source: null };
+
+function suggestListEl(input) {
   return input ? document.getElementById(input.name + '-suggest') : null;
 }
 
-function closeAirportSuggestions(input) {
-  var el = airportSuggestEl(input);
-  if (el) { el.classList.remove('is-open'); el.innerHTML = ''; }
-  if (airportDropdownState.input === input) airportDropdownState = { input: null, items: [], activeIndex: -1 };
+function suggestSourceFor(input) {
+  var type = input && input.getAttribute && input.getAttribute('data-suggest-type');
+  return type ? SUGGEST_SOURCES[type] : null;
 }
 
-function renderAirportSuggestList(input) {
-  var el = airportSuggestEl(input);
+function isSuggestInput(el) {
+  return !!(el && el.getAttribute && el.getAttribute('data-suggest-type'));
+}
+
+function closeSuggestions(input) {
+  var el = suggestListEl(input);
+  if (el) { el.classList.remove('is-open'); el.innerHTML = ''; }
+  if (suggestDropdownState.input === input) suggestDropdownState = { input: null, items: [], activeIndex: -1, source: null };
+}
+
+function renderSuggestList(input) {
+  var el = suggestListEl(input);
   if (!el) return;
-  var items = airportDropdownState.items;
+  var items = suggestDropdownState.items;
+  var display = suggestDropdownState.source.display;
   if (!items.length) {
-    el.innerHTML = '<div class="airport-suggest-empty">No airports match yet</div>';
+    el.innerHTML = '<div class="suggest-empty">No matches yet</div>';
     el.classList.add('is-open');
     return;
   }
-  el.innerHTML = items.map(function (a, i) {
-    return '<div class="airport-suggest-item' + (i === airportDropdownState.activeIndex ? ' is-active' : '') +
-      '" data-index="' + i + '">' + esc(airportDisplay(a)) + '</div>';
+  el.innerHTML = items.map(function (item, i) {
+    return '<div class="suggest-item' + (i === suggestDropdownState.activeIndex ? ' is-active' : '') +
+      '" data-index="' + i + '">' + esc(display(item)) + '</div>';
   }).join('');
   el.classList.add('is-open');
-  if (airportDropdownState.activeIndex >= 0) {
-    var active = el.querySelector('.airport-suggest-item.is-active');
+  if (suggestDropdownState.activeIndex >= 0) {
+    var active = el.querySelector('.suggest-item.is-active');
     if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
   }
 }
 
-function openAirportSuggestions(input) {
-  var items = searchAirports(input.value);
-  airportDropdownState = { input: input, items: items, activeIndex: -1 };
-  renderAirportSuggestList(input);
+function openSuggestions(input) {
+  var source = suggestSourceFor(input);
+  if (!source) return;
+  var items = source.search(input.value);
+  suggestDropdownState = { input: input, items: items, activeIndex: -1, source: source };
+  renderSuggestList(input);
 }
 
-function selectAirportSuggestion(input, item) {
-  input.value = airportDisplay(item);
-  closeAirportSuggestions(input);
-  updateAirportResolveHint(input);
-}
-
-function isAirportInput(el) {
-  return !!(el && el.closest && el.closest('.airport-input-wrap'));
+function selectSuggestion(input, item) {
+  input.value = suggestDropdownState.source.display(item);
+  closeSuggestions(input);
+  // Airport-only: keep the resolve-hint in sync when the value changes
+  // via a click/keyboard selection, same as it already does on typed
+  // input (see the 'input' listener below).
+  if (input.getAttribute('data-suggest-type') === 'airport') updateAirportResolveHint(input);
 }
 
 // Debounced so a fast typist doesn't trigger a dropdown rebuild on
 // every single keystroke — 120ms is short enough to still feel
 // immediate, long enough to skip the in-between keystrokes of a normal
-// typing burst. The resolve-hint update is cheap enough (no list
+// typing burst. Airport's resolve-hint update is cheap enough (no list
 // rebuild, just one lookup) to run on every keystroke without this.
-var airportSuggestionDebounce = null;
+var suggestDebounce = null;
 document.addEventListener('input', function (e) {
-  if (!isAirportInput(e.target)) return;
+  if (!isSuggestInput(e.target)) return;
   var input = e.target;
-  updateAirportResolveHint(input);
-  clearTimeout(airportSuggestionDebounce);
-  airportSuggestionDebounce = setTimeout(function () { openAirportSuggestions(input); }, 120);
+  if (input.getAttribute('data-suggest-type') === 'airport') updateAirportResolveHint(input);
+  clearTimeout(suggestDebounce);
+  suggestDebounce = setTimeout(function () { openSuggestions(input); }, 120);
 });
 
-// Opens with whatever's already there (the curated list, on an empty
-// field) as soon as the field is focused, same as a native datalist
-// would've offered on focus.
+// Opens with whatever's already there (the field's default list, on an
+// empty field) as soon as the field is focused, same as a native
+// datalist would've offered on focus.
 document.addEventListener('focusin', function (e) {
-  if (!isAirportInput(e.target)) return;
-  openAirportSuggestions(e.target);
+  if (!isSuggestInput(e.target)) return;
+  openSuggestions(e.target);
 });
 
 // Closing on blur needs a short delay: a click on a suggestion fires
@@ -1786,40 +1834,40 @@ document.addEventListener('focusin', function (e) {
 // input in the first place, but the delay stays as a safety net for
 // any other way focus can leave the field (Tab, tapping elsewhere).
 document.addEventListener('focusout', function (e) {
-  if (!isAirportInput(e.target)) return;
+  if (!isSuggestInput(e.target)) return;
   var input = e.target;
-  setTimeout(function () { closeAirportSuggestions(input); }, 150);
+  setTimeout(function () { closeSuggestions(input); }, 150);
 });
 
 // preventDefault on mousedown (not click) is what stops the input
 // from blurring at all when a suggestion is tapped/clicked — by the
 // time a 'click' event would fire, blur has already happened.
 document.addEventListener('mousedown', function (e) {
-  var item = e.target.closest && e.target.closest('.airport-suggest-item');
+  var item = e.target.closest && e.target.closest('.suggest-item');
   if (!item) return;
   e.preventDefault();
-  var input = airportDropdownState.input;
+  var input = suggestDropdownState.input;
   if (!input) return;
-  var chosen = airportDropdownState.items[parseInt(item.getAttribute('data-index'), 10)];
-  if (chosen) selectAirportSuggestion(input, chosen);
+  var chosen = suggestDropdownState.items[parseInt(item.getAttribute('data-index'), 10)];
+  if (chosen) selectSuggestion(input, chosen);
 });
 
 document.addEventListener('keydown', function (e) {
-  if (!isAirportInput(e.target) || airportDropdownState.input !== e.target) return;
-  var items = airportDropdownState.items;
-  if (e.key === 'Escape') { closeAirportSuggestions(e.target); return; }
+  if (!isSuggestInput(e.target) || suggestDropdownState.input !== e.target) return;
+  var items = suggestDropdownState.items;
+  if (e.key === 'Escape') { closeSuggestions(e.target); return; }
   if (!items.length) return;
   if (e.key === 'ArrowDown') {
     e.preventDefault();
-    airportDropdownState.activeIndex = Math.min(airportDropdownState.activeIndex + 1, items.length - 1);
-    renderAirportSuggestList(e.target);
+    suggestDropdownState.activeIndex = Math.min(suggestDropdownState.activeIndex + 1, items.length - 1);
+    renderSuggestList(e.target);
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
-    airportDropdownState.activeIndex = Math.max(airportDropdownState.activeIndex - 1, 0);
-    renderAirportSuggestList(e.target);
-  } else if (e.key === 'Enter' && airportDropdownState.activeIndex >= 0) {
+    suggestDropdownState.activeIndex = Math.max(suggestDropdownState.activeIndex - 1, 0);
+    renderSuggestList(e.target);
+  } else if (e.key === 'Enter' && suggestDropdownState.activeIndex >= 0) {
     e.preventDefault();
-    selectAirportSuggestion(e.target, items[airportDropdownState.activeIndex]);
+    selectSuggestion(e.target, items[suggestDropdownState.activeIndex]);
   }
 });
 
@@ -2746,12 +2794,20 @@ function renderSettingsTab(trip) {
     '<div class="tab-panel-head"><h2>Settings</h2></div>' +
     '<form id="rates-form" data-write-only>' +
       '<div class="field"><label>Home currency</label>' +
-      '<input type="text" list="currency-list" maxlength="6" style="text-transform:uppercase;max-width:140px" name="homeCurrency" value="' + esc(trip.homeCurrency) + '">' +
+      // Hand-built rather than through suggestInputHtml() (this form
+      // isn't part of the fieldHtml()/openForm() modal system), but
+      // uses the exact same `.suggest-input-wrap` + `data-suggest-type`
+      // markup so it gets the identical dropdown as every other
+      // currency/country/city/timezone/airport field — see the
+      // "Generic suggestion dropdown" section further down.
+      '<div class="suggest-input-wrap" style="max-width:140px">' +
+        '<input type="text" autocomplete="off" data-suggest-type="currency" maxlength="6" style="text-transform:uppercase" name="homeCurrency" value="' + esc(trip.homeCurrency) + '">' +
+        '<div class="suggest-list" id="homeCurrency-suggest"></div>' +
+      '</div>' +
       '<div class="field-hint">Every total on this trip converts into this currency.</div></div>' +
       (currencies.length
         ? '<div class="field"><label>Fixed exchange rates for this trip</label><div class="field-hint" style="margin-bottom:10px">Used whenever an item in that currency doesn\'t have its own rate override. One rate per currency for the whole trip, as you set up.</div><div class="rate-table">' + rateRows + '</div></div>'
         : '<p class="field-hint">No foreign-currency costs logged yet — rates will appear here once you add one.</p>') +
-      '<datalist id="currency-list">' + COMMON_CURRENCIES.map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>' +
       '<button type="submit" class="btn btn-primary">Save currency settings</button>' +
     '</form>' +
     '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)">' +
