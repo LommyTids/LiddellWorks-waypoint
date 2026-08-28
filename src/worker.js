@@ -11,10 +11,11 @@
  *
  *   1. If the request is for our JSON API (`/WayPoint/api/data`), handle it
  *      here directly — either read the saved trips out of Cloudflare KV
- *      (a simple key/value store, think of it like a single shared file)
- *      and send them back as JSON, or take a JSON body from the page and
- *      merge it safely into KV so it's there next time (see "Saving safely"
- *      below for why this is a merge, not a plain overwrite).
+ *      (a simple key/value store, think of it like a small set of shared
+ *      files, one per trip — see "How trips are stored" below) and send
+ *      them back as JSON, or take a JSON body from the page and merge it
+ *      safely into KV so it's there next time (see "Saving safely" below
+ *      for why this is a merge, not a plain overwrite).
  *   2. `/WayPoint/api/flight-lookup` proxies a flight number + date (e.g.
  *      "BA15" on 2026-09-03) to the AeroDataBox API (via RapidAPI) and
  *      hands back its carrier, origin/destination airports, and scheduled
@@ -28,7 +29,9 @@
  *      `/api/trip-grants/revoke` are how a trip gets shared with someone;
  *      `/api/users*` is the (site-owner-only) "create/delete a login"
  *      screen — see the big "Who is allowed in" section right below for
- *      how all of this fits together.
+ *      how all of this fits together. NONE of this changed in this
+ *      storage-restructuring pass — accounts/sessions are left completely
+ *      untouched on purpose (see "How trips are stored" below).
  *   4. For every other request (loading the page itself, any future CSS/JS/
  *      image files), just hand it off to Cloudflare's static asset serving
  *      (the `env.ASSETS` binding below) — that's what actually serves
@@ -71,32 +74,22 @@
  * so the site owner can always get in to fix something, even a trip they
  * didn't create and nobody thought to share with them. It's "undisclosed"
  * in the sense that nothing in the API response ever tells a browser "this
- * account is special" — every place that matters just sees the SAME
- * `{ role: "superuser" }` a real owner would see, so there's no separate
- * code path (and no separate flag) that could leak this account's status.
+ * account is special" (except a response describing your OWN account, e.g.
+ * after logging in — see handleLogin() further down) — every place that
+ * matters just sees the SAME `{ role: "superuser" }` a real owner would
+ * see, so there's no separate code path (and no separate flag on anyone
+ * ELSE's account) that could leak this account's status.
  *
- * Accounts live in KV under a second fixed key, USERS_KEY ("users") — a
- * small JSON document listing everyone and their (hashed, never
- * plain-text) password. An account record itself carries almost nothing —
- * just who they are and whether they're the uber-user — because every
- * actual permission lives on the TRIP (its `ownerId` and `grants[]`), not
- * on the account. See permissionForTrip() further down for exactly how a
- * trip + an account resolve into what that account may do.
- *
- * Passwords are never stored as typed: see hashPassword()/verifyPassword()
- * below for how PBKDF2 (a standard, slow-by-design hashing algorithm)
- * turns a password into something safe to keep in KV.
- *
- * Logging in (handleLogin) checks a username/password against that list
- * and, on success, hands back a signed *session cookie* — a small blob of
- * data (just "which account, and when this expires") that's cryptographically
- * signed with the WAYPOINT_SESSION_SECRET secret so it can't be forged or
- * edited by whoever's holding it. Every later request re-checks that
- * signature (see getCurrentUser()) and looks the account up fresh in KV,
- * and every trip's permissions are re-resolved fresh from KV too — so if
- * an owner revokes someone's access, or deletes their account, that takes
- * effect on their very next request, not just whenever their cookie
- * happens to expire.
+ * Accounts live in KV under a fixed key, USERS_KEY ("users") — a small
+ * JSON document listing everyone and their (hashed, never plain-text)
+ * password. An account record itself carries almost nothing — just who
+ * they are and whether they're the uber-user — because every actual
+ * permission lives on the TRIP (its `ownerId` and `grants[]`), not on the
+ * account. See permissionForTrip() further down for exactly how a trip + an
+ * account resolve into what that account may do. NONE of this — the
+ * account system, password hashing, or session cookies — changed in this
+ * storage-restructuring pass. Only WHERE and HOW trip data itself is
+ * stored changed (see below); who's allowed to do what with it did not.
  *
  * BOOTSTRAP PROBLEM: with no accounts yet, how does the very first account
  * (the site owner's, i.e. the uber-user) get created? This repurposes the
@@ -126,27 +119,98 @@
  * first place.
  *
  * ----------------------------------------------------------------------------
+ * HOW TRIPS ARE STORED (this is what changed in this pass)
+ * ----------------------------------------------------------------------------
+ * Earlier versions of this file kept EVERY trip in one single KV value
+ * under the key "state" — the whole thing read on every visit, and the
+ * whole thing rewritten on every save, no matter how small the change.
+ * That has two real problems as the number (and size) of trips grows:
+ *
+ *   1. Cloudflare KV caps a single value at 25 MiB. A long way off today,
+ *      but a single blob holding every trip forever is the wrong shape
+ *      regardless of how close to that ceiling it actually gets.
+ *   2. Cloudflare KV allows at most ONE write per second to the same key.
+ *      Because every save rewrote the ENTIRE "state" value, two people
+ *      saving two DIFFERENT trips within the same second could still
+ *      collide on that one shared key — one save silently losing to the
+ *      other, even though neither of them touched what the other was
+ *      editing. That's not a future scaling problem, it's a real
+ *      correctness gap that existed from the very first version of the
+ *      per-trip permissions system.
+ *
+ * So trip data now lives in TWO kinds of KV entry instead of one:
+ *
+ *   - TRIP_INDEX_KEY ("trip_index") — one small document listing every
+ *     trip that exists: just enough to render the dashboard (name, dates,
+ *     currency) and to resolve permissions (ownerId, grants) WITHOUT
+ *     loading any trip's actual content. This is the one and only place
+ *     `ownerId`/`grants` are stored — see loadTripIndex()/saveTripIndex().
+ *   - "trip:<tripId>" — one KV key PER TRIP, holding that trip's actual
+ *     content (destinations, activities, transport, accommodation,
+ *     contacts, expenses, companions, notes, currency rates, geocode
+ *     cache). See loadTripContent()/saveTripContent()/deleteTripContent().
+ *
+ * The payoff: opening the dashboard only ever reads the small index, never
+ * every trip's full content. Saving a trip only reads/writes THAT trip's
+ * own "trip:<id>" key — a save to Trip A never touches Trip B's key at
+ * all, so two people saving two different trips at the same moment can no
+ * longer collide. The trip index itself is still a single shared key, so
+ * renaming a trip or changing who it's shared with (both of which touch
+ * the index) retains a narrow version of the old collision window — see
+ * the comment on saveTripIndex() for why that's an acceptable, much
+ * smaller trade-off rather than something worth over-engineering away.
+ *
+ * OLD DATA: anything saved under the old "state" key before this change
+ * shipped is picked up automatically — see migrateFromLegacyState()
+ * below. That old key is left in place afterwards (never deleted) purely
+ * as an inert backup; nothing in this file reads it again once migration
+ * has run.
+ *
+ * ----------------------------------------------------------------------------
+ * SCHEMA NOTE: every item's own id field is now named for what it is
+ * ----------------------------------------------------------------------------
+ * Trip/destination/activity/transport/accommodation/contact/expense/
+ * companion objects used to all just have a generic `id` field — fine when
+ * you're deep in one item's own object, confusing the moment you're looking
+ * at raw JSON with several item types mixed together (exactly the situation
+ * hand-editing KV data in the Cloudflare dashboard puts you in). Each now
+ * has its own clearly-named id instead: `tripId`, `destinationId`,
+ * `activityId`, `transportId`, `accommodationId`, `contactId`, `expenseId`,
+ * `companionId`. Fields that were already references to one of these (e.g.
+ * an activity's `destinationId`, a booking's `contactId`, a grant's
+ * `companionId`) don't change at all — they already used exactly this
+ * naming, which is what this rename is bringing everything else in line
+ * with. Account/login records are DELIBERATELY left alone (still a plain
+ * `id`) — the account/session system is working, well-tested, and not
+ * worth the extra risk of touching again right after it just went through
+ * a rocky first real deploy.
+ * ----------------------------------------------------------------------------
  * SAVING SAFELY (the part of this file that matters most to get right)
  * ----------------------------------------------------------------------------
  * The frontend still works the simple way it always has: it keeps the
  * trips it knows about in one `state` object and POSTs the whole thing
- * back to /api/data whenever something changes. The wrinkle is that,
- * because trips are private-by-default now, any one account's copy of
- * `state.trips` is only ever a SUBSET — whatever GET handed them (see
- * buildResponseState() below). If this Worker just took that subset and
- * wrote it straight into KV, it would silently DELETE every trip that
- * account couldn't see. That would be a disaster the very first time a
- * "user"-role account (who can only see one trip) saved anything.
+ * back to /api/data whenever something changes — the WIRE FORMAT to and
+ * from the browser hasn't changed in this pass at all, only what happens
+ * to it on this end. The wrinkle is that, because trips are private-by-
+ * default, any one account's copy of `state.trips` is only ever a SUBSET —
+ * whatever GET handed them (see buildResponseState() below). If this
+ * Worker just took that subset and wrote it straight into storage, it
+ * would silently DELETE every trip that account couldn't see. That would
+ * be a disaster the very first time a "user"-role account (who can only
+ * see one trip) saved anything.
  *
  * So handlePost() below never does that. Instead, for every save, it:
- *   1. Loads the REAL, full, currently-stored state (not what the client
- *      sent).
- *   2. Works out — from that real stored data, never from anything the
- *      client claims — exactly what this account is allowed to change:
- *      the whole trip (Superuser/admin), just their own tagged items
- *      ("user"), or nothing at all (no access, or "viewer").
- *   3. Applies ONLY that, trip by trip, leaving everything else exactly
- *      as it was already stored.
+ *   1. Loads the REAL, full, currently-stored trip index (not what the
+ *      client sent) — ownerId/grants always come from here, never from
+ *      the client.
+ *   2. Works out — from that real stored data — exactly what this account
+ *      is allowed to change: the whole trip (Superuser/admin), just their
+ *      own tagged items ("user"), or nothing at all (no access, or
+ *      "viewer").
+ *   3. Applies ONLY that, trip by trip, loading and rewriting a trip's own
+ *      "trip:<id>" content key only when that trip actually changed —
+ *      everything else (every OTHER trip, and the index itself, unless a
+ *      trip was renamed/created/deleted) is left completely untouched.
  * See the big comment on handlePost() itself for the trip-by-trip rules in
  * full detail. The one thing this design guarantees is: no matter what an
  * account's browser sends, an account can never affect a trip (or, for a
@@ -161,19 +225,30 @@
 // even a very detailed set of trips should ever need as JSON text.
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 
-// The one fixed KV key everything is stored under. See the comment above —
-// this is deliberately a single blob, not one key per trip.
-const STATE_KEY = "state";
+// The old, single-blob storage key from before this restructuring. Only
+// ever READ, by migrateFromLegacyState() below, to pick up anything
+// saved before this change shipped — never written to again afterwards.
+const LEGACY_STATE_KEY = "state";
+
+// The lightweight "list of every trip" document — see the big "HOW TRIPS
+// ARE STORED" comment above. This is the one and only place a trip's
+// ownerId/grants live.
+const TRIP_INDEX_KEY = "trip_index";
+
+// Every trip's actual content lives under its own key, "trip:<tripId>".
+function tripContentKey(tripId) {
+  return "trip:" + tripId;
+}
 
 // The fixed KV key the account list lives under — a separate document from
 // the trip data above, so listing/editing accounts never touches (or risks
-// corrupting) anyone's trips, and vice versa.
+// corrupting) anyone's trips, and vice versa. Unchanged by this pass.
 const USERS_KEY = "users";
 
-// A brand-new install has nothing in KV yet. Rather than the frontend
-// having to guess what an "empty" trip list looks like, we hand back the
-// same shape it would otherwise save: one object with an empty trips array.
-const EMPTY_STATE = JSON.stringify({ trips: [] });
+// An empty index/trip shape, for a brand-new install (or a trip/account
+// list that's never been written to yet) — so nothing else in this file
+// has to special-case "not set up yet" versus "something went wrong".
+const EMPTY_INDEX = JSON.stringify({ trips: [] });
 
 // Cap on how many accounts can exist, purely as a sanity backstop (this
 // app was built for a friends-and-family group expected to top out around
@@ -238,7 +313,7 @@ export default {
 
       // ---- Sharing a trip (grant/revoke) -- owner (or the uber-user)
       // only; enforced inside these handlers against the REAL stored
-      // ownerId, never against anything the client claims. ----------------
+      // ownerId, never anything the client claims. ----------------
       if (path === "/WayPoint/api/trip-grants") {
         if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
         return handleTripGrantsUpsert(request, env, user);
@@ -283,24 +358,195 @@ export default {
   },
 };
 
+/* ============================================================================
+ * Trip storage — the index, per-trip content, and the one-time migration
+ * from the old single-blob "state" key. See the big "HOW TRIPS ARE STORED"
+ * comment near the top of this file for the reasoning behind this shape.
+ * ==========================================================================*/
+
 /**
- * Loads the real, full, currently-stored trip data straight out of KV —
- * the "server truth" that both handleGet() and handlePost() build on.
- * Never filtered, never trimmed — filtering only ever happens afterwards,
- * per-account, in buildResponseState().
+ * Reads the trip index — { trips: [{tripId, name, startDate, endDate,
+ * homeCurrency, ownerId, grants}, ...] } — running the one-time migration
+ * from the old "state" key first if this install hasn't been migrated yet.
+ * Always resolves to a valid { trips: [] } shape, same trick loadUsers()
+ * plays for accounts, for the same reason.
+ *
+ * Note the deliberate shape here: the index is read ONCE in the normal
+ * (already-migrated) case. An earlier version called ensureMigrated()
+ * first and then read the index separately, which meant every single
+ * request read the same KV key twice forever, just to answer a question
+ * ("has migration run?") the first read already answers.
  */
-async function loadFullState(env) {
-  const saved = await env.WAYPOINT_KV.get(STATE_KEY);
-  return saved !== null ? JSON.parse(saved) : JSON.parse(EMPTY_STATE);
+async function loadTripIndex(env) {
+  let saved = await env.WAYPOINT_KV.get(TRIP_INDEX_KEY);
+  if (saved === null) {
+    // No index yet: either a brand-new install, or an existing one still
+    // holding its data in the old single "state" blob. migrateFromLegacyState()
+    // handles both (it writes an empty index for a new install).
+    await migrateFromLegacyState(env);
+    saved = await env.WAYPOINT_KV.get(TRIP_INDEX_KEY);
+  }
+  return saved !== null ? JSON.parse(saved) : JSON.parse(EMPTY_INDEX);
 }
 
-async function saveFullState(env, state) {
-  await env.WAYPOINT_KV.put(STATE_KEY, JSON.stringify(state));
+/**
+ * Writes the trip index back. This is the one piece of trip storage that's
+ * STILL a single shared key across every trip, so — unlike a single trip's
+ * own content — two DIFFERENT index-touching changes (renaming two
+ * different trips, say) landing in the same second can still collide,
+ * same as the old design did for everything. That's a much narrower
+ * window than before (it only matters for renames/date changes/creating/
+ * deleting a trip or changing its sharing — not for ordinary editing of a
+ * trip's own content, which never touches the index at all), and a proper
+ * fix would mean a retry-with-fresh-read loop here. Given how rarely two
+ * people rename or re-share two DIFFERENT trips in the same second on an
+ * app built for a small family/friends group, that extra complexity isn't
+ * worth it right now — this is a known, accepted, narrow trade-off rather
+ * than something silently swept under the rug.
+ */
+async function saveTripIndex(env, index) {
+  await env.WAYPOINT_KV.put(TRIP_INDEX_KEY, JSON.stringify(index));
+}
+
+/** A single trip's full content, or null if that trip doesn't exist. */
+async function loadTripContent(env, tripId) {
+  const saved = await env.WAYPOINT_KV.get(tripContentKey(tripId));
+  return saved !== null ? JSON.parse(saved) : null;
+}
+
+async function saveTripContent(env, tripId, content) {
+  await env.WAYPOINT_KV.put(tripContentKey(tripId), JSON.stringify(content));
+}
+
+async function deleteTripContent(env, tripId) {
+  await env.WAYPOINT_KV.delete(tripContentKey(tripId));
+}
+
+// The full list of a trip's own CONTENT fields — everything except its
+// index-level bookkeeping (tripId/ownerId/grants, which live only in the
+// trip index) and the response-only convenience fields a GET adds (see
+// stripClientOwnershipFields() further down). This is what the migration
+// below copies across into a "trip:<id>" document, and it deliberately
+// does NOT include tripId: a trip's id lives in the index and in its own
+// KV key name, never duplicated inside its content (see
+// stripClientOwnershipFields(), which strips it back out of every save
+// for exactly the same reason).
+const TRIP_CONTENT_FIELDS = [
+  "name", "startDate", "endDate", "homeCurrency", "notes", "currencyRates",
+  "destinations", "activities", "transport", "accommodation", "contacts",
+  "expenses", "companions", "geocodeCache",
+];
+
+/**
+ * One-time migration from the old single "state" blob into the new
+ * index + per-trip-key shape. Only ever called by loadTripIndex() above,
+ * and only when there's no index yet — so on an already-migrated install
+ * it never runs at all.
+ *
+ * Safe to retry if it's ever interrupted partway through: each per-trip
+ * content key is written independently, and the index — which is what
+ * loadTripIndex() checks to decide "has this already run?" — is only
+ * written LAST, once every trip's content has been written successfully.
+ * So a retry after a partial failure just harmlessly rewrites the same
+ * per-trip content again before finishing the job. Two requests racing to
+ * migrate at the same moment is likewise harmless: both write identical
+ * content and an identical index.
+ *
+ * This also applies the id-field rename described in the big "SCHEMA
+ * NOTE" comment near the top of this file (trip.id -> tripId,
+ * destination.id -> destinationId, etc.) to every trip it migrates.
+ * Reference fields (activity.destinationId, transport.contactId,
+ * grant.companionId) already used the typed name before this change, so
+ * only each object's OWN id field needs rewriting. The old "state" key is
+ * left in place afterwards, untouched, purely as an inert backup —
+ * nothing reads it again once the index exists.
+ */
+async function migrateFromLegacyState(env) {
+  const legacy = await env.WAYPOINT_KV.get(LEGACY_STATE_KEY);
+  const legacyTrips = legacy ? (JSON.parse(legacy).trips || []) : [];
+
+  const index = { trips: [] };
+  for (const oldTrip of legacyTrips) {
+    const tripId = oldTrip.id || oldTrip.tripId;
+    if (!tripId) continue; // Shouldn't happen, but skip rather than crash migration.
+
+    const content = renameIdFieldsForMigration(oldTrip);
+    await saveTripContent(env, tripId, content);
+
+    index.trips.push({
+      tripId: tripId,
+      name: oldTrip.name || "",
+      startDate: oldTrip.startDate || "",
+      endDate: oldTrip.endDate || "",
+      homeCurrency: oldTrip.homeCurrency || "",
+      ownerId: oldTrip.ownerId || null, // null = not yet claimed by anyone (see the big auth comment: only the uber-user can see/reach it until someone opens it and it's re-owned via a save, or it's shared out).
+      grants: oldTrip.grants || [],
+    });
+  }
+  await saveTripIndex(env, index);
+}
+
+// Renames the generic `id` field on a trip and every item inside it to its
+// typed name (tripId/destinationId/activityId/...), for a trip object
+// coming out of the OLD storage format during migration. Every reference
+// field (activity.destinationId, transport.contactId, grant.companionId,
+// etc.) already used the typed name before this change, so those are left
+// completely alone — only each object's OWN id needs renaming.
+function renameIdFieldsForMigration(oldTrip) {
+  const content = {};
+  TRIP_CONTENT_FIELDS.forEach(function (key) {
+    content[key] = oldTrip[key];
+  });
+  // Deliberately no content.tripId -- see TRIP_CONTENT_FIELDS' comment.
+  // Writing it here would mean a migrated trip's stored content carried a
+  // field that every subsequent save strips back out, so the very first
+  // save after migration would always look like a change even when
+  // nothing was actually edited.
+  content.destinations = (oldTrip.destinations || []).map(function (d) {
+    return renamedIdCopy(d, "destinationId");
+  });
+  content.activities = (oldTrip.activities || []).map(function (a) {
+    return renamedIdCopy(a, "activityId");
+  });
+  content.transport = (oldTrip.transport || []).map(function (t) {
+    return renamedIdCopy(t, "transportId");
+  });
+  content.accommodation = (oldTrip.accommodation || []).map(function (a) {
+    return renamedIdCopy(a, "accommodationId");
+  });
+  content.contacts = (oldTrip.contacts || []).map(function (c) {
+    return renamedIdCopy(c, "contactId");
+  });
+  content.expenses = (oldTrip.expenses || []).map(function (e) {
+    return renamedIdCopy(e, "expenseId");
+  });
+  content.companions = (oldTrip.companions || []).map(function (c) {
+    return renamedIdCopy(c, "companionId");
+  });
+  content.geocodeCache = oldTrip.geocodeCache || {};
+  content.currencyRates = oldTrip.currencyRates || {};
+  return content;
+}
+
+// Copies `item`, replacing its generic `id` field with one named
+// `newIdField` — used only during migration (see above). Items saved by
+// the NEW code already come out of the frontend with the typed name
+// directly, so this renaming only ever needs to run once per trip, the
+// first time it's read after this change ships.
+function renamedIdCopy(item, newIdField) {
+  const copy = Object.assign({}, item);
+  if (Object.prototype.hasOwnProperty.call(copy, "id") && !Object.prototype.hasOwnProperty.call(copy, newIdField)) {
+    copy[newIdField] = copy.id;
+    delete copy.id;
+  }
+  return copy;
 }
 
 /* ============================================================================
  * Permission resolution — the one function that decides what an account
- * may do with a trip, from server-side truth only.
+ * may do with a trip, from server-side truth only. Unchanged in spirit
+ * from before this pass — only WHERE `trip.ownerId`/`trip.grants` come
+ * from changed (the trip index now, instead of the trip object itself).
  * ==========================================================================*/
 
 function findGrant(trip, accountId) {
@@ -308,10 +554,11 @@ function findGrant(trip, accountId) {
 }
 
 /**
- * Resolves what `user` may do with `trip`, right now — purely from
- * `trip.ownerId` / `trip.grants` / `user.isUberUser`, NEVER from anything
- * the client claims. Returns `null` if this account has no access to this
- * trip at all (treat it as if it doesn't exist), or one of:
+ * Resolves what `user` may do with `indexEntry` (one entry from the trip
+ * index — has ownerId/grants, NOT the trip's actual content), right now —
+ * purely from `indexEntry.ownerId` / `indexEntry.grants` / `user.isUberUser`,
+ * NEVER from anything the client claims. Returns `null` if this account has
+ * no access to this trip at all (treat it as if it doesn't exist), or one of:
  *
  *   { role: "superuser" }                 — the owner, or the uber-user.
  *                                            Full read/write, AND can
@@ -324,10 +571,10 @@ function findGrant(trip, accountId) {
  *   { role: "viewer", companionId: "..." } — same scoping as "user", but
  *                                            read-only.
  */
-function permissionForTrip(trip, user) {
+function permissionForTrip(indexEntry, user) {
   if (user.isUberUser) return { role: "superuser" };
-  if (trip.ownerId === user.id) return { role: "superuser" };
-  const grant = findGrant(trip, user.id);
+  if (indexEntry.ownerId === user.id) return { role: "superuser" };
+  const grant = findGrant(indexEntry, user.id);
   if (!grant) return null;
   if (grant.role === "admin") return { role: "admin" };
   if (grant.role === "user") return { role: "user", companionId: grant.companionId || "" };
@@ -342,8 +589,8 @@ function permissionForTrip(trip, user) {
  * been deleted is quietly left out — same "dangling reference just
  * vanishes, nothing crashes" philosophy as a deleted companion's tags.
  */
-function resolveGrants(trip, usersDoc) {
-  return (trip.grants || [])
+function resolveGrants(indexEntry, usersDoc) {
+  return (indexEntry.grants || [])
     .map(function (g) {
       const account = usersDoc.users.find(function (u) { return u.id === g.accountId; });
       if (!account) return null;
@@ -353,62 +600,66 @@ function resolveGrants(trip, usersDoc) {
 }
 
 /**
- * Builds the per-account response for GET /api/data: every trip `user` has
- * ANY access to, each one annotated with `myGrant` (so the frontend never
- * has to duplicate this permission logic, and never has to guess whether
- * an optimistic UI update is still valid) --- see permissionForTrip()
- * above for what `myGrant` can be.
- *
- * A full-scope trip (Superuser or "admin") comes back complete, PLUS who
- * currently owns it (`ownerUsername`) and its full sharing list
- * (`grants`) so a Superuser can run the "Share this trip" panel and an
- * "admin" can at least see who else has access.
- *
- * A scoped trip ("user"/"viewer") comes back trimmed to just that
- * account's own tagged items, with expenses stripped entirely (no
- * per-companion split exists for those, and they often show what OTHER
- * people spent) and NO `ownerId`/`grants` at all -- a scoped account has
- * no business knowing who else has access to a trip they can barely see
- * into themselves.
+ * Builds the full trip object the frontend expects for one trip this user
+ * can see, combining the index entry's bookkeeping (ownerId/grants, or a
+ * scoped view of neither) with that trip's own content loaded from its
+ * "trip:<id>" key. Mirrors exactly what the old single-blob
+ * buildResponseState() used to do per trip — see that function's
+ * description below for the full shape.
  */
-function buildResponseState(fullState, user, usersDoc) {
-  const trips = [];
-  (fullState.trips || []).forEach(function (trip) {
-    const perm = permissionForTrip(trip, user);
-    if (!perm) return; // Invisible entirely.
-
-    if (perm.role === "superuser" || perm.role === "admin") {
-      const ownerAccount = usersDoc.users.find(function (u) { return u.id === trip.ownerId; });
-      trips.push(Object.assign({}, trip, {
-        myGrant: perm,
-        ownerUsername: ownerAccount ? ownerAccount.username : "",
-        grants: resolveGrants(trip, usersDoc),
-      }));
-      return;
-    }
-
-    // "user" / "viewer": scoped to their own tagged items only.
-    const companionId = perm.companionId;
-    const taggedTo = function (item) { return (item.companions || []).indexOf(companionId) !== -1; };
-    const scoped = Object.assign({}, trip, {
-      destinations: (trip.destinations || []).filter(taggedTo),
-      activities: (trip.activities || []).filter(taggedTo),
-      accommodation: (trip.accommodation || []).filter(taggedTo),
-      transport: (trip.transport || []).filter(taggedTo),
-      expenses: [],
+function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
+  if (perm.role === "superuser" || perm.role === "admin") {
+    const ownerAccount = usersDoc.users.find(function (u) { return u.id === indexEntry.ownerId; });
+    return Object.assign({ tripId: indexEntry.tripId }, content, {
+      ownerId: indexEntry.ownerId,
       myGrant: perm,
+      ownerUsername: ownerAccount ? ownerAccount.username : "",
+      grants: resolveGrants(indexEntry, usersDoc),
     });
-    delete scoped.ownerId;
-    delete scoped.grants;
-    trips.push(scoped);
+  }
+
+  // "user" / "viewer": scoped to their own tagged items only.
+  const companionId = perm.companionId;
+  const taggedTo = function (item) { return (item.companions || []).indexOf(companionId) !== -1; };
+  return Object.assign({ tripId: indexEntry.tripId }, content, {
+    destinations: (content.destinations || []).filter(taggedTo),
+    activities: (content.activities || []).filter(taggedTo),
+    accommodation: (content.accommodation || []).filter(taggedTo),
+    transport: (content.transport || []).filter(taggedTo),
+    expenses: [],
+    myGrant: perm,
   });
+  // No ownerId/grants added at all for a scoped account -- see the class
+  // comment on the old buildResponseState() this replaces: a scoped
+  // account has no business knowing who else has access to a trip they
+  // can barely see into themselves.
+}
+
+/**
+ * Builds the whole GET /api/data response: every trip `user` has ANY
+ * access to (from the index), each one loaded and annotated exactly as
+ * buildVisibleTrip() above describes. This does one extra KV read per
+ * visible trip compared to the old single-blob design (which had
+ * everything in memory already) -- a fine trade-off for an app with a
+ * handful of trips per account, in exchange for never having to load
+ * every trip that exists just to show the ones you can see.
+ */
+async function buildResponseState(env, user, usersDoc) {
+  const index = await loadTripIndex(env);
+  const trips = [];
+  for (const indexEntry of (index.trips || [])) {
+    const perm = permissionForTrip(indexEntry, user);
+    if (!perm) continue; // Invisible entirely.
+    const content = await loadTripContent(env, indexEntry.tripId);
+    if (!content) continue; // Index says it exists but content's missing -- shouldn't happen, skip rather than crash.
+    trips.push(buildVisibleTrip(indexEntry, content, perm, usersDoc));
+  }
   return { trips: trips };
 }
 
 async function handleGet(env, user) {
-  const fullState = await loadFullState(env);
   const usersDoc = await loadUsers(env);
-  const responseState = buildResponseState(fullState, user, usersDoc);
+  const responseState = await buildResponseState(env, user, usersDoc);
   return new Response(JSON.stringify(responseState), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -420,26 +671,36 @@ async function handleGet(env, user) {
  * "SAVING SAFELY" comment near the top of this file for why a plain
  * overwrite would be dangerous now that trips are private-by-default.
  *
- * The rule, trip by trip, computed from the REAL currently-stored data
+ * The rule, trip by trip, computed from the REAL currently-stored index
  * (never from the client):
  *
  *   - No access, or a "viewer" grant: this trip is left completely
- *     untouched, whatever (if anything) the client sent for it.
+ *     untouched -- its content key isn't even read, whatever (if
+ *     anything) the client sent for it.
  *   - Superuser (owner, or the uber-user) or an "admin" grant: the whole
- *     trip is replaced with what they submitted -- leaving it out entirely
- *     means they deleted it. Either way, `ownerId` and `grants` always
- *     come from the stored trip, NEVER from the client -- even a
- *     Superuser can't change who owns/shares a trip through this
- *     endpoint, only through /api/trip-grants (see below), which checks
- *     that specifically.
+ *     trip's CONTENT is replaced with what they submitted -- leaving it
+ *     out entirely means they deleted it (its content key is deleted and
+ *     its index entry removed). `ownerId` and `grants` always come from
+ *     the stored index, NEVER from the client -- even a Superuser can't
+ *     change who owns/shares a trip through this endpoint, only through
+ *     /api/trip-grants (see below), which checks that specifically.
  *   - A "user" grant: only fields on items that already existed AND were
  *     tagged with their companion both before and after get updated (see
  *     mergeUserScopedTrip()). They can't add or remove items, retag
  *     anything, or touch the trip's own fields, companions or contacts --
  *     all of that comes back exactly as stored.
- *   - Anything in the submitted body whose id ISN'T an existing trip is a
- *     brand-new trip: any logged-in account may create one, and becomes
- *     its permanent Superuser (owner) automatically.
+ *   - Anything in the submitted body whose tripId ISN'T an existing trip
+ *     is a brand-new trip: any logged-in account may create one, and
+ *     becomes its permanent Superuser (owner) automatically.
+ *
+ * A trip's own content key is only written when its content actually
+ * changed (a plain JSON-string comparison against what's currently
+ * stored) -- editing Trip A never touches Trip B's key at all, even if
+ * Trip B happened to be included in what the browser submitted (which it
+ * normally is, since the frontend still keeps and resubmits its whole
+ * local `state`). The index is only rewritten if a trip was created,
+ * deleted, or had its name/dates/currency changed -- ordinary item edits
+ * never touch it.
  */
 async function handlePost(request, env, user) {
   const contentLength = Number(request.headers.get("content-length") || 0);
@@ -459,61 +720,161 @@ async function handlePost(request, env, user) {
     return jsonError(400, "Request body didn't look like trip data (expected { trips: [...] }).");
   }
 
-  const storedState = await loadFullState(env);
-  const storedTrips = storedState.trips || [];
-  const storedById = {};
-  storedTrips.forEach(function (t) { storedById[t.id] = t; });
+  const index = await loadTripIndex(env);
+  const indexById = {};
+  index.trips.forEach(function (t) { indexById[t.tripId] = t; });
 
   const submittedById = {};
-  submitted.trips.forEach(function (t) { if (t && t.id) submittedById[t.id] = t; });
+  submitted.trips.forEach(function (t) { if (t && t.tripId) submittedById[t.tripId] = t; });
 
-  const resultTrips = [];
+  /* ---- SAFETY PASS: work out what this save would DELETE, before
+   * writing a single thing. ---------------------------------------------
+   * A trip is deleted by being LEFT OUT of what the browser sends (there's
+   * no "delete" endpoint -- see the rules in this function's doc comment).
+   * That's fine when the browser genuinely has the full picture, and
+   * dangerous when it doesn't, so this pass catches the two ways it might
+   * not:
+   *
+   *   1. A trip whose content key couldn't be read. buildResponseState()
+   *      SKIPS such a trip when building the GET response, so the browser
+   *      never had it to send back -- treating that absence as "delete it"
+   *      would destroy a trip purely because a read failed. Cloudflare KV
+   *      is eventually consistent (a just-written key can briefly read as
+   *      missing from another location, and misses are cached), so this
+   *      is a real, reachable state, not a hypothetical one.
+   *   2. More than one trip missing at once. The UI only ever deletes ONE
+   *      trip at a time, behind a confirmation dialog -- so a request that
+   *      would delete two or more is never something the real app
+   *      produces. It means the browser is working from a stale or empty
+   *      copy of the data (e.g. a failed load that fell back to "no trips
+   *      at all"), and applying it would wipe out everything that account
+   *      can see. Rejecting the whole request and changing nothing is the
+   *      only safe answer.
+   *
+   * This is deliberately a separate pass rather than a check inside the
+   * main loop below: it has to be able to reject the request having
+   * written NOTHING, and the main loop starts writing as it goes.
+   */
+  const contentMissingForTripId = {};
+  const plannedDeletions = [];
+  for (const indexEntry of index.trips) {
+    if (submittedById[indexEntry.tripId]) continue; // Present -- not a deletion.
+    const perm = permissionForTrip(indexEntry, user);
+    // Only a full-scope role can delete at all; for everyone else an
+    // omission is already a no-op further down, so it isn't a deletion.
+    if (!perm || perm.role === "viewer" || perm.role === "user") continue;
+    const storedContent = await loadTripContent(env, indexEntry.tripId);
+    if (storedContent === null) {
+      contentMissingForTripId[indexEntry.tripId] = true;
+      continue; // Case 1 above -- absence proves nothing, so never a deletion.
+    }
+    plannedDeletions.push(indexEntry.tripId);
+  }
+  if (plannedDeletions.length > 1) {
+    return jsonError(409,
+      "That save would have deleted " + plannedDeletions.length + " trips at once, which the app never does on purpose — " +
+      "so it was rejected and nothing was changed. This usually means this page's copy of your trips is out of date " +
+      "or failed to load. Refresh the page and try your change again.");
+  }
+
+  let indexChanged = false;
+  const nextIndexTrips = [];
 
   // ---- Every EXISTING trip: apply exactly what this account's REAL
-  // permission on it (from the stored version) allows. ----
-  storedTrips.forEach(function (storedTrip) {
-    const perm = permissionForTrip(storedTrip, user);
-    const incoming = submittedById[storedTrip.id];
+  // permission on it (from the stored index) allows. ----
+  for (const indexEntry of index.trips) {
+    const perm = permissionForTrip(indexEntry, user);
+    const incoming = submittedById[indexEntry.tripId];
 
     if (!perm || perm.role === "viewer") {
-      // No access, or read-only: completely untouched.
-      resultTrips.push(storedTrip);
-      return;
+      // No access, or read-only: completely untouched, content key not
+      // even read.
+      nextIndexTrips.push(indexEntry);
+      continue;
     }
 
     if (perm.role === "superuser" || perm.role === "admin") {
-      if (!incoming) return; // Left out by a full-scope account -> deleted.
-      resultTrips.push(Object.assign({}, stripClientOwnershipFields(incoming), {
-        id: storedTrip.id,
-        ownerId: storedTrip.ownerId,
-        grants: storedTrip.grants || [],
-      }));
-      return;
+      if (!incoming) {
+        if (contentMissingForTripId[indexEntry.tripId]) {
+          // Case 1 from the safety pass: we couldn't read this trip's
+          // content, so the browser was never shown it and its absence
+          // here means nothing. Keep the index entry exactly as it is --
+          // if the content turns up on a later read (KV catching up), the
+          // trip simply reappears, intact.
+          nextIndexTrips.push(indexEntry);
+          continue;
+        }
+        // Left out by a full-scope account -> deleted.
+        await deleteTripContent(env, indexEntry.tripId);
+        indexChanged = true;
+        continue;
+      }
+      const newContent = stripClientOwnershipFields(incoming);
+      const storedContent = await loadTripContent(env, indexEntry.tripId);
+      if (JSON.stringify(newContent) !== JSON.stringify(storedContent)) {
+        await saveTripContent(env, indexEntry.tripId, newContent);
+      }
+      const nextEntry = Object.assign({}, indexEntry, {
+        name: newContent.name || "",
+        startDate: newContent.startDate || "",
+        endDate: newContent.endDate || "",
+        homeCurrency: newContent.homeCurrency || "",
+        // ownerId/grants deliberately NOT taken from newContent -- they
+        // were never in it (stripClientOwnershipFields removed them, and
+        // the frontend doesn't send them for a full-scope save anyway) --
+        // this keeps indexEntry's existing ownerId/grants exactly as they
+        // were, unless /api/trip-grants changes them.
+      });
+      if (JSON.stringify(nextEntry) !== JSON.stringify(indexEntry)) indexChanged = true;
+      nextIndexTrips.push(nextEntry);
+      continue;
     }
 
     // perm.role === "user": scoped read/write.
     if (!incoming) {
       // A "user" grant can't delete the trip -- if it's missing from what
       // they sent (shouldn't happen, the UI never offers it), the safe
-      // thing is to just keep it exactly as it was.
-      resultTrips.push(storedTrip);
-      return;
+      // thing is to just leave it exactly as it was.
+      nextIndexTrips.push(indexEntry);
+      continue;
     }
-    resultTrips.push(mergeUserScopedTrip(storedTrip, incoming, perm.companionId));
-  });
+    const storedContent = await loadTripContent(env, indexEntry.tripId);
+    const mergedContent = mergeUserScopedTrip(storedContent, incoming, perm.companionId);
+    if (JSON.stringify(mergedContent) !== JSON.stringify(storedContent)) {
+      await saveTripContent(env, indexEntry.tripId, mergedContent);
+    }
+    nextIndexTrips.push(indexEntry); // A "user" grant never changes name/dates/ownership.
+  }
 
   // ---- Anything submitted that ISN'T an existing trip id is brand new --
   // any logged-in account may create one, becoming its Superuser. ----
-  submitted.trips.forEach(function (incoming) {
-    if (!incoming || !incoming.id) return;
-    if (storedById[incoming.id]) return; // Already handled above.
-    resultTrips.push(Object.assign({}, stripClientOwnershipFields(incoming), {
+  const createdTripIds = {};
+  for (const incoming of submitted.trips) {
+    if (!incoming || !incoming.tripId) continue;
+    if (indexById[incoming.tripId]) continue; // Already handled above.
+    // A malformed body listing the same brand-new tripId twice would
+    // otherwise add it to the index twice, leaving a duplicate entry that
+    // nothing else in this file expects.
+    if (createdTripIds[incoming.tripId]) continue;
+    createdTripIds[incoming.tripId] = true;
+    const newContent = stripClientOwnershipFields(incoming);
+    await saveTripContent(env, incoming.tripId, newContent);
+    nextIndexTrips.push({
+      tripId: incoming.tripId,
+      name: newContent.name || "",
+      startDate: newContent.startDate || "",
+      endDate: newContent.endDate || "",
+      homeCurrency: newContent.homeCurrency || "",
       ownerId: user.id,
       grants: [],
-    }));
-  });
+    });
+    indexChanged = true;
+  }
 
-  await saveFullState(env, { trips: resultTrips });
+  if (indexChanged) {
+    await saveTripIndex(env, { trips: nextIndexTrips });
+  }
+
   return new Response(JSON.stringify({ status: "ok" }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -525,8 +886,11 @@ async function handlePost(request, env, user) {
 // permission even is into storage -- these fields only ever exist in a
 // GET response as a convenience for the UI, and are always recomputed
 // server-side before anything is written back. See handlePost() above.
+// Also strips tripId itself -- that lives in the index/KV key, never
+// inside a trip's own content document.
 function stripClientOwnershipFields(trip) {
   const copy = Object.assign({}, trip);
+  delete copy.tripId;
   delete copy.ownerId;
   delete copy.grants;
   delete copy.myGrant;
@@ -535,40 +899,61 @@ function stripClientOwnershipFields(trip) {
 }
 
 /**
- * Applies a "user" grant's edits to a trip: only fields on items that
- * already existed AND were tagged with `companionId` in BOTH the stored
- * and the submitted version get updated. Everything else -- the trip's
- * own name/dates/notes, its companions list, its contacts, other people's
- * items, and of course who owns/shares it -- comes back exactly as it was
- * stored, no matter what the client sent. This is what makes a "user"
- * grant genuinely safe to give write access to: even a compromised or
- * buggy client can't use it to reach outside their own tagged items.
+ * Applies a "user" grant's edits to a trip's CONTENT: only fields on items
+ * that already existed AND were tagged with `companionId` in BOTH the
+ * stored and the submitted version get updated. Everything else -- the
+ * trip's own name/dates/notes, its companions list, its contacts, other
+ * people's items -- comes back exactly as it was stored, no matter what
+ * the client sent. This is what makes a "user" grant genuinely safe to
+ * give write access to: even a compromised or buggy client can't use it
+ * to reach outside their own tagged items. (ownerId/grants aren't part of
+ * a trip's content at all any more -- they live only in the index, which
+ * a "user" grant never touches regardless.)
  */
-function mergeUserScopedTrip(storedTrip, incomingTrip, companionId) {
-  const merged = Object.assign({}, storedTrip); // Start from stored truth.
+function mergeUserScopedTrip(storedContent, incomingContent, companionId) {
+  // `storedContent` can legitimately be null -- an index entry whose
+  // content key couldn't be read (see loadTripContent()). Guarding here
+  // rather than assuming an object matters: without it this function
+  // throws a TypeError on `storedContent[listKey]` and the whole save
+  // fails with a 500, for every trip in the request, not just this one.
+  const stored = storedContent || {};
+  const merged = Object.assign({}, stored); // Start from stored truth.
   ["destinations", "activities", "accommodation", "transport"].forEach(function (listKey) {
-    merged[listKey] = mergeUserScopedList(storedTrip[listKey] || [], incomingTrip[listKey] || [], companionId);
+    merged[listKey] = mergeUserScopedList(stored[listKey] || [], incomingContent[listKey] || [], companionId, listItemIdField(listKey));
   });
-  // Trip-level fields, companions, contacts, expenses, ownerId, grants:
-  // deliberately left as `storedTrip`'s values (from Object.assign above)
-  // -- a "user" grant never touches any of those.
   return merged;
 }
 
-function mergeUserScopedList(storedList, incomingList, companionId) {
+// Which id field each of a trip's item lists uses -- see the "SCHEMA NOTE"
+// comment near the top of this file. Centralised here so
+// mergeUserScopedList() stays generic across all four list types rather
+// than needing a copy of itself per type.
+function listItemIdField(listKey) {
+  return {
+    destinations: "destinationId",
+    activities: "activityId",
+    accommodation: "accommodationId",
+    transport: "transportId",
+  }[listKey];
+}
+
+function mergeUserScopedList(storedList, incomingList, companionId, idField) {
   const incomingById = {};
-  incomingList.forEach(function (item) { if (item && item.id) incomingById[item.id] = item; });
+  incomingList.forEach(function (item) { if (item && item[idField]) incomingById[item[idField]] = item; });
   const taggedTo = function (item) { return (item.companions || []).indexOf(companionId) !== -1; };
 
   return storedList.map(function (storedItem) {
     if (!taggedTo(storedItem)) return storedItem; // Not theirs -- untouched.
-    const incomingItem = incomingById[storedItem.id];
+    const incomingItem = incomingById[storedItem[idField]];
     if (!incomingItem) return storedItem; // Can't delete -- keep it.
     if (!taggedTo(incomingItem)) return storedItem; // Can't un-tag themselves -- ignore the attempt.
-    // Apply their edits, but id/companions always stay as stored -- a
-    // "user" grant can change an item's OTHER fields, never which item it
-    // is or who it's tagged to.
-    return Object.assign({}, incomingItem, { id: storedItem.id, companions: storedItem.companions });
+    // Apply their edits, but the item's own id/companions always stay as
+    // stored -- a "user" grant can change an item's OTHER fields, never
+    // which item it is or who it's tagged to.
+    const applied = Object.assign({}, incomingItem);
+    applied[idField] = storedItem[idField];
+    applied.companions = storedItem.companions;
+    return applied;
   });
   // Any id present in `incomingList` but not in `storedList` (a brand-new
   // item) is silently dropped here -- a "user" grant can't create items,
@@ -580,7 +965,8 @@ function mergeUserScopedList(storedList, incomingList, companionId) {
  * access to it -- deliberately not even an "admin" grant, so "full
  * read/write" and "decides who else gets in" stay two separate powers,
  * exactly as asked for. Both handlers check this against the REAL stored
- * `ownerId`, never anything the client claims. ---------------------------- */
+ * `ownerId` (now on the trip's INDEX entry, not the trip object itself),
+ * never anything the client claims. ---------------------------------------- */
 
 async function handleTripGrantsUpsert(request, env, user) {
   let body;
@@ -600,29 +986,30 @@ async function handleTripGrantsUpsert(request, env, user) {
     return jsonError(400, "Pick which companion this person is, so their access is scoped correctly.");
   }
 
-  const state = await loadFullState(env);
-  const trip = (state.trips || []).find(function (t) { return t.id === tripId; });
-  if (!trip) return jsonError(404, "That trip no longer exists.");
-  if (!(user.isUberUser || trip.ownerId === user.id)) {
+  const index = await loadTripIndex(env);
+  const indexEntry = index.trips.find(function (t) { return t.tripId === tripId; });
+  if (!indexEntry) return jsonError(404, "That trip no longer exists.");
+  if (!(user.isUberUser || indexEntry.ownerId === user.id)) {
     return jsonError(403, "Only this trip's owner can decide who has access to it.");
   }
 
   const usersDoc = await loadUsers(env);
   const targetAccount = usersDoc.users.find(function (u) { return u.username.toLowerCase() === username.toLowerCase(); });
   if (!targetAccount) return jsonError(404, "No account with that username exists yet — ask the site owner to create one first.");
-  if (targetAccount.id === trip.ownerId) return jsonError(400, "That account already owns this trip.");
+  if (targetAccount.id === indexEntry.ownerId) return jsonError(400, "That account already owns this trip.");
   if (targetAccount.isUberUser) return jsonError(400, "That account already has full access to everything.");
   if (role === "user" || role === "viewer") {
-    const companionExists = (trip.companions || []).some(function (c) { return c.id === companionId; });
+    const content = await loadTripContent(env, tripId);
+    const companionExists = (content && content.companions || []).some(function (c) { return c.companionId === companionId; });
     if (!companionExists) return jsonError(400, "That companion isn't on this trip.");
   }
 
   // Upsert: replace any existing grant for this account, or add a new one.
-  trip.grants = (trip.grants || []).filter(function (g) { return g.accountId !== targetAccount.id; });
-  trip.grants.push({ accountId: targetAccount.id, role: role, companionId: role === "admin" ? "" : companionId });
+  indexEntry.grants = (indexEntry.grants || []).filter(function (g) { return g.accountId !== targetAccount.id; });
+  indexEntry.grants.push({ accountId: targetAccount.id, role: role, companionId: role === "admin" ? "" : companionId });
 
-  await saveFullState(env, state);
-  return new Response(JSON.stringify({ status: "ok", grants: resolveGrants(trip, usersDoc) }), {
+  await saveTripIndex(env, index);
+  return new Response(JSON.stringify({ status: "ok", grants: resolveGrants(indexEntry, usersDoc) }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
@@ -639,15 +1026,15 @@ async function handleTripGrantsRevoke(request, env, user) {
   const accountId = body.accountId;
   if (!tripId || !accountId) return jsonError(400, "Missing trip or account.");
 
-  const state = await loadFullState(env);
-  const trip = (state.trips || []).find(function (t) { return t.id === tripId; });
-  if (!trip) return jsonError(404, "That trip no longer exists.");
-  if (!(user.isUberUser || trip.ownerId === user.id)) {
+  const index = await loadTripIndex(env);
+  const indexEntry = index.trips.find(function (t) { return t.tripId === tripId; });
+  if (!indexEntry) return jsonError(404, "That trip no longer exists.");
+  if (!(user.isUberUser || indexEntry.ownerId === user.id)) {
     return jsonError(403, "Only this trip's owner can decide who has access to it.");
   }
 
-  trip.grants = (trip.grants || []).filter(function (g) { return g.accountId !== accountId; });
-  await saveFullState(env, state);
+  indexEntry.grants = (indexEntry.grants || []).filter(function (g) { return g.accountId !== accountId; });
+  await saveTripIndex(env, index);
   return new Response(JSON.stringify({ status: "ok" }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -844,13 +1231,16 @@ function movementSummary(movement) {
 }
 
 /* ============================================================================
- * Accounts, password hashing, and sessions
+ * Accounts, password hashing, and sessions — completely unchanged by this
+ * storage-restructuring pass. See the "SCHEMA NOTE" comment near the top
+ * of this file for why account records deliberately keep their plain `id`
+ * field rather than being renamed to `accountId` alongside everything else.
  * ==========================================================================*/
 
 /**
  * Reads the account list out of KV. A brand-new install has none yet, so
  * this always resolves to a valid { users: [] } shape rather than null —
- * exactly the same trick loadFullState() plays for trip data, and for the
+ * exactly the same trick loadTripIndex() plays for trip data, and for the
  * same reason (nothing else in this file has to special-case "not set up
  * yet" versus "something went wrong").
  */
