@@ -69,6 +69,50 @@ there the next time you visit.
   lowercased search index once on first use instead of redoing that
   work on every keystroke, which was the main source of the typing lag
   some devices were seeing.
+- **Every other suggestible field uses that same dropdown too.**
+  Currency, country, city, and timezone fields — everywhere they
+  appear, including the Home currency field on the Settings tab, which
+  is hand-built outside the normal form system but still wired into
+  the same mechanism — used to still be native `<datalist>` popups even
+  after airport moved off them, which meant the app had two different
+  autocomplete behaviors depending on which field you were in. They now
+  all render through the same `suggestInputHtml()` helper and the same
+  generic dropdown code (a `data-suggest-type` attribute on the input —
+  "currency", "country", "city", "timezone", or "airport" — tells the
+  shared dropdown logic which list/search to use), so every one of them
+  looks and behaves identically: opens on focus, narrows as you type,
+  never covers the field, supports arrow keys + Enter and click to
+  select. There's no native `<datalist>` element left anywhere in the
+  app. The plain-string fields (currency/country/city/timezone) use one
+  small shared substring search (a "starts with" match ranked above a
+  mere "contains" match) rather than airport's own richer scored search
+  — their lists are only tens to a couple hundred entries each, so
+  nothing fancier is needed.
+- **The transport ("flight") form's layout and "Paid with" section.**
+  Cleaned up from its original one-column-per-field version: seat/coach
+  numbers were dropped entirely (unused clutter), and From/To, Depart
+  date/Arrive date, Depart time/Arrive time, and Booking reference/
+  Contact are each paired onto one row instead of stacking one field
+  per line. Cost tracking is now behind a "Paid with" selector — Cash,
+  Points, Combo, or Free — rather than always showing a currency+amount
+  pair whether or not the leg actually cost cash: Cash shows currency
+  and amount on one row plus a checkbox for using a different exchange
+  rate than the trip's fixed one (the override input itself only
+  appears once that's ticked, instead of always sitting there mostly
+  unused); Points shows a points-program box and a points-count box
+  instead; Combo shows both sections at once (for a leg part-paid each
+  way); Free shows neither, since there's nothing to record. Saving
+  only keeps whichever section is actually visible for the chosen
+  option — switching an already-priced leg to Free clears its old cost
+  rather than silently keeping data nothing on screen still shows.
+  Editing a leg saved before this existed infers Cash (if it has a
+  cost) or Free (if it doesn't) the first time it's opened, so existing
+  cost data stays visible rather than disappearing behind a blank
+  selector. Mode ("Flight"/"Train"/...), "Paid with", and the
+  exchange-rate checkbox are all "reactive" fields (see `reactiveKey`
+  in `openForm()`/`fieldsHtml()`) — changing any of them re-renders
+  just the field list to match, without discarding anything else
+  already typed into the form.
 - **`src/worker.js`** — the server side. It answers `/WayPoint/api/data`
   (GET to read your saved trips, POST to save them) by reading/writing a
   single JSON blob in Cloudflare KV; answers `/WayPoint/api/flight-lookup`
@@ -193,3 +237,23 @@ A handful of Playwright suites live outside this repo's deployed contents
   the dropdown always renders below the input rather than covering it.
   Also checks click-to-select and arrow-key-plus-Enter selection both
   fill the field and close the dropdown.
+- A dedicated test for the transport form's layout and "Paid with"
+  section — checks seat/coach is gone from every mode; From/To, Depart/
+  Arrive date, Depart/Arrive time, and Booking reference/Contact each
+  land on one row; a new leg defaults to "Free" with no cost/points
+  fields showing; Cash/Points/Combo/Free each show exactly the right
+  fields (including the exchange-rate checkbox only revealing its
+  override input once ticked); saving a Cash or a Points leg persists
+  the right data and leaves the other section blank; and editing a
+  leg saved before "Paid with" existed correctly infers Cash and shows
+  its existing cost data rather than hiding it.
+- A dedicated test for the suggestion dropdown being consistent across
+  every field that has one, not just airport — checks there's no native
+  `<datalist>` element left anywhere on the page, that country/city/
+  timezone fields on the destination form all carry the right
+  `data-suggest-type` and sit in a `.suggest-input-wrap`, that each
+  opens on focus with a seeded list and narrows to the expected match
+  as you type, that clicking a suggestion fills the field, and that the
+  Settings tab's hand-built Home currency field — the one field of this
+  kind not built through the normal fieldHtml()/openForm() system —
+  behaves identically to the rest.
