@@ -42,20 +42,33 @@ there the next time you visit.
   until a Flight leg is actually saved.
 - **Airport field suggestions and the live "resolved" hint.** The
   From/To fields on a Flight leg are still a single plain text box
-  (not a dropdown or a two-step city-then-airport picker) — typing
-  starts you off with the ~126 curated major hubs as suggestions, the
-  same list as always. Once you've typed 2+ characters, though, the
-  suggestion list quietly widens to search the full ~7,900-airport
-  `airports-full.js` database by code, city, or name, capped to the
-  best 30 matches — so a secondary airport like Birmingham (BHX) or a
-  less common city spelling still shows up, without ever rendering
-  thousands of `<option>` elements into the page (that would be slow,
-  especially on a phone or tablet). Underneath the field, a small hint
-  updates live as you type: "✓ Mapped precisely for the Map tab" once
-  what you've typed resolves to a real airport coordinate, or "No
-  exact airport match yet" if it doesn't (yet) — so you always know
-  whether that leg will place accurately on the Map tab before you
-  even hit Save.
+  (not a two-step city-then-airport picker) — typing starts you off
+  with the ~126 curated major hubs as suggestions, the same list as
+  always. Once you've typed 2+ characters, though, the suggestion list
+  quietly widens to search the full ~7,900-airport `airports-full.js`
+  database by code, city, or name, capped to the best 30 matches — so
+  a secondary airport like Birmingham (BHX) or a less common city
+  spelling still shows up, without ever rendering thousands of options
+  into the page (that would be slow, especially on a phone or tablet).
+  Underneath the field, a small hint updates live as you type: "✓
+  Mapped precisely for the Map tab" once what you've typed resolves to
+  a real airport coordinate, or "No exact airport match yet" if it
+  doesn't (yet) — so you always know whether that leg will place
+  accurately on the Map tab before you
+  even hit Save. The suggestion list itself is a small app-rendered
+  dropdown, not a native browser `<datalist>` popup — an earlier
+  version used a datalist, but real-world testing found two problems
+  with that: its popup can't be repositioned with CSS at all (it ended
+  up covering part of the input on a narrow screen), and swapping its
+  options live was interrupting mid-word typing on at least one real
+  device. The custom dropdown sits flush under the input, never over
+  it, and rebuilding it never touches the input itself, so typing is
+  never interrupted. It supports arrow-key navigation and Enter to
+  select, same as the native version did, plus click-to-select. The
+  ~7,900-airport search itself is also a bit faster now: it builds a
+  lowercased search index once on first use instead of redoing that
+  work on every keystroke, which was the main source of the typing lag
+  some devices were seeing.
 - **`src/worker.js`** — the server side. It answers `/WayPoint/api/data`
   (GET to read your saved trips, POST to save them) by reading/writing a
   single JSON blob in Cloudflare KV; answers `/WayPoint/api/flight-lookup`
@@ -168,11 +181,15 @@ A handful of Playwright suites live outside this repo's deployed contents
   Nominatim), and separately checks that flight details from a "Look
   up" click (aircraft, terminal, gate) land in the leg's Notes field
   instead of just flashing in the status line and vanishing.
-- A dedicated test for the From/To field's live suggestions and
-  resolve-hint — checks the datalist starts with the curated ~126,
-  widens to surface a secondary airport (e.g. BHX) once typed, shows
-  the "✓ Mapped precisely" hint for a real match and "No exact
-  airport match yet" for made-up text, clears the hint when the field
-  is emptied, and never renders more than 30 suggestions at once even
-  when a broad search term (e.g. "london") matches more airports than
-  that.
+- A dedicated test for the From/To field's custom suggestion dropdown
+  and resolve-hint — checks it opens on focus seeded with the curated
+  ~126, widens to surface a secondary airport (e.g. BHX, or Chongqing
+  by city name) once typed, shows the "✓ Mapped precisely" hint for a
+  real match and "No exact airport match yet" for a city name/made-up
+  text, never renders more than 30 suggestions at once even when a
+  broad search term (e.g. "london") matches more airports than that,
+  and — the specific bug this replaced a native `<datalist>` to fix —
+  that typing a full word never gets interrupted partway through, and
+  the dropdown always renders below the input rather than covering it.
+  Also checks click-to-select and arrow-key-plus-Enter selection both
+  fill the field and close the dropdown.
