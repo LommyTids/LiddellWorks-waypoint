@@ -114,27 +114,95 @@ there the next time you visit.
   just the field list to match, without discarding anything else
   already typed into the form.
 - **`src/worker.js`** — the server side. It answers `/WayPoint/api/data`
-  (GET to read your saved trips, POST to save them) by reading/writing a
-  single JSON blob in Cloudflare KV; answers `/WayPoint/api/flight-lookup`
-  by proxying a flight number + date to the [AeroDataBox](https://aerodatabox.com/)
-  API (via RapidAPI) and handing back the airline, airports, and scheduled
-  local departure/arrival date+time — used by the "Look up" button next to
-  Flight number on the transport form. Needs the `AERODATABOX_API_KEY`
-  secret set up (step 4 below); and hands off every other request to
-  Cloudflare's static file serving for the HTML file above.
+  (GET to read your saved trips — filtered per trip and, for a scoped
+  grant, per item, see "Accounts and permissions" below — POST to save
+  them, via a safe per-trip merge rather than a plain overwrite) by
+  reading/writing a single JSON blob in Cloudflare KV; answers
+  `/WayPoint/api/login`, `/api/logout`, `/api/whoami`, `/api/setup` and
+  `/api/users*` — the account/session system; `/api/trip-grants` and
+  `/api/trip-grants/revoke` — sharing a trip, see "Accounts and
+  permissions" below and the big comment at the top of this file;
+  answers `/WayPoint/api/flight-lookup` by proxying a flight number +
+  date to the [AeroDataBox](https://aerodatabox.com/) API (via RapidAPI)
+  and handing back the airline, airports, and scheduled local
+  departure/arrival date+time — used by the "Look up" button next to
+  Flight number on the transport form, needs the `AERODATABOX_API_KEY`
+  secret set up (step 5 below); and hands off every other request (the
+  page itself, its CSS/JS) to Cloudflare's static file serving, with no
+  auth check at all — see this file's own comment for why serving that
+  shell openly is fine and in fact necessary.
 - **`wrangler.toml`** — Cloudflare configuration: which route
   (`liddellworks.com/WayPoint*`) reaches this Worker, which KV namespace it
   uses, and where the static files live. Heavily commented — worth a skim.
 
-The login gate is a single shared password, checked in `src/worker.js` via
-plain HTTP Basic Auth — the browser's own built-in username/password
-prompt, no custom login page to build. Anyone who knows the password gets
-in; there's no per-person account, which matches "share it with a few
-friends" rather than a strictly single-user gate. The password is never
-committed to this repo — it's stored as a Worker *secret* in the
-Cloudflare dashboard (step 3 below) and read at runtime as
-`env.WAYPOINT_PASSWORD`. Everyone who knows it shares the same one set of
-trips (see `src/worker.js` for more on that trade-off).
+**Accounts and permissions.** Logging in used to be one shared password
+via the browser's own Basic Auth prompt — that's gone now, replaced with
+real per-person accounts and a signed login session (a cookie). There's
+no self-signup or "forgot password" email flow (this still isn't a
+commercial-grade auth system, just a proper one for a small trusted
+group) — you create every LOGIN yourself from **Manage accounts** (top
+bar; only the site owner's account sees this button). Creating an
+account just gives someone somewhere to log in — on its own it doesn't
+grant them access to anything.
+
+Permissions are **per trip**, not a single global role on the account:
+
+- **Superuser** — whoever creates a trip becomes its permanent,
+  non-transferable owner, with full read/write on it and — the one power
+  nobody else gets — control over who else has access (the "Share this
+  trip" panel on that trip's Settings tab). Ownership can't be handed to
+  someone else.
+- **Admin** *(a role the owner can grant)* — full read/write on that one
+  trip, same as the owner, except they can't grant or revoke anyone
+  else's access — sharing stays the owner's call alone.
+- **User** *(a role the owner can grant, scoped to one companion)* — can
+  see and edit only the items on that trip already tagged with the one
+  companion they've been linked to (see "Companions", below) — their own
+  accommodation, their own flights, that kind of thing. They can change
+  details on those items, but can't create new items, delete anything,
+  retag anything, or touch the trip's own name/dates/notes, its
+  companions list, or its contacts.
+- **Viewer** *(a role the owner can grant, scoped to one companion)* —
+  the same scoping as User, but read-only.
+
+A trip nobody's shared with you is genuinely absent from what the server
+sends back — not hidden in the UI, invisible. Expenses are always left
+out entirely for a User/Viewer grant (there's no per-companion split for
+those, and they often show what OTHER people spent).
+
+On top of all that there's **one** additional, undisclosed account — the
+site owner's own login, created during the one-time setup below — with
+full access to every trip on the whole site, whether it was shared with
+them or not, purely so you (as the person who runs this) can always get
+in to fix something. Nothing in the app ever tells anyone else that this
+account is special; every place permissions matter just treats it
+exactly like a trip's real owner would be treated, and it never appears
+in any trip's own sharing list.
+
+A trip's owner shares it from that trip's own **Settings** tab: type the
+username of an existing account, pick a role, and — for User/Viewer —
+which companion they are on this trip. The account has to already exist
+(create it from Manage accounts first if it doesn't). A person can be a
+different companion on different trips, or have a completely different
+role, or no access at all — it's all per trip.
+
+**Companions** (Destinations/Activities/Accommodation/Transport tabs
+each gained this) — a per-trip list of the people actually on the trip,
+managed from its own Companions tab. Any destination, activity,
+accommodation booking or transport leg can be tagged with any number of
+them (a small row of checkboxes on that item's form), and the tags show
+up right on that item in the list. This is more than a label — it's
+also literally what a User/Viewer grant's visibility is scoped to (see
+above), so tagging accurately matters if you're planning to share a trip
+with anyone.
+
+See the big "WHO IS ALLOWED IN" and "SAVING SAFELY" comments at the top
+of `src/worker.js` for the full design (password hashing, session
+cookies, the bootstrap problem and how `WAYPOINT_PASSWORD` solves it, and
+— the trickiest part — how the save endpoint safely merges a save without
+ever letting one account's request affect a trip or item outside what
+they're actually allowed to touch) — worth a read before touching any of
+it.
 
 ## One-time setup in the Cloudflare dashboard
 
@@ -154,29 +222,53 @@ actions Cloudflare requires a person to click through:
    anything else — but if the route isn't listed after step 1's deploy, add
    it manually there.
 
-3. **Set the shared password.**
+3. **Set the two auth secrets.**
    Workers & Pages → **waypoint-app** → **Settings** → **Variables and
-   Secrets** → **Add** → name it exactly `WAYPOINT_PASSWORD`, type
-   **Secret** (not plain text, so it's encrypted and never shown again in
-   the dashboard), value: whatever password you want to share → **Save**.
-   That's the whole login setup — no separate identity provider or
-   per-person accounts to configure. To change the password later, edit
-   this same secret and save again; no code change or redeploy needed.
+   Secrets** → **Add**, twice:
+   - `WAYPOINT_PASSWORD` — if you're upgrading from the old single-password
+     version this already exists; keep it, it's been repurposed as a
+     **one-time setup key** (see step 4). If this is a fresh install, set
+     it now to any value you'll remember for the next five minutes — type
+     **Secret**, not plain text.
+   - `WAYPOINT_SESSION_SECRET` — new. This signs everyone's login session
+     cookie, so it needs to be a long, random, unguessable value (e.g.
+     generate one with `openssl rand -hex 32` in any terminal, or a
+     password manager's "generate password" feature set to 40+ characters)
+     — type **Secret**. Don't reuse `WAYPOINT_PASSWORD`'s value here.
 
-4. **Set the flight-lookup API key (optional — only needed for the "Look
+   Both are read at runtime as `env.WAYPOINT_PASSWORD` /
+   `env.WAYPOINT_SESSION_SECRET` — neither ever lives in this repo's code.
+
+4. **Create your own account (one-time) — this becomes the site owner.**
+   Visit `liddellworks.com/WayPoint` — since no accounts exist yet, you'll
+   land on a "Set up Waypoint" screen instead of a login form. Enter the
+   `WAYPOINT_PASSWORD` value from step 3 as the setup key, choose your own
+   username and password, and submit — you're logged straight in. This
+   first account is the one that gets full, undisclosed access to
+   everything on the whole site forever after (see "Accounts and
+   permissions" above) — there's exactly one of these, and it's whoever
+   completes this step. That setup screen refuses to run a second time
+   once any account exists, so it's safe to leave `liddellworks.com/WayPoint`
+   reachable afterwards; there's nothing more to do with
+   `WAYPOINT_PASSWORD` after this one step (leave it set or remove it,
+   either is fine — it's inert either way). From here on, create a LOGIN
+   for each family/friend yourself from **Manage accounts** (top bar,
+   only visible to you) — there's no self-signup. Creating a login is
+   just that: a login. Whoever creates a trip becomes ITS owner and
+   decides from there who gets to see or edit it, and as what role — you
+   don't need to do anything else to give someone access to a specific
+   trip unless you're the one creating it.
+
+5. **Set the flight-lookup API key (optional — only needed for the "Look
    up" button on the transport form).**
    Sign up free at [RapidAPI's AeroDataBox page](https://rapidapi.com/aedbx-aedbx/api/aerodatabox)
    and subscribe to its free plan to get an API key, then: Workers & Pages
    → **waypoint-app** → **Settings** → **Variables and Secrets** → **Add**
    → name it exactly `AERODATABOX_API_KEY`, type **Secret**, value: the
    key RapidAPI gave you → **Save**. Same "never committed to this repo,
-   never shown again once saved" model as the password above — if this
-   secret is missing, the "Look up" button just shows a clear "not set up
-   yet" message instead of the rest of the app breaking.
-
-Same as with the password, none of these secret values live anywhere in
-this repo's code — `src/worker.js` only ever reads them at runtime as
-`env.WAYPOINT_PASSWORD` / `env.AERODATABOX_API_KEY`.
+   never shown again once saved" model as the secrets above — if this one
+   is missing, the "Look up" button just shows a clear "not set up yet"
+   message instead of the rest of the app breaking.
 
 The KV namespace the Worker reads/writes (`waypoint-data`) already exists in
 your Cloudflare account and is wired up in `wrangler.toml` — no separate
@@ -257,3 +349,55 @@ A handful of Playwright suites live outside this repo's deployed contents
   Settings tab's hand-built Home currency field — the one field of this
   kind not built through the normal fieldHtml()/openForm() system —
   behaves identically to the rest.
+- A dedicated test for the Companions feature — adding companions,
+  tagging them onto a destination/activity/accommodation/transport leg
+  via the "tag-picker" checkbox row, the tag showing up on that item's
+  card, editing an item re-showing its saved tags checked correctly,
+  renaming a companion updating their tag everywhere it appears (tags
+  are stored as an id and resolved to a name at render time), and
+  deleting a tagged companion leaving the item itself intact with the
+  tag just quietly gone (no crash, no stale reference).
+- A dedicated test for the per-trip ownership + grants permission system
+  — the first-run "set up Waypoint" screen (including a wrong setup key
+  being rejected, and setup refusing to run again once an account
+  exists); that creating a trip makes you its permanent Superuser
+  automatically; sharing it from the Settings tab's "Share this trip"
+  panel with an Admin, a User (scoped to one companion) and a Viewer
+  (scoped to a different companion); that an Admin grant gets full
+  read/write but the server itself refuses a direct attempt to manage
+  sharing (not just hides the panel); that a User grant sees and can
+  edit only their own tagged items (with the Companions tag-picker
+  locked on their edit form), never sees an Add or Delete control, and
+  never sees the Expenses tab at all; that a Viewer grant is fully
+  read-only even for their own tagged items; that an account with no
+  grant on a trip doesn't see it at all; that the site's one uber-user
+  account gets full access to a trip it was never shared on and never
+  appears in that trip's own sharing list; that revoking someone's
+  access actually removes their visibility; that the last remaining
+  site-owner account can't be deleted; and — the most important check in
+  this file — a raw `fetch()` from a "user"-scoped session, bypassing the
+  UI entirely, hand-crafting a save request that tries to rename the
+  trip, retag an item outside their scope, delete their own tagged item,
+  sneak in a brand-new item, and overwrite a completely different trip
+  they have zero access to — proving the safe per-trip merge-save
+  genuinely rejects every single one of those, not just the ones the UI
+  happens to prevent. This test (and this one alone) runs the mock
+  server with `--empty-users` (see mock-server.js) to exercise the true
+  first-run state; every other test uses mock-server.js's normal
+  pre-seeded uber-user account (`admin` / `testpass123`) via the
+  `loginAsAdmin()` helper in `test-helpers.js`, since they don't care
+  about the bootstrap flow itself and would otherwise all need to repeat
+  it.
+
+`mock-server.js` (the small Node HTTP server every test above runs
+against, standing in for the real Worker/KV) implements this same
+per-trip permission-resolution and safe-merge-save logic in parallel to
+`src/worker.js` — same endpoints, same request/response shapes, same
+rules — since `src/worker.js` is written as a Cloudflare Worker module
+(Web Crypto, KV bindings) and isn't meant to run under plain Node. Its
+own comment block spells out the two deliberate differences (no `Secure`
+cookie attribute, since it runs over plain local http; plain-text
+password comparison instead of PBKDF2, since there's no real secret at
+stake in a throwaway in-memory test server) — neither is a bug, both are
+there so nobody "fixes" this file to match `worker.js` exactly and
+breaks every test.

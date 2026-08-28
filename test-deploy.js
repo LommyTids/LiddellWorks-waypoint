@@ -7,6 +7,7 @@
 // the old Artifact-only version couldn't be tested for in this sandbox).
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
+const { loginAsAdmin } = require('./test-helpers');
 const path = require('path');
 
 const PORT = 8787;
@@ -35,7 +36,7 @@ function waitForServer(url, tries) {
     page.on('console', (msg) => { if (msg.type() === 'error') errors.push('CONSOLE: ' + msg.text()); });
 
     await page.goto('http://localhost:' + PORT + '/WayPoint');
-    await page.waitForSelector('.empty-state, .trip-grid', { timeout: 5000 });
+    await loginAsAdmin(page);
     console.log('1. Page loaded via fetch() (no app-data script tag needed):', true);
 
     // ---- Create a trip ----
