@@ -68,6 +68,18 @@ function waitForServer(url, tries) {
     const accountBarText = await page.locator('#account-bar').textContent();
     console.log('3. Correct setup key creates the account and logs straight in (site owner):', /boss/.test(accountBarText), accountBarText);
 
+    // These two look trivial and are not: the `isUberUser` flag going
+    // missing from the login/whoami/setup responses is EXACTLY the bug
+    // that reached production once already. Everything still worked
+    // except that the site owner silently lost the "Manage accounts"
+    // button and had no way to create anyone else's login. Nothing
+    // asserted the flag at the time, so nothing caught it — the mock
+    // server had it right and the real Worker had drifted. Assert both
+    // the API field and the button it drives.
+    const whoamiAsOwner = await directFetchJson('/WayPoint/api/whoami');
+    console.log('    ...and /api/whoami reports isUberUser for the site owner:', whoamiAsOwner.isUberUser === true, whoamiAsOwner.isUberUser);
+    console.log('    ...so the "Manage accounts" button is actually there:', (await page.locator('[data-action="open-manage-users"]').count()) === 1);
+
     const replaySetupStatus = await directFetchStatus('/WayPoint/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ setupKey: SETUP_KEY, username: 'someone-else', password: 'irrelevant1' }) });
     console.log('4. Setup refuses to run a second time (403) now that an account exists:', replaySetupStatus === 403, replaySetupStatus);
 
@@ -199,6 +211,11 @@ function waitForServer(url, tries) {
     await loginAs(page, 'admin1', 'adminpass1');
     await page.waitForSelector('.trip-grid', { timeout: 5000 });
     console.log('10. admin1 (Admin grant) sees Trip A:', (await page.locator('.trip-card').count()) === 1);
+    // The other half of the isUberUser check above: an ordinary account
+    // must NOT be told it's the uber-user, and must not get the button.
+    const whoamiAsAdmin1 = await directFetchJson('/WayPoint/api/whoami');
+    console.log('    ...and an ordinary account is NOT flagged as the uber-user:', whoamiAsAdmin1.isUberUser === false, whoamiAsAdmin1.isUberUser);
+    console.log('    ...so it never sees the "Manage accounts" button:', (await page.locator('[data-action="open-manage-users"]').count()) === 0);
     await page.click('.trip-card');
     await page.click('[data-action="switch-tab"][data-tab="destinations"]');
     console.log('11. admin1 (Admin grant) can Add items (full read/write on the trip\'s data):', await page.locator('[data-action="new-destination"]').isVisible());
@@ -263,15 +280,15 @@ function waitForServer(url, tries) {
     // ---- The important part: server-side write boundaries, proven with
     // a raw fetch() that bypasses the UI and hand-crafts a hostile body.
     const sarahScoped = await directFetchJson('/WayPoint/api/data');
-    const tripAScoped = sarahScoped.trips.find((t) => t.id === tripAId);
+    const tripAScoped = sarahScoped.trips.find((t) => t.tripId === tripAId);
     const sarahOnlyDest = tripAScoped.destinations.find((d) => d.name === 'Sarah Only Place');
     const attackBody = JSON.parse(JSON.stringify(sarahScoped));
-    const attackTrip = attackBody.trips.find((t) => t.id === tripAId);
+    const attackTrip = attackBody.trips.find((t) => t.tripId === tripAId);
     attackTrip.name = 'HACKED BY SARAH';                                    // (a) trip-level field
-    attackTrip.destinations.find((d) => d.id === sarahOnlyDest.id).companions.push('mike-fake-id'); // (b) retag
-    attackTrip.destinations = attackTrip.destinations.filter((d) => d.id !== sarahOnlyDest.id);      // (c) delete
-    attackTrip.destinations.push({ id: 'sneaky-new-id', name: 'Sneaky New Place', companions: [sarahOnlyDest.companions[0]], arriveDate: '2028-01-02', departDate: '2028-01-03', notes: '' }); // (d) create
-    attackBody.trips.push({ id: tripBId, name: 'STOLEN', ownerId: 'sarah-does-not-own-this', grants: [], destinations: [], activities: [], accommodation: [], transport: [], contacts: [], companions: [], expenses: [] }); // (e) touch a trip she has no access to at all
+    attackTrip.destinations.find((d) => d.destinationId === sarahOnlyDest.destinationId).companions.push('mike-fake-id'); // (b) retag
+    attackTrip.destinations = attackTrip.destinations.filter((d) => d.destinationId !== sarahOnlyDest.destinationId);      // (c) delete
+    attackTrip.destinations.push({ destinationId: 'sneaky-new-id', name: 'Sneaky New Place', companions: [sarahOnlyDest.companions[0]], arriveDate: '2028-01-02', departDate: '2028-01-03', notes: '' }); // (d) create
+    attackBody.trips.push({ tripId: tripBId, name: 'STOLEN', ownerId: 'sarah-does-not-own-this', grants: [], destinations: [], activities: [], accommodation: [], transport: [], contacts: [], companions: [], expenses: [] }); // (e) touch a trip she has no access to at all
     await directFetchStatus('/WayPoint/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(attackBody) });
 
     await page.click('[data-action="logout"]');
@@ -279,12 +296,12 @@ function waitForServer(url, tries) {
     await loginAs(page, 'admin1', 'adminpass1');
     await page.waitForSelector('.trip-grid', { timeout: 5000 });
     const afterAttack = await directFetchJson('/WayPoint/api/data');
-    const tripAAfter = afterAttack.trips.find((t) => t.id === tripAId);
-    const tripBAfter = afterAttack.trips.find((t) => t.id === tripBId);
+    const tripAAfter = afterAttack.trips.find((t) => t.tripId === tripAId);
+    const tripBAfter = afterAttack.trips.find((t) => t.tripId === tripBId);
     console.log('23. Safe merge-save: trip name survived the attack unchanged:', tripAAfter.name === 'Roles Test Trip', tripAAfter.name);
-    console.log('    ...the retag attempt was ignored (still just Sarah):', JSON.stringify(tripAAfter.destinations.find((d) => d.id === sarahOnlyDest.id).companions) === JSON.stringify(sarahOnlyDest.companions));
-    console.log('    ...the "deleted" item is still there:', tripAAfter.destinations.some((d) => d.id === sarahOnlyDest.id));
-    console.log('    ...the "created" item was NOT added:', !tripAAfter.destinations.some((d) => d.id === 'sneaky-new-id'));
+    console.log('    ...the retag attempt was ignored (still just Sarah):', JSON.stringify(tripAAfter.destinations.find((d) => d.destinationId === sarahOnlyDest.destinationId).companions) === JSON.stringify(sarahOnlyDest.companions));
+    console.log('    ...the "deleted" item is still there:', tripAAfter.destinations.some((d) => d.destinationId === sarahOnlyDest.destinationId));
+    console.log('    ...the "created" item was NOT added:', !tripAAfter.destinations.some((d) => d.destinationId === 'sneaky-new-id'));
     console.log('    ...and Trip B (admin1\'s, sarah1 has zero access to) was completely untouched:', tripBAfter.name === "Admin1's Own Trip", tripBAfter.name);
     await page.click('[data-action="logout"]');
     await page.waitForSelector('#login-form', { timeout: 5000 });
@@ -300,7 +317,7 @@ function waitForServer(url, tries) {
     console.log('    ...with NO edit or delete controls at all (read-only, even for their own tagged item):', (await page.locator('.item-row .item-actions').count()) === 0);
     const viewerWriteStatus = await directFetchStatus('/WayPoint/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trips: [] }) });
     const viewerAfterWrite = await directFetchJson('/WayPoint/api/data');
-    console.log('25. A raw POST from viewer1 (even an empty {trips:[]}) changes nothing server-side:', viewerAfterWrite.trips.length === 1 && viewerAfterWrite.trips[0].id === tripAId, viewerWriteStatus);
+    console.log('25. A raw POST from viewer1 (even an empty {trips:[]}) changes nothing server-side:', viewerAfterWrite.trips.length === 1 && viewerAfterWrite.trips[0].tripId === tripAId, viewerWriteStatus);
     console.log('    ...and Manage accounts is refused server-side too (not just hidden):', (await directFetchStatus('/WayPoint/api/users')) === 403);
     await page.click('[data-action="logout"]');
     await page.waitForSelector('#login-form', { timeout: 5000 });
@@ -322,7 +339,7 @@ function waitForServer(url, tries) {
     console.log('27. The uber-user sees EVERY trip, including one it was never shared on:',
       bossTripCards.length === 2 && bossTripCards.some((t) => /Admin1's Own Trip/.test(t)));
     const bossView = await directFetchJson('/WayPoint/api/data');
-    const tripBAsBoss = bossView.trips.find((t) => t.id === tripBId);
+    const tripBAsBoss = bossView.trips.find((t) => t.tripId === tripBId);
     console.log('28. ...with full Superuser-equivalent access to it:', tripBAsBoss.myGrant && tripBAsBoss.myGrant.role === 'superuser');
     console.log('    ...yet the uber-user never appears in that trip\'s own grants list:', !(tripBAsBoss.grants || []).some((g) => g.username === 'boss'));
 

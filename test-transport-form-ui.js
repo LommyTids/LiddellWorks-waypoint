@@ -162,7 +162,7 @@ function waitForServer(url, tries) {
     await page.evaluate(() => {
       const trip = currentTrip();
       trip.transport.push({
-        id: 'legacy1', mode: 'Flight', carrier: 'Legacy Air', flightNumber: '', licensePlate: '',
+        transportId: 'legacy1', mode: 'Flight', carrier: 'Legacy Air', flightNumber: '', licensePlate: '',
         fromLocation: 'CDG', toLocation: 'FCO', fromLat: '', fromLng: '', toLat: '', toLng: '',
         departDateTime: '2027-09-08T09:00', arriveDateTime: '2027-09-08T11:00',
         bookingRef: '', contactId: '', costAmount: '210', costCurrency: 'EUR', costRate: '0.85',
