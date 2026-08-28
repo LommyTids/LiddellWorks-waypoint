@@ -1,17 +1,16 @@
-// Regression test for the custom airport-suggestion dropdown and the
+// Regression test for the airport field's suggestion dropdown and the
 // "resolved to a real coordinate" hint (fieldHtml's 'airport' case,
-// openAirportSuggestions()/searchAirports(), updateAirportResolveHint()
-// in index.html) — this replaced an earlier native <datalist>-based
-// version after real-world use turned up two problems with datalist:
-// its popup can't be repositioned (it ended up covering part of the
-// input on a narrow modal), and rebuilding its options live was
-// interrupting mid-word typing on at least one real device. This test
-// covers the custom dropdown: it still finds a secondary airport by
-// code or city (searching the full ~7,900-airport AIRPORT_DB, not just
-// COMMON_AIRPORTS' curated ~126), still gives an honest live signal of
-// whether what's typed will place precisely on the Map tab, and adds
-// coverage for the parts that only exist now — keyboard navigation,
-// click-to-select, and the dropdown never covering the input itself.
+// the generic openSuggestions()/searchAirports(),
+// updateAirportResolveHint() in index.html). The dropdown itself is
+// the same generic, app-rendered one every suggestible field uses (see
+// test-suggest-dropdown-consistency.js for the shared-mechanism
+// coverage) — this file focuses on what's specific to airport: it
+// still finds a secondary airport by code or city (searching the full
+// ~7,900-airport AIRPORT_DB, not just COMMON_AIRPORTS' curated ~126),
+// still gives an honest live signal of whether what's typed will place
+// precisely on the Map tab, and — the original bug report that started
+// all of this — that typing is never interrupted and the dropdown
+// never covers the input itself.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 
@@ -55,7 +54,7 @@ function waitForServer(url, tries) {
     // curated ~126 (same starting point as the old datalist). ----
     await page.click('input[name="fromLocation"]');
     await page.waitForTimeout(50);
-    const initialCount = await page.locator('#fromLocation-suggest .airport-suggest-item').count();
+    const initialCount = await page.locator('#fromLocation-suggest .suggest-item').count();
     console.log('1. Dropdown opens on focus with the curated shortlist (~126):', initialCount > 100 && initialCount < 150, initialCount);
     const initiallyOpen = await page.locator('#fromLocation-suggest').evaluate((el) => el.classList.contains('is-open'));
     console.log('   Dropdown has is-open class:', initiallyOpen);
@@ -64,7 +63,7 @@ function waitForServer(url, tries) {
     // still surface it once the search widens to AIRPORT_DB. ----
     await page.fill('input[name="fromLocation"]', 'BHX');
     await page.waitForTimeout(300); // past the 120ms debounce
-    const bhxOption = await page.locator('#fromLocation-suggest .airport-suggest-item', { hasText: 'BHX —' }).count();
+    const bhxOption = await page.locator('#fromLocation-suggest .suggest-item', { hasText: 'BHX —' }).count();
     console.log('2. BHX (secondary airport) appears as a suggestion once typed:', bhxOption === 1, bhxOption);
 
     // ---- The dropdown must never cover the input itself — it should
@@ -96,12 +95,12 @@ function waitForServer(url, tries) {
     console.log('5. Typing is never interrupted mid-word ("Chongqing" lands in full):', typedValue === 'Chongqing', JSON.stringify(typedValue));
     const hintText2 = await page.locator('#fromLocation-resolve-hint').textContent();
     console.log('6. Resolve hint shows "no match" for a city name (not yet a code):', /No exact airport match/.test(hintText2), hintText2);
-    const ckgOption = await page.locator('#fromLocation-suggest .airport-suggest-item', { hasText: 'CKG —' }).count();
+    const ckgOption = await page.locator('#fromLocation-suggest .suggest-item', { hasText: 'CKG —' }).count();
     console.log('   Chongqing (CKG) still surfaced as a suggestion despite not being curated:', ckgOption === 1, ckgOption);
 
     // ---- Clicking a suggestion fills the field and updates the hint,
     // without the field ever blurring out from under the click. ----
-    await page.locator('#fromLocation-suggest .airport-suggest-item', { hasText: 'CKG —' }).click();
+    await page.locator('#fromLocation-suggest .suggest-item', { hasText: 'CKG —' }).click();
     await page.waitForTimeout(100);
     const afterClickValue = await page.locator('input[name="fromLocation"]').inputValue();
     const afterClickHint = await page.locator('#fromLocation-resolve-hint').textContent();
@@ -116,7 +115,7 @@ function waitForServer(url, tries) {
     await page.waitForTimeout(300);
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
-    const activeItem = await page.locator('#toLocation-suggest .airport-suggest-item.is-active').textContent();
+    const activeItem = await page.locator('#toLocation-suggest .suggest-item.is-active').textContent();
     await page.keyboard.press('Enter');
     await page.waitForTimeout(100);
     const toValue = await page.locator('input[name="toLocation"]').inputValue();
@@ -126,14 +125,14 @@ function waitForServer(url, tries) {
     // just the curated 4 (LHR/LGW/STN/LTN). ----
     await page.fill('input[name="toLocation"]', 'london');
     await page.waitForTimeout(300);
-    const londonMatches = await page.locator('#toLocation-suggest .airport-suggest-item').evaluateAll(
+    const londonMatches = await page.locator('#toLocation-suggest .suggest-item').evaluateAll(
       (items) => items.filter((el) => /London/.test(el.textContent)).map((el) => el.textContent)
     );
     console.log('9. Typing "london" surfaces multiple London airports:', londonMatches.length >= 4, londonMatches);
 
     // ---- Suggestions list stays capped at a reasonable size, not
     // thousands of options rendered into the DOM. ----
-    const cappedCount = await page.locator('#toLocation-suggest .airport-suggest-item').count();
+    const cappedCount = await page.locator('#toLocation-suggest .suggest-item').count();
     console.log('10. Suggestion list stays capped (<=30) while searching:', cappedCount <= 30, cappedCount);
 
     // ---- Clicking elsewhere in the form closes the dropdown. ----

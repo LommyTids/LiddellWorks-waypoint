@@ -180,7 +180,7 @@ function waitForServer(url, tries) {
     console.log('16. Editing a legacy Cash leg infers "Cash" and keeps its data visible:',
       legacyPaymentType === 'Cash' && legacyAmountValue === '210' && legacyRateChecked === true && legacyRateValue === '0.85',
       JSON.stringify({ legacyPaymentType, legacyAmountValue, legacyRateChecked, legacyRateValue }));
-    await page.click('[data-action="close-modal"]');
+    await page.click('.modal-head [data-action="close-modal"]');
 
     console.log('\nPage errors:', errors.length ? errors : 'NONE');
     await browser.close();
