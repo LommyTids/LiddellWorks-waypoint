@@ -164,6 +164,24 @@ textarea { resize: vertical; min-height: 60px; }
 .flight-lookup-status.is-ok { color: var(--ink-soft); }
 .airport-resolve-hint.is-ok { color: var(--success); }
 .airport-resolve-hint.is-unresolved { color: var(--ink-faint); }
+/* Custom airport-suggestion dropdown (replaces a native <datalist> —
+   see the long comment above openAirportSuggestions() in the JS for
+   why: a native datalist popup can't be repositioned by CSS at all,
+   and rebuilding its options while it's open was interrupting typing
+   on some devices/browsers). `.airport-input-wrap` is the positioning
+   anchor for the dropdown, scoped to just the input so the dropdown's
+   `top: 100%` sits right under the input itself, not under the hint
+   text below it. */
+.airport-input-wrap { position: relative; }
+.airport-suggest-list {
+  display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow); max-height: 220px; overflow-y: auto; z-index: 50;
+}
+.airport-suggest-list.is-open { display: block; }
+.airport-suggest-item { padding: 8px 10px; font-size: 13px; cursor: pointer; }
+.airport-suggest-item.is-active, .airport-suggest-item:hover { background: var(--surface-2); }
+.airport-suggest-empty { padding: 8px 10px; font-size: 12.5px; color: var(--ink-faint); }
 
 /* ---- 4b. Dashboard ------------------------------------------------ */
 .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
@@ -778,14 +796,22 @@ function fieldHtml(field, value, trip, allValues) {
       // a city name for a mode where a full airport isn't really the
       // right concept) is equally valid.
       //
-      // The airport-list datalist starts out seeded with just
-      // COMMON_AIRPORTS' curated ~126 major hubs (see openForm()), and
-      // widens live as you type to search the full ~7,900-airport
-      // AIRPORT_DB instead — see refreshAirportSuggestions(), wired up
-      // via the 'input' listener near it. That keeps this fast (nothing
-      // renders thousands of suggestion rows into the page up front)
-      // while still finding a smaller/regional airport by code or city
-      // once you start typing one.
+      // This used to be a native <input list="airport-list"> wired to a
+      // shared <datalist>. Real-world use turned up two problems with
+      // that: the browser's own suggestion popup can't be repositioned
+      // by CSS, so on a narrow modal it ends up covering part of the
+      // input it belongs to; and rebuilding the datalist's <option>s
+      // live (needed to widen from the curated ~126 to the full
+      // ~7,900-airport AIRPORT_DB) was interrupting mid-word typing on
+      // at least one real device — the browser seemingly fights with
+      // itself over the popup while you're still typing into it. A
+      // custom, app-rendered dropdown (openAirportSuggestions() et al,
+      // near MIN_AIRPORT_SEARCH_LENGTH below) replaces it: same search
+      // behavior, but the suggestion list is just a normal positioned
+      // <div> we fully control, so it can sit flush under the input
+      // (never over it) and never interferes with the input's own
+      // typing. `.airport-input-wrap` is what the dropdown's absolute
+      // position is anchored to — see its CSS rule.
       //
       // The hint underneath is a live, honest signal of whether
       // whatever's typed so far actually resolves to a real coordinate
@@ -795,14 +821,17 @@ function fieldHtml(field, value, trip, allValues) {
       // once here for whatever the field already contains (e.g.
       // editing an existing leg, or the field list re-rendering after
       // a mode switch), then kept live after that by the same 'input'
-      // listener that widens the suggestions above.
+      // listener that drives the dropdown above.
       var airportResolved = airportCoordsFromText(val);
       var airportHintText = !val ? ''
         : (airportResolved ? '✓ Mapped precisely for the Map tab' : 'No exact airport match yet — the map will try to search by name instead.');
       var airportHintClass = 'field-hint airport-resolve-hint' + (val ? (airportResolved ? ' is-ok' : ' is-unresolved') : '');
-      inputHtml = '<input type="text" list="airport-list" maxlength="80" ' +
+      inputHtml = '<div class="airport-input-wrap">' +
+        '<input type="text" autocomplete="off" maxlength="80" ' +
         'name="' + field.key + '" value="' + esc(val) + '" ' + req +
         ' placeholder="' + esc(field.placeholder || 'e.g. LHR or Heathrow') + '">' +
+        '<div class="airport-suggest-list" id="' + field.key + '-suggest"></div>' +
+        '</div>' +
         '<div class="' + airportHintClass + '" id="' + field.key + '-resolve-hint">' + esc(airportHintText) + '</div>';
       break;
     case 'flight-lookup':
@@ -935,8 +964,11 @@ function openForm(opts) {
     '<datalist id="currency-list">' + COMMON_CURRENCIES.map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>' +
     '<datalist id="timezone-list">' + COMMON_TIMEZONES.map(function (tz) { return '<option value="' + tz + '">'; }).join('') + '</datalist>' +
     '<datalist id="country-list">' + COMMON_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
-    '<datalist id="city-list">' + COMMON_CITIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
-    '<datalist id="airport-list">' + COMMON_AIRPORTS.map(function (a) { return '<option value="' + esc(airportDisplay(a)) + '">'; }).join('') + '</datalist>';
+    '<datalist id="city-list">' + COMMON_CITIES.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>';
+  // No datalist for airport fields — that's now a custom dropdown (see
+  // the 'airport' case in fieldHtml() and openAirportSuggestions()
+  // near MIN_AIRPORT_SEARCH_LENGTH below), built per-field on demand
+  // rather than seeded once here.
 }
 
 /* ---------- 7. Entity field schemas --------------------------------- */
@@ -1408,7 +1440,7 @@ function performFlightLookup(button) {
 // { code, name, municipality, country }). Both are used the same way:
 // as the value typed/saved into a transport leg's "From"/"To" field, so
 // a looked-up value reads consistently with one a viewer picked by
-// hand from the airport-list datalist (see openForm()).
+// hand from the airport suggestion dropdown (see openAirportSuggestions()).
 //
 // The result looks like "LHR — London Heathrow, London, United
 // Kingdom" — deliberately fuller than the old "CODE — Name" alone.
@@ -1471,12 +1503,12 @@ function airportCoordsForCode(code) {
 }
 
 // Pulls the leading 3-letter airport code off a "CODE — Name, City,
-// Country" (or bare "CODE") string — the shape both the airport-list
-// datalist and a successful flight lookup fill "From"/"To" with — and
-// resolves it via airportCoordsForCode() above. Returns null for
-// anything that doesn't start with a plausible 3-letter code (a city
-// name typed for a non-Flight mode, say), which is fine — the caller
-// just falls back to geocoding that text instead.
+// Country" (or bare "CODE") string — the shape both the airport
+// suggestion dropdown and a successful flight lookup fill "From"/"To"
+// with — and resolves it via airportCoordsForCode() above. Returns
+// null for anything that doesn't start with a plausible 3-letter code
+// (a city name typed for a non-Flight mode, say), which is fine — the
+// caller just falls back to geocoding that text instead.
 function airportCoordsFromText(text) {
   var m = /^([A-Za-z]{3})\b/.exec((text || '').trim());
   return m ? airportCoordsForCode(m[1].toUpperCase()) : null;
@@ -1485,55 +1517,62 @@ function airportCoordsFromText(text) {
 var MAX_AIRPORT_SUGGESTIONS = 30;
 var MIN_AIRPORT_SEARCH_LENGTH = 2;
 
-// Rebuilds the #airport-list datalist's <option>s to match whatever's
-// currently typed into a Flight leg's "From"/"To" field — searched
-// against the FULL ~7,900-airport AIRPORT_DB, not just COMMON_AIRPORTS'
-// curated ~126, so typing e.g. "birmingham" or "bhx" finds a secondary
-// airport too, the same way typing "london" already found LHR/LGW/STN/
-// LTN among the curated hubs (a native <datalist> matches anywhere in
-// each option's text, not just the start — this just widens the pool
-// it's matching against).
-//
-// This deliberately does NOT pre-render all ~7,900 options into the
-// page up front — openForm() still seeds the datalist with just the
-// curated 126 on open (see its own comment), and this only swaps in a
-// small, freshly-filtered subset (capped at MAX_AIRPORT_SUGGESTIONS)
-// once there's enough typed to search on. Scanning all ~7,900 entries
-// in memory on every keystroke is cheap (a plain object loop, no DOM
-// work) — it's rendering thousands of DOM nodes that would actually be
-// slow, especially on a phone/tablet, so that's the part this avoids.
-function refreshAirportSuggestions(query) {
-  var list = document.getElementById('airport-list');
-  if (!list) return;
-  var q = (query || '').trim();
-  if (q.length < MIN_AIRPORT_SEARCH_LENGTH) {
-    list.innerHTML = COMMON_AIRPORTS.map(function (a) { return '<option value="' + esc(airportDisplay(a)) + '">'; }).join('');
-    return;
+// A flattened, lowercased copy of AIRPORT_DB, built once on first use
+// rather than every keystroke. AIRPORT_DB itself stores name/city with
+// their original casing (so airportDisplay() and other callers get
+// proper capitalization); searching needs a lowercased version of the
+// same text to compare against, and doing that ~7,900-entry lowercase
+// pass fresh on every single keystroke was real, measurable work on a
+// slower device — most of what made typing feel laggy. This trades a
+// few hundred KB of memory (built once, kept for the rest of the
+// session) to turn every search after the first into a plain
+// substring-compare loop instead.
+var airportSearchIndex = null;
+function airportSearchIndexReady() {
+  if (airportSearchIndex || typeof AIRPORT_DB === 'undefined') return !!airportSearchIndex;
+  airportSearchIndex = [];
+  for (var code in AIRPORT_DB) {
+    if (!Object.prototype.hasOwnProperty.call(AIRPORT_DB, code)) continue;
+    var entry = AIRPORT_DB[code]; // [name, city, countryCode, lat, lng]
+    airportSearchIndex.push({
+      code: code, name: entry[0], city: entry[1],
+      nameLower: (entry[0] || '').toLowerCase(), cityLower: (entry[1] || '').toLowerCase()
+    });
   }
-  if (typeof AIRPORT_DB === 'undefined') return; // still loading (it's `defer`red) — curated list stays as-is until it's ready
+  return true;
+}
+
+// Searches for airports matching whatever's typed into a Flight leg's
+// "From"/"To" field, against the FULL ~7,900-airport AIRPORT_DB, not
+// just COMMON_AIRPORTS' curated ~126 — so typing e.g. "birmingham" or
+// "bhx" finds a secondary airport too, the same way typing "london"
+// already found LHR/LGW/STN/LTN among the curated hubs. Returns a
+// plain array of { code, name, city }, capped at
+// MAX_AIRPORT_SUGGESTIONS — under 2 characters (or before AIRPORT_DB
+// has finished its `defer`red load) just returns the curated list, the
+// same "nothing to search yet, show the obvious answers" fallback as
+// before.
+function searchAirports(query) {
+  var q = (query || '').trim();
+  if (q.length < MIN_AIRPORT_SEARCH_LENGTH || !airportSearchIndexReady()) return COMMON_AIRPORTS;
 
   var qUpper = q.toUpperCase();
   var qLower = q.toLowerCase();
   var matches = [];
-  for (var code in AIRPORT_DB) {
-    if (!Object.prototype.hasOwnProperty.call(AIRPORT_DB, code)) continue;
-    var entry = AIRPORT_DB[code]; // [name, city, countryCode, lat, lng]
-    var name = entry[0], city = entry[1];
+  for (var i = 0; i < airportSearchIndex.length; i++) {
+    var e = airportSearchIndex[i];
     var score = 0;
     // Ranked so an exact/prefix code match (what a frequent flyer types)
     // always beats a name/city text match (what someone browsing by
     // place typed) — both are useful, but shouldn't compete evenly.
-    if (code === qUpper) score = 4;
-    else if (code.indexOf(qUpper) === 0) score = 3;
-    else if (city && city.toLowerCase().indexOf(qLower) === 0) score = 2;
-    else if ((name && name.toLowerCase().indexOf(qLower) !== -1) || (city && city.toLowerCase().indexOf(qLower) !== -1)) score = 1;
-    if (score > 0) matches.push({ code: code, name: name, city: city, score: score });
+    if (e.code === qUpper) score = 4;
+    else if (e.code.indexOf(qUpper) === 0) score = 3;
+    else if (e.cityLower.indexOf(qLower) === 0) score = 2;
+    else if (e.nameLower.indexOf(qLower) !== -1 || e.cityLower.indexOf(qLower) !== -1) score = 1;
+    if (score > 0) matches.push({ code: e.code, name: e.name, city: e.city, score: score });
   }
   matches.sort(function (a, b) { return (b.score - a.score) || a.code.localeCompare(b.code); });
-  matches = matches.slice(0, MAX_AIRPORT_SUGGESTIONS);
-  list.innerHTML = matches.map(function (m) {
-    return '<option value="' + esc(airportDisplay({ code: m.code, name: m.name, city: m.city })) + '">';
-  }).join('');
+  return matches.slice(0, MAX_AIRPORT_SUGGESTIONS);
 }
 
 // Updates the live "resolved to a real coordinate or not" hint under a
@@ -1549,18 +1588,140 @@ function updateAirportResolveHint(input) {
   hintEl.className = 'field-hint airport-resolve-hint' + (resolved ? ' is-ok' : ' is-unresolved');
 }
 
-// Debounced so a fast typist doesn't trigger a datalist rebuild on
+// ---- Custom airport-suggestion dropdown -----------------------------
+//
+// Replaces what used to be a native <input list="..."> wired to a
+// <datalist>. Two real problems with that showed up in actual use:
+// the browser's own suggestion popup renders wherever the browser
+// decides, with no CSS hook to move it, so on a field near the edge of
+// a narrow modal it can end up covering the very input it's attached
+// to; and swapping the datalist's <option>s live (needed to widen from
+// the curated ~126 to the full AIRPORT_DB) was interrupting mid-word
+// typing on at least one real device/browser — the native popup
+// appears to fight with the input over the keystroke that triggered
+// the rebuild. A plain, app-rendered <div> (`.airport-suggest-list`,
+// positioned by the `.airport-input-wrap` CSS rule right under its
+// input) sidesteps both: we choose exactly where it sits, and
+// rebuilding it is just an ordinary DOM update the input itself is
+// never involved in, so it can never interrupt what's being typed.
+//
+// airportDropdownState tracks whichever ONE airport field currently
+// has its dropdown open — a Flight leg has two ("From" and "To"), but
+// only one can be focused/typed-into at a time, so a single shared
+// state object (rather than one per field) is enough, and keeps the
+// keyboard-navigation handlers below simple.
+var airportDropdownState = { input: null, items: [], activeIndex: -1 };
+
+function airportSuggestEl(input) {
+  return input ? document.getElementById(input.name + '-suggest') : null;
+}
+
+function closeAirportSuggestions(input) {
+  var el = airportSuggestEl(input);
+  if (el) { el.classList.remove('is-open'); el.innerHTML = ''; }
+  if (airportDropdownState.input === input) airportDropdownState = { input: null, items: [], activeIndex: -1 };
+}
+
+function renderAirportSuggestList(input) {
+  var el = airportSuggestEl(input);
+  if (!el) return;
+  var items = airportDropdownState.items;
+  if (!items.length) {
+    el.innerHTML = '<div class="airport-suggest-empty">No airports match yet</div>';
+    el.classList.add('is-open');
+    return;
+  }
+  el.innerHTML = items.map(function (a, i) {
+    return '<div class="airport-suggest-item' + (i === airportDropdownState.activeIndex ? ' is-active' : '') +
+      '" data-index="' + i + '">' + esc(airportDisplay(a)) + '</div>';
+  }).join('');
+  el.classList.add('is-open');
+  if (airportDropdownState.activeIndex >= 0) {
+    var active = el.querySelector('.airport-suggest-item.is-active');
+    if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function openAirportSuggestions(input) {
+  var items = searchAirports(input.value);
+  airportDropdownState = { input: input, items: items, activeIndex: -1 };
+  renderAirportSuggestList(input);
+}
+
+function selectAirportSuggestion(input, item) {
+  input.value = airportDisplay(item);
+  closeAirportSuggestions(input);
+  updateAirportResolveHint(input);
+}
+
+function isAirportInput(el) {
+  return !!(el && el.closest && el.closest('.airport-input-wrap'));
+}
+
+// Debounced so a fast typist doesn't trigger a dropdown rebuild on
 // every single keystroke — 120ms is short enough to still feel
 // immediate, long enough to skip the in-between keystrokes of a normal
-// typing burst. The resolve-hint update is cheap enough (no DOM list
+// typing burst. The resolve-hint update is cheap enough (no list
 // rebuild, just one lookup) to run on every keystroke without this.
 var airportSuggestionDebounce = null;
 document.addEventListener('input', function (e) {
-  if (!e.target.getAttribute || e.target.getAttribute('list') !== 'airport-list') return;
+  if (!isAirportInput(e.target)) return;
   var input = e.target;
   updateAirportResolveHint(input);
   clearTimeout(airportSuggestionDebounce);
-  airportSuggestionDebounce = setTimeout(function () { refreshAirportSuggestions(input.value); }, 120);
+  airportSuggestionDebounce = setTimeout(function () { openAirportSuggestions(input); }, 120);
+});
+
+// Opens with whatever's already there (the curated list, on an empty
+// field) as soon as the field is focused, same as a native datalist
+// would've offered on focus.
+document.addEventListener('focusin', function (e) {
+  if (!isAirportInput(e.target)) return;
+  openAirportSuggestions(e.target);
+});
+
+// Closing on blur needs a short delay: a click on a suggestion fires
+// the input's blur before the click's own handler runs, so closing
+// immediately would remove the option out from under the click. The
+// mousedown handler below cancels that click from ever blurring the
+// input in the first place, but the delay stays as a safety net for
+// any other way focus can leave the field (Tab, tapping elsewhere).
+document.addEventListener('focusout', function (e) {
+  if (!isAirportInput(e.target)) return;
+  var input = e.target;
+  setTimeout(function () { closeAirportSuggestions(input); }, 150);
+});
+
+// preventDefault on mousedown (not click) is what stops the input
+// from blurring at all when a suggestion is tapped/clicked — by the
+// time a 'click' event would fire, blur has already happened.
+document.addEventListener('mousedown', function (e) {
+  var item = e.target.closest && e.target.closest('.airport-suggest-item');
+  if (!item) return;
+  e.preventDefault();
+  var input = airportDropdownState.input;
+  if (!input) return;
+  var chosen = airportDropdownState.items[parseInt(item.getAttribute('data-index'), 10)];
+  if (chosen) selectAirportSuggestion(input, chosen);
+});
+
+document.addEventListener('keydown', function (e) {
+  if (!isAirportInput(e.target) || airportDropdownState.input !== e.target) return;
+  var items = airportDropdownState.items;
+  if (e.key === 'Escape') { closeAirportSuggestions(e.target); return; }
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    airportDropdownState.activeIndex = Math.min(airportDropdownState.activeIndex + 1, items.length - 1);
+    renderAirportSuggestList(e.target);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    airportDropdownState.activeIndex = Math.max(airportDropdownState.activeIndex - 1, 0);
+    renderAirportSuggestList(e.target);
+  } else if (e.key === 'Enter' && airportDropdownState.activeIndex >= 0) {
+    e.preventDefault();
+    selectAirportSuggestion(e.target, items[airportDropdownState.activeIndex]);
+  }
 });
 
 // Holds whatever real coordinates the most recent successful flight
