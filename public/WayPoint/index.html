@@ -127,6 +127,36 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 .save-indicator[data-kind="readonly"] { color: var(--danger); }
 .save-indicator[data-kind="saved"] { color: var(--success); }
 
+/* Accounts/login: who's signed in, "Manage accounts" (site owner only),
+   Log out — lives in the topbar next to the save indicator. See
+   applyAuthUI(). */
+.account-bar { display: flex; align-items: center; gap: 8px; }
+.account-label { font-size: 12.5px; color: var(--ink-soft); margin-right: 2px; white-space: nowrap; }
+
+/* NOTE: there used to be a single blanket "read-only-mode" body class
+   here that hid every Add/Edit/Delete control at once for a non-Admin
+   account. That doesn't work anymore now that permissions are PER TRIP
+   (and, for a "user" grant, per ITEM within a trip) rather than one
+   global role — see canFullyEditTrip()/canEditItem() in the JS further
+   down. Every Add/Edit/Delete control is now included in a render's HTML
+   string, or left out of it, based on those functions — a plain "is this
+   button even in the page" check, not a CSS toggle. As ever, this is a
+   courtesy for a nicer UI, not the real security boundary: the Worker
+   independently refuses any write it doesn't allow, regardless of what
+   the page shows (see the big "SAVING SAFELY" comment in src/worker.js). */
+.share-panel { border-top: 1px solid var(--line); margin-top: 32px; padding-top: 20px; }
+.share-panel .item-list { margin-top: 12px; }
+.share-form-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-top: 10px; }
+.share-form-row .field { margin-bottom: 0; min-width: 140px; }
+
+/* Login / first-run setup screen — shown instead of the normal app
+   whenever there's no valid session (see renderAuthScreen()/renderBoot()). */
+.auth-screen { display: flex; justify-content: center; padding: 60px 20px; }
+.auth-card { width: 100%; max-width: 360px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow); }
+.auth-card h1 { font-family: var(--font-display); font-size: 22px; margin-bottom: 6px; }
+.auth-card .field-hint { margin-bottom: 16px; }
+.auth-error { background: var(--danger-soft); color: var(--danger); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 13px; margin-bottom: 14px; }
+
 .page { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
 
 /* ---- 4a. Buttons & form controls --------------------------------- */
@@ -148,7 +178,7 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 
 label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 4px; }
-input[type="text"], input[type="number"], input[type="date"], input[type="time"], select, textarea {
+input[type="text"], input[type="number"], input[type="date"], input[type="time"], input[type="password"], select, textarea {
   width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm);
   background: var(--surface); color: var(--ink);
 }
@@ -158,6 +188,15 @@ textarea { resize: vertical; min-height: 60px; }
 .field-hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 3px; }
 .checkbox-field { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
 .checkbox-field input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
+/* The Companions "tag-picker" field (see fieldHtml()'s 'tag-picker' case)
+   — a row of small pill-shaped checkboxes, one per companion, that wraps
+   onto multiple lines once there are more than fit on one. */
+.tag-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-picker-item {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;
+  padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2);
+}
+.tag-picker-item input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
 .flight-lookup-row { display: flex; gap: 8px; }
 .flight-lookup-row input { flex: 1; }
 .flight-lookup-row .btn { flex-shrink: 0; white-space: nowrap; }
@@ -371,6 +410,7 @@ tr:last-child td { border-bottom: none; }
     Waypoint
   </div>
   <span id="save-indicator" class="save-indicator"></span>
+  <div id="account-bar" class="account-bar"></div>
 </div>
 <div class="page">
   <div id="app"></div>
@@ -579,7 +619,11 @@ var ICONS = {
   map: '<path d="M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z"/><line x1="9" y1="4" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="20"/>',
   wallet: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16" cy="14" r="1.2"/>',
   star: '<path d="M12 3l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.9 6.4 20.1l1.4-6.3L3 9.5l6.4-.6z"/>',
-  users: '<circle cx="9" cy="8" r="3"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 8.2a3 3 0 1 1 0 5.8"/><path d="M17.5 14.3c2 .5 3.3 2.1 3.3 4.7"/>'
+  users: '<circle cx="9" cy="8" r="3"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 8.2a3 3 0 1 1 0 5.8"/><path d="M17.5 14.3c2 .5 3.3 2.1 3.3 4.7"/>',
+  // Two overlapping people — used for "Companions" (who's actually on a
+  // trip / tagged to an item), kept visually distinct from "users"
+  // (Contacts — external people like hotel desks/tour operators).
+  companion: '<circle cx="8" cy="9" r="3"/><circle cx="17" cy="9" r="3"/><path d="M2 20a6 6 0 0 1 11.5-2.3"/><path d="M11.5 20a6 6 0 0 1 11.5 0"/>'
 };
 
 // Returns the icon key that best represents a transport mode, so the
@@ -621,6 +665,30 @@ var currentView = 'dashboard';
 var currentTripId = null;
 var currentTab = 'timeline';
 
+// ---- Accounts / login (see section 4b, "Auth", further down) ----------
+// `currentUser` is null until checkAuth() resolves at boot, and stays
+// null for the whole session if nobody's logged in — in that state
+// renderBoot() shows the login screen instead of any trip data at all.
+// { id, username, isUberUser } once set. There's deliberately no global
+// "role" here anymore — what an account can do is entirely PER TRIP now
+// (see each trip's own `myGrant`, annotated by the server — src/worker.js's
+// buildResponseState() — and the canFullyEditTrip()/canEditItem() helpers
+// further down). `isUberUser` is the one exception: it's this account's
+// own flag, returned only in responses that describe the CALLER's own
+// account (login/whoami/setup), never anywhere that describes OTHER
+// accounts — see the "undisclosed" explanation in src/worker.js. It's
+// used only to decide whether to show the "Manage accounts" button.
+var currentUser = null;
+// Set by checkAuth() from the whoami response: true only when NO
+// accounts exist yet anywhere, meaning the login screen should offer
+// first-run setup (create the site owner's own account) instead of an
+// ordinary username/password form. See renderAuthScreen().
+var setupNeeded = false;
+// The account list as last fetched for the "Manage accounts" screen
+// (site owner / uber-user only) — see
+// loadAndRenderManageUsers()/renderManageUsersView().
+var managedUsers = [];
+
 // Self-hosted version: state no longer lives inside the page's own HTML
 // (that was the Claude Artifact "publish" trick). Instead, the very
 // first thing this page does (see the init() function at the bottom of
@@ -631,7 +699,7 @@ var currentTab = 'timeline';
 // the app never has to worry about a missing or malformed response.
 async function loadInitialState() {
   try {
-    var res = await fetch('/WayPoint/api/data', { headers: { 'Accept': 'application/json' } });
+    var res = await fetch('/WayPoint/api/data', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error('Server responded with status ' + res.status);
     var parsed = await res.json();
     if (!parsed || typeof parsed !== 'object') parsed = {};
@@ -694,6 +762,7 @@ async function persist(newState) {
   try {
     var res = await fetch('/WayPoint/api/data', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(state)
     });
@@ -704,6 +773,277 @@ async function persist(newState) {
     setSaveStatus('error', 'Could not save');
     showToast('Could not save your change: ' + (err && err.message ? err.message : 'unknown error') + '. Your edit is only kept in this browser tab until it saves successfully.');
   }
+}
+
+/* ---------- 4b. Auth: login / setup / logout / per-trip permissions ---
+   Everything about WHO is using the app right now, as opposed to WHAT
+   trip data they're looking at (that's `state`, above). See the big
+   comment at the top of src/worker.js for the server side of all of
+   this — this section is just the frontend's half: show a login screen
+   when there's no session, and remember who's logged in once there is
+   one. What that account can actually DO is decided per trip (and, for
+   a "user" grant, per item) — see canFullyEditTrip()/canEditItem() near
+   currentTrip() further down, not anything in this section. */
+
+// Asks the server "is there a valid session on this browser right now,
+// and if so who?" — always resolves (never throws), leaving currentUser
+// null on any failure so the rest of the app safely falls back to
+// showing the login screen rather than a half-broken page.
+async function checkAuth() {
+  try {
+    var res = await fetch('/WayPoint/api/whoami', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    var body = await res.json();
+    if (body && body.loggedIn) {
+      currentUser = { id: body.id, username: body.username, isUberUser: !!body.isUberUser };
+    } else {
+      currentUser = null;
+      setupNeeded = !!(body && body.setupNeeded);
+    }
+  } catch (err) {
+    currentUser = null;
+  }
+}
+
+// Keeps the topbar's "who's logged in" area in sync with `currentUser`.
+// Called any time currentUser changes (after checkAuth(), after a
+// successful login/setup, after logout). There's no global read-only
+// styling to apply here anymore — see the big CSS comment near
+// .account-bar for why permissions moved from "one global role" to "per
+// trip", which every trip/item-level render now checks for itself.
+function applyAuthUI() {
+  var el = document.getElementById('account-bar');
+  if (!el) return;
+  if (!currentUser) { el.innerHTML = ''; return; }
+  el.innerHTML =
+    '<span class="account-label">' + esc(currentUser.username) + '</span>' +
+    (currentUser.isUberUser ? '<button class="btn btn-ghost" data-action="open-manage-users">Manage accounts</button>' : '') +
+    '<button class="btn btn-ghost" data-action="logout">Log out</button>';
+}
+
+// Builds the login screen (or, if no account exists anywhere yet, the
+// one-time "set up your Admin account" screen instead — see setupNeeded,
+// set by checkAuth() from the whoami response). `errorMessage`, when
+// given, is shown above the form — e.g. "Incorrect username or password."
+// after a failed attempt.
+function renderAuthScreen(errorMessage) {
+  var errorHtml = errorMessage ? '<p class="auth-error">' + esc(errorMessage) + '</p>' : '';
+  if (setupNeeded) {
+    return '<div class="auth-screen"><div class="auth-card">' +
+      '<h1>Set up Waypoint</h1>' +
+      '<p class="field-hint">No accounts exist yet — create your own account to get started. It becomes the site owner\'s account, with full access to everything. You\'ll need the setup key (the <code>WAYPOINT_PASSWORD</code> secret set in the Cloudflare dashboard when this was first deployed).</p>' +
+      errorHtml +
+      '<form id="setup-form">' +
+        '<div class="field"><label>Setup key</label><input type="password" name="setupKey" required autocomplete="off"></div>' +
+        '<div class="field"><label>Choose a username</label><input type="text" name="username" required autocomplete="username"></div>' +
+        '<div class="field"><label>Choose a password</label><input type="password" name="password" required autocomplete="new-password"><div class="field-hint">At least 8 characters.</div></div>' +
+        '<button type="submit" class="btn btn-primary" style="width:100%">Create account</button>' +
+      '</form>' +
+    '</div></div>';
+  }
+  return '<div class="auth-screen"><div class="auth-card">' +
+    '<h1>Log in to Waypoint</h1>' +
+    errorHtml +
+    '<form id="login-form">' +
+      '<div class="field"><label>Username</label><input type="text" name="username" required autocomplete="username"></div>' +
+      '<div class="field"><label>Password</label><input type="password" name="password" required autocomplete="current-password"></div>' +
+      '<button type="submit" class="btn btn-primary" style="width:100%">Log in</button>' +
+    '</form>' +
+    '<p class="field-hint" style="margin-top:14px">Don\'t have an account? Ask the site owner to set one up for you.</p>' +
+  '</div></div>';
+}
+
+// Shared by both the login form and the first-run setup form (see the
+// 'login-form'/'setup-form' branches in the submit listener further
+// down) — POSTs credentials to whichever endpoint, and either lands in
+// the app (on success) or re-shows the same screen with an error message
+// (on failure) rather than leaving the form silently stuck.
+async function submitAuthForm(url, payload) {
+  try {
+    var res = await fetch(url, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      document.getElementById('app').innerHTML = renderAuthScreen(body.error || 'Something went wrong — try again.');
+      return;
+    }
+    currentUser = { id: body.id, username: body.username, isUberUser: !!body.isUberUser };
+    clearSavedNav();
+    await renderBoot();
+  } catch (err) {
+    document.getElementById('app').innerHTML = renderAuthScreen('Could not reach the server — check your connection and try again.');
+  }
+}
+
+// Forgets "which trip/tab was last open" (see persist()'s own
+// sessionStorage.setItem, and renderBoot()'s read of it) whenever the
+// logged-in account changes — on the app's very first login, and again
+// on every subsequent login/logout. Without this, logging out of one
+// account and straight into a DIFFERENT one on the same browser tab
+// (the exact scenario a shared family device makes routine — see the
+// "Proper login page" choice in the big auth comment above) could land
+// the new account inside whatever trip the PREVIOUS account happened to
+// be viewing, rather than starting fresh at the dashboard — a real bug
+// this project's own tests caught (see test-auth-roles.js).
+function clearSavedNav() {
+  try { sessionStorage.removeItem('waypoint-nav'); } catch (e) { /* sessionStorage may be unavailable */ }
+}
+
+async function doLogout() {
+  try {
+    await fetch('/WayPoint/api/logout', { method: 'POST', credentials: 'same-origin' });
+  } catch (err) {
+    // Worst case the server-side cookie check still thinks we're logged
+    // in until it expires — but we still drop back to the login screen
+    // client-side either way, and every real data endpoint re-checks
+    // the session itself regardless of what this page believes.
+  }
+  state = { trips: [] };
+  currentView = 'dashboard'; currentTripId = null; currentTab = 'timeline';
+  clearSavedNav();
+  // Re-run checkAuth() (rather than just setting currentUser = null
+  // directly) so setupNeeded gets refreshed too — without this, logging
+  // out after the very first-ever setup would show the SETUP screen
+  // again instead of an ordinary login form, because setupNeeded was
+  // last computed back when no account existed yet at all.
+  await checkAuth();
+  await renderBoot();
+}
+
+// The single entry point that decides what the page actually shows:
+// the login/setup screen (no session), or the normal app (a valid one).
+// Called once at boot (see init() at the bottom of this file) and again
+// after every login/setup/logout, so it's always this function — never
+// render() directly — that's responsible for that top-level decision.
+async function renderBoot() {
+  applyAuthUI();
+  if (!currentUser) {
+    document.getElementById('app').innerHTML = renderAuthScreen();
+    return;
+  }
+  state = await loadInitialState();
+  try {
+    var nav = JSON.parse(sessionStorage.getItem('waypoint-nav') || 'null');
+    if (nav && nav.view === 'trip' && byId(state.trips, nav.tripId)) {
+      currentView = 'trip'; currentTripId = nav.tripId; currentTab = nav.tab || 'timeline';
+    }
+  } catch (e) { /* ignore malformed/unavailable sessionStorage */ }
+  render();
+}
+
+/* ---------- 4c. Manage accounts (site owner / uber-user only) ---------
+   A trip-agnostic screen (currentView === 'manage-users') for creating,
+   renaming, resetting the password of, and deleting LOGINS. Deliberately
+   minimal now that permissions live on trips, not accounts (see the big
+   comment near currentTrip() further down) — this screen no longer has
+   anything to do with roles or which trips someone can see; that's
+   entirely up to each trip's own Superuser now, via that trip's "Share
+   this trip" panel (see renderSharePanel() further down). Reached via
+   the "Manage accounts" button in the topbar (see applyAuthUI()), which
+   only ever appears for the account that's actually the uber-user — the
+   server enforces the same rule independently (see src/worker.js's
+   /api/users routes), so this isn't the only thing stopping anyone else
+   from reaching it, just the normal way in. */
+
+async function loadAndRenderManageUsers() {
+  currentView = 'manage-users';
+  try {
+    var res = await fetch('/WayPoint/api/users', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    var body = await res.json();
+    managedUsers = (body && body.users) || [];
+  } catch (err) {
+    managedUsers = [];
+    showToastSafe('Could not load accounts.');
+  }
+  render();
+}
+
+function renderManageUsersView() {
+  var rows = managedUsers.slice().sort(function (a, b) { return a.username.localeCompare(b.username); }).map(function (u) {
+    return '<div class="item-row"><div class="item-icon">' + icon('user') + '</div><div class="item-main">' +
+      '<div class="item-title-row"><span class="item-title">' + esc(u.username) + '</span></div>' +
+      '</div><div class="item-actions">' +
+        '<button class="btn btn-icon btn-ghost" data-action="edit-user" data-id="' + u.id + '" title="Edit">' + icon('edit') + '</button>' +
+        '<button class="btn btn-icon btn-ghost" data-action="delete-user" data-id="' + u.id + '" title="Delete">' + icon('trash') + '</button>' +
+      '</div></div>';
+  }).join('');
+  return '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + ' All trips</button>' +
+    '<div class="tab-panel-head"><h2>Manage accounts</h2>' +
+      '<button class="btn btn-accent" data-action="new-user">' + icon('plus') + ' Add account</button></div>' +
+    '<p class="field-hint" style="margin-bottom:16px">You set every account\'s username and password yourself and share it with them directly — there\'s no self-signup or "forgot password" flow. Creating an account here just gives someone a login; it doesn\'t give them access to any trip. Whoever creates a trip becomes that trip\'s owner, and can then share it with any of these accounts from that trip\'s own Settings tab.</p>' +
+    (managedUsers.length ? '<div class="item-list">' + rows + '</div>' : '<p class="field-hint">No accounts yet.</p>');
+}
+
+// Opens the Add/Edit account modal. Built directly (rather than through
+// the openForm()/fieldHtml() system every OTHER form in this app uses)
+// since it's such a small, fixed shape that pulling in the generic
+// machinery wouldn't save anything. Uses the same visual chrome (.modal,
+// .field, .btn classes) by hand instead, so it still looks identical to
+// every other modal in the app.
+function openUserForm(existing) {
+  var root = document.getElementById('modal-root');
+  root.innerHTML =
+    '<div class="modal-backdrop" data-action="close-modal">' +
+      '<div class="modal">' +
+        '<div class="modal-head"><h2>' + (existing ? 'Edit account' : 'Add account') + '</h2>' +
+          '<button class="btn btn-icon btn-ghost" data-action="close-modal">' + icon('close') + '</button></div>' +
+        '<form id="user-form" data-existing-id="' + (existing ? esc(existing.id) : '') + '">' +
+          '<div class="modal-body">' +
+            '<div class="field"><label>Username</label><input type="text" name="username" value="' + esc(existing ? existing.username : '') + '" required></div>' +
+            '<div class="field"><label>' + (existing ? 'New password' : 'Password') + '</label>' +
+              '<input type="password" name="password" autocomplete="new-password" placeholder="' + (existing ? 'Leave blank to keep the current password' : 'At least 8 characters') + '">' +
+              (existing ? '' : '<div class="field-hint">You set this directly and share it with them — there\'s no self-signup or "forgot password" flow.</div>') +
+            '</div>' +
+          '</div>' +
+          '<div class="modal-foot">' +
+            '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+            '<button type="submit" class="btn btn-primary">Save</button>' +
+          '</div>' +
+        '</form>' +
+      '</div>' +
+    '</div>';
+}
+
+async function saveUserAccount(payload) {
+  try {
+    var res = await fetch('/WayPoint/api/users', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) { showToast(body.error || 'Could not save that account.'); return; }
+    closeModal();
+    showToast('Account saved');
+    await loadAndRenderManageUsers();
+  } catch (err) {
+    showToast('Could not save that account — check your connection and try again.');
+  }
+}
+
+function deleteUserAccount(id) {
+  var u = managedUsers.find(function (x) { return x.id === id; });
+  if (!u) return;
+  openConfirm({
+    title: 'Delete this account?', message: 'This deletes the login for "' + u.username + '". This can\'t be undone.', confirmLabel: 'Delete',
+    onConfirm: async function () {
+      try {
+        var res = await fetch('/WayPoint/api/users/delete', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: id })
+        });
+        var body = await res.json().catch(function () { return {}; });
+        if (!res.ok) { showToast(body.error || 'Could not delete that account.'); return; }
+        showToast('Account deleted');
+        await loadAndRenderManageUsers();
+      } catch (err) {
+        showToast('Could not delete that account — check your connection and try again.');
+      }
+    }
+  });
 }
 
 /* ---------- 5. Toast & confirm dialog ------------------------------ */
@@ -763,6 +1103,44 @@ function closeModal() {
 // field type needs beyond the basics (maxlength, uppercase styling,
 // ...); `placeholderFallback` is used only when the field itself
 // didn't specify one.
+// Reads a 'tag-picker' field's selections back out of a submitted form's
+// values object. A tag-picker renders one checkbox per companion, each
+// with its OWN unique name ("<field.key>__<companionId>") rather than
+// several checkboxes sharing one name — see the 'tag-picker' case in
+// fieldHtml() below for exactly why (currentFormValues()'s handling of
+// repeated names is the short version). This is the matching read-back
+// half: it scans every key in `values` for that "<key>__" prefix and
+// pulls the companion id back out of whichever ones were checked.
+function readTagPicker(values, key) {
+  var prefix = key + '__';
+  var ids = [];
+  for (var k in values) {
+    if (Object.prototype.hasOwnProperty.call(values, k) && k.indexOf(prefix) === 0 && values[k]) {
+      ids.push(k.slice(prefix.length));
+    }
+  }
+  return ids;
+}
+
+// Returns a shallow copy of `fields` with its 'tag-picker' field (if it
+// has one) marked `locked: true` — see fieldHtml()'s 'tag-picker' case
+// for what that actually does (disables the checkboxes, adds an
+// explanatory hint). Used whenever an item's edit form is opened by a
+// "user" grant editing one of their own tagged items: they can change
+// that item's OTHER fields, but never retag it — the Worker's
+// mergeUserScopedList() (src/worker.js) silently keeps the stored tags
+// no matter what a submitted form claims anyway, so this is just making
+// the UI honest about that rather than showing a control that wouldn't
+// do anything. `fields` may itself be a function (e.g. Transport's
+// mode-dependent field list) — this wraps it transparently either way.
+function fieldsWithTagPickerLock(fields, locked) {
+  if (!locked) return fields;
+  var lockOne = function (list) {
+    return list.map(function (f) { return f.type === 'tag-picker' ? Object.assign({}, f, { locked: true }) : f; });
+  };
+  return (typeof fields === 'function') ? function (values) { return lockOne(fields(values)); } : lockOne(fields);
+}
+
 function suggestInputHtml(field, val, req, suggestType, extraAttrs, placeholderFallback) {
   var placeholder = field.placeholder || placeholderFallback || '';
   return '<div class="suggest-input-wrap">' +
@@ -793,6 +1171,38 @@ function fieldHtml(field, value, trip, allValues) {
     return '<div class="field" ' + full + '><label class="checkbox-field">' +
       '<input type="checkbox" name="' + field.key + '"' + (val ? ' checked' : '') + '> ' + esc(field.label) + '</label>' +
       (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '') + '</div>';
+  }
+
+  // Also rendered separately, for the same reason as 'checkbox' above: a
+  // multi-select (several companions can be tagged to one item) doesn't
+  // fit the "one <input>, one value" shape the switch below assumes. See
+  // readTagPicker() just above for the read-back side, and its comment
+  // for why each checkbox gets its own unique name rather than sharing
+  // `field.key` the way every other field's single <input> does.
+  if (field.type === 'tag-picker') {
+    var companions = (trip && trip.companions) || [];
+    if (companions.length === 0) {
+      return '<div class="field" ' + full + '><label>' + esc(field.label) + '</label>' +
+        '<div class="field-hint">No companions added yet — add some on the Companions tab to tag them here.</div></div>';
+    }
+    var pickerItems = companions.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
+      // Checked if this render came from the record's saved value (`val`
+      // is the plain array of companion ids in that case), OR — on a
+      // reactive re-render, where `val` itself is blank because there's
+      // no single flat "companions" key in live form data — if the
+      // uniquely-named checkbox for this companion shows up checked in
+      // `allValues` instead. Either source is enough; checking both means
+      // this reads correctly whichever situation produced this render.
+      var checked = (Array.isArray(val) && val.indexOf(c.id) !== -1) || (allValues && allValues[field.key + '__' + c.id]);
+      // `field.locked` (see fieldsWithTagPickerLock()) disables every
+      // checkbox — a disabled checkbox is left out of the submitted
+      // FormData entirely, so readTagPicker() sees no change for this
+      // item regardless, matching what the Worker enforces server-side.
+      return '<label class="tag-picker-item"><input type="checkbox" name="' + field.key + '__' + c.id + '"' + (checked ? ' checked' : '') + (field.locked ? ' disabled' : '') + '> ' + esc(c.name) + '</label>';
+    }).join('');
+    return '<div class="field" ' + full + '><label>' + esc(field.label) + '</label><div class="tag-picker">' + pickerItems + '</div>' +
+      (field.locked ? '<div class="field-hint">Who this is tagged to isn\'t something you can change.</div>' : '') +
+      '</div>';
   }
 
   var inputHtml;
@@ -1006,6 +1416,7 @@ var DESTINATION_FIELDS = [
   { key: 'arriveDate', label: 'Arriving', type: 'date', required: true },
   { key: 'departDate', label: 'Leaving', type: 'date', required: true },
   { key: 'timezone', label: 'Local timezone', type: 'timezone', placeholder: 'e.g. Asia/Bangkok', hint: 'Used just as a reference — handy when a trip crosses several timezones.', wide: true },
+  { key: 'companions', label: 'Companions', type: 'tag-picker', wide: true },
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
@@ -1023,6 +1434,7 @@ var ACTIVITY_FIELDS = [
   { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
   { key: 'costRate', label: 'Exchange rate override', type: 'number', hint: 'Optional — home-currency value of 1 unit of this currency. Leave blank to use the trip\'s fixed rate.', wide: true },
   { key: 'receiptRef', label: 'Receipt reference', type: 'text', placeholder: 'e.g. email confirmation, photo filename', wide: true },
+  { key: 'companions', label: 'Companions', type: 'tag-picker', wide: true },
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
@@ -1122,6 +1534,7 @@ function transportFieldsForMode(values) {
       { key: 'bookingRef', label: 'Booking reference', type: 'text' },
       { key: 'contactId', label: 'Contact', type: 'select-contact' },
       { key: 'receiptRef', label: 'Receipt reference', type: 'text', wide: true },
+      { key: 'companions', label: 'Companions', type: 'tag-picker', wide: true },
       { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
     ]);
 }
@@ -1140,6 +1553,7 @@ var ACCOMMODATION_FIELDS = [
   { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
   { key: 'costRate', label: 'Exchange rate override', type: 'number', wide: true },
   { key: 'receiptRef', label: 'Receipt reference', type: 'text', wide: true },
+  { key: 'companions', label: 'Companions', type: 'tag-picker', wide: true },
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
@@ -1149,6 +1563,18 @@ var CONTACT_FIELDS = [
   { key: 'phone', label: 'Phone', type: 'text' },
   { key: 'email', label: 'Email', type: 'text' },
   { key: 'address', label: 'Address', type: 'text', wide: true },
+  { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+];
+
+// Companions are a different idea from Contacts above: not a service
+// provider you might call, but a person actually ON this trip with you
+// (or on part of it) — the thing every destination/activity/accommodation/
+// transport form's "Companions" tag-picker field points at (see
+// tagPickerHtml()/the 'tag-picker' case in fieldHtml(), further down).
+// Deliberately just a name + optional notes — nothing else about a
+// companion is ever referenced elsewhere in the app.
+var COMPANION_FIELDS = [
+  { key: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Sarah' },
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
@@ -1172,6 +1598,59 @@ var EXPENSE_FIELDS = [
 
 function currentTrip() { return byId(state.trips, currentTripId); }
 
+/* ---- Per-trip permissions ---------------------------------------------
+   Every trip the server sends back carries a `myGrant` field (set by
+   buildResponseState() in src/worker.js) saying exactly what THIS
+   account may do with THIS trip, right now — there's no single global
+   "role" anymore (compare the old `currentUser.role` this app used to
+   have). `myGrant` is always one of:
+     { role: 'superuser' }                    -- owner, or the uber-user.
+     { role: 'admin' }                         -- full read/write, no sharing control.
+     { role: 'user',   companionId: '...' }    -- read/write, own tagged items only.
+     { role: 'viewer', companionId: '...' }    -- read-only, own tagged items only.
+   These four little functions are the ONLY place the rest of the app
+   asks "am I allowed to ___ on this trip/item?" — every render below
+   goes through them rather than re-deriving the logic inline, so there's
+   exactly one place to get this right. ------------------------------- */
+
+// Full read/write on the trip itself (its own name/dates/notes, and
+// every item on it) — true for a Superuser or an "admin" grant. False
+// for a scoped "user"/"viewer" grant.
+function canFullyEditTrip(trip) {
+  var g = trip && trip.myGrant;
+  return !!g && (g.role === 'superuser' || g.role === 'admin');
+}
+
+// Only a trip's Superuser (its owner, or the uber-user) can decide who
+// else has access to it — see renderSharePanel() further down. Even an
+// "admin" grant (full read/write on the trip's data) can't do this.
+function canManageSharing(trip) {
+  var g = trip && trip.myGrant;
+  return !!g && g.role === 'superuser';
+}
+
+// The companion id a "user"/"viewer" grant is scoped to. Empty string
+// for a full-scope role (Superuser/admin), which isn't tied to any one
+// companion.
+function myCompanionId(trip) {
+  var g = trip && trip.myGrant;
+  return (g && (g.role === 'user' || g.role === 'viewer')) ? (g.companionId || '') : '';
+}
+
+// Can THIS ONE item be edited? True everywhere canFullyEditTrip() is,
+// PLUS for a "user" grant when `item` is tagged with their companion —
+// never true for a "viewer" grant, however it's scoped (read-only is
+// read-only). Only meaningful for the four taggable item types
+// (destinations/activities/accommodation/transport); companions,
+// contacts and expenses aren't per-companion scoped, so callers for
+// those just use canFullyEditTrip() directly instead of this.
+function canEditItem(trip, item) {
+  if (canFullyEditTrip(trip)) return true;
+  var g = trip && trip.myGrant;
+  if (!g || g.role !== 'user') return false;
+  return !!(item && item.companions && item.companions.indexOf(g.companionId) !== -1);
+}
+
 function defaultHomeCurrency() {
   var last = state.trips[state.trips.length - 1];
   return (last && last.homeCurrency) || 'GBP';
@@ -1189,17 +1668,30 @@ function openTripForm(existing) {
           var t = byId(next.trips, existing.id);
           t.name = v.name; t.startDate = v.startDate || ''; t.endDate = v.endDate || '';
           t.homeCurrency = (v.homeCurrency || 'GBP').toUpperCase(); t.notes = v.notes || '';
+          // ownerId/grants/myGrant aren't touched here at all -- they
+          // already carried over from `existing` via byId() above, and
+          // the Worker only ever trusts its OWN stored copy of them
+          // regardless (see "SAVING SAFELY" in src/worker.js).
         } else {
           next.trips.push({
             id: newId(), name: v.name, startDate: v.startDate || '', endDate: v.endDate || '',
             homeCurrency: (v.homeCurrency || 'GBP').toUpperCase(), notes: v.notes || '',
-            currencyRates: {}, destinations: [], activities: [], transport: [], accommodation: [], contacts: [], expenses: [],
+            currencyRates: {}, destinations: [], activities: [], transport: [], accommodation: [], contacts: [], companions: [], expenses: [],
             // A cache of place-name -> {lat,lng} lookups for the Map tab (see
             // the Map section further down), so the same place is only ever
             // looked up once, not re-fetched on every visit. {} for a new
             // trip; older trips just get one lazily the first time they need
             // it (see initMap()).
-            geocodeCache: {}
+            geocodeCache: {},
+            // Creating a trip makes you its permanent Superuser (owner) --
+            // the Worker enforces this for real when it actually saves a
+            // brand-new trip id (see handlePost()'s "anything submitted
+            // that ISN'T an existing trip id" branch), but setting it here
+            // too means the UI shows the right controls (Edit/Delete trip,
+            // "Add" buttons, the Share panel) immediately, on this very
+            // first render, rather than only after the next reload.
+            ownerId: currentUser.id, ownerUsername: currentUser.username, grants: [],
+            myGrant: { role: 'superuser' }
           });
           currentTripId = next.trips[next.trips.length - 1].id;
           currentView = 'trip'; currentTab = 'timeline';
@@ -1211,12 +1703,13 @@ function openTripForm(existing) {
 
 function openDestinationForm(trip, existing) {
   openForm({
-    title: existing ? 'Edit destination' : 'Add destination', fields: DESTINATION_FIELDS,
+    title: existing ? 'Edit destination' : 'Add destination',
+    fields: fieldsWithTagPickerLock(DESTINATION_FIELDS, !!existing && !canFullyEditTrip(trip)),
     initial: existing || {}, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.id);
-        var rec = { id: existing ? existing.id : newId(), name: v.name, country: v.country || '', arriveDate: v.arriveDate, departDate: v.departDate, timezone: (v.timezone || '').trim(), notes: v.notes || '' };
+        var rec = { id: existing ? existing.id : newId(), name: v.name, country: v.country || '', arriveDate: v.arriveDate, departDate: v.departDate, timezone: (v.timezone || '').trim(), companions: readTagPicker(v, 'companions'), notes: v.notes || '' };
         if (existing) t.destinations[t.destinations.findIndex(function (x) { return x.id === existing.id; })] = rec;
         else t.destinations.push(rec);
       });
@@ -1226,7 +1719,8 @@ function openDestinationForm(trip, existing) {
 
 function openActivityForm(trip, existing) {
   openForm({
-    title: existing ? 'Edit activity' : 'Add activity', fields: ACTIVITY_FIELDS,
+    title: existing ? 'Edit activity' : 'Add activity',
+    fields: fieldsWithTagPickerLock(ACTIVITY_FIELDS, !!existing && !canFullyEditTrip(trip)),
     initial: existing || {}, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
@@ -1236,7 +1730,7 @@ function openActivityForm(trip, existing) {
           date: v.date, startTime: v.startTime || '', endTime: v.endTime || '',
           location: v.location || '', address: v.address || '', bookingRef: v.bookingRef || '',
           contactId: v.contactId || '', costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(),
-          costRate: v.costRate || '', receiptRef: v.receiptRef || '', notes: v.notes || ''
+          costRate: v.costRate || '', receiptRef: v.receiptRef || '', companions: readTagPicker(v, 'companions'), notes: v.notes || ''
         };
         if (existing) t.activities[t.activities.findIndex(function (x) { return x.id === existing.id; })] = rec;
         else t.activities.push(rec);
@@ -1304,7 +1798,9 @@ function openTransportForm(trip, existing) {
     // The field list depends on whichever mode AND payment type are
     // currently selected (a flight shows a flight-number field, Cash
     // shows a currency+amount, etc.) — see transportFieldsForMode().
-    fields: function (values) { return transportFieldsForMode(values); },
+    // fieldsWithTagPickerLock() wraps that transparently to also lock
+    // the Companions picker when a "user" grant is editing their own leg.
+    fields: fieldsWithTagPickerLock(function (values) { return transportFieldsForMode(values); }, !!existing && !canFullyEditTrip(trip)),
     // Three fields drive a live re-render, not just Mode: switching
     // "Paid with" swaps in the right cost/points fields, and toggling
     // the exchange-rate checkbox shows/hides the override input right
@@ -1348,7 +1844,7 @@ function openTransportForm(trip, existing) {
           costRate: (showCash && rateOverrideOn) ? (v.costRate || '') : '',
           pointsProgram: showPoints ? (v.pointsProgram || '') : '',
           pointsAmount: showPoints ? (v.pointsAmount || '') : '',
-          receiptRef: v.receiptRef || '', notes: v.notes || ''
+          receiptRef: v.receiptRef || '', companions: readTagPicker(v, 'companions'), notes: v.notes || ''
         };
         if (existing) t.transport[t.transport.findIndex(function (x) { return x.id === existing.id; })] = rec;
         else t.transport.push(rec);
@@ -1431,7 +1927,7 @@ function performFlightLookup(button) {
   button.disabled = true;
   if (statusEl) { statusEl.textContent = 'Looking up ' + flightNumber + ' on ' + departDate + '…'; statusEl.className = 'flight-lookup-status'; }
 
-  fetch('/WayPoint/api/flight-lookup?flightNumber=' + encodeURIComponent(flightNumber) + '&date=' + encodeURIComponent(departDate))
+  fetch('/WayPoint/api/flight-lookup?flightNumber=' + encodeURIComponent(flightNumber) + '&date=' + encodeURIComponent(departDate), { credentials: 'same-origin' })
     .then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
         return { ok: res.ok, body: body };
@@ -1892,7 +2388,8 @@ function openAccommodationForm(trip, existing) {
     checkOutDate: dateOnly(existing.checkOut), checkOutTime: timeOnly(existing.checkOut)
   }) : {};
   openForm({
-    title: existing ? 'Edit accommodation' : 'Add accommodation', fields: ACCOMMODATION_FIELDS,
+    title: existing ? 'Edit accommodation' : 'Add accommodation',
+    fields: fieldsWithTagPickerLock(ACCOMMODATION_FIELDS, !!existing && !canFullyEditTrip(trip)),
     initial: initial, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
@@ -1902,7 +2399,7 @@ function openAccommodationForm(trip, existing) {
           checkIn: combineDateTime(v.checkInDate, v.checkInTime), checkOut: combineDateTime(v.checkOutDate, v.checkOutTime),
           bookingRef: v.bookingRef || '', contactId: v.contactId || '',
           costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(), costRate: v.costRate || '',
-          receiptRef: v.receiptRef || '', notes: v.notes || ''
+          receiptRef: v.receiptRef || '', companions: readTagPicker(v, 'companions'), notes: v.notes || ''
         };
         if (existing) t.accommodation[t.accommodation.findIndex(function (x) { return x.id === existing.id; })] = rec;
         else t.accommodation.push(rec);
@@ -1921,6 +2418,28 @@ function openContactForm(trip, existing) {
         var rec = { id: existing ? existing.id : newId(), name: v.name, role: v.role || '', phone: v.phone || '', email: v.email || '', address: v.address || '', notes: v.notes || '' };
         if (existing) t.contacts[t.contacts.findIndex(function (x) { return x.id === existing.id; })] = rec;
         else t.contacts.push(rec);
+      });
+    }
+  });
+}
+
+function openCompanionForm(trip, existing) {
+  openForm({
+    title: existing ? 'Edit companion' : 'Add companion', fields: COMPANION_FIELDS,
+    initial: existing || {}, trip: trip, submitLabel: 'Save',
+    onSubmit: function (v) {
+      updateState(function (next) {
+        var t = byId(next.trips, trip.id);
+        var rec = { id: existing ? existing.id : newId(), name: v.name, notes: v.notes || '' };
+        if (existing) t.companions[t.companions.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        else t.companions.push(rec);
+        // Deliberately NOT touching every destination/activity/
+        // accommodation/transport record here to rename a tag — nothing
+        // needs to, since every tag is stored as just the companion's id
+        // (see readTagPicker()) and looked up by name at render time
+        // (see e.g. renderActivitiesTab()'s tag list) — so a rename here
+        // is instantly reflected everywhere that companion is tagged,
+        // with nothing else to keep in sync.
       });
     }
   });
@@ -1960,7 +2479,7 @@ function deleteEntity(trip, section, id, label) {
 function deleteTrip(id) {
   var t = byId(state.trips, id);
   openConfirm({
-    title: 'Delete trip?', message: 'This deletes "' + t.name + '" and everything in it — destinations, activities, transport, accommodation, contacts and expenses. This can\'t be undone.', confirmLabel: 'Delete trip',
+    title: 'Delete trip?', message: 'This deletes "' + t.name + '" and everything in it — destinations, activities, transport, accommodation, contacts, companions and expenses. This can\'t be undone.', confirmLabel: 'Delete trip',
     onConfirm: function () {
       updateState(function (next) { next.trips = next.trips.filter(function (x) { return x.id !== id; }); });
       currentView = 'dashboard'; currentTripId = null;
@@ -2115,10 +2634,14 @@ function tripSpend(trip) {
 /* ---------- 12. Render: Dashboard ------------------------------------ */
 
 function renderDashboard() {
+  // "New trip" is always shown — creating one is open to any logged-in
+  // account, not gated by any per-trip permission (there's nothing to
+  // check permission against yet; whoever creates it becomes its
+  // Superuser automatically — see openTripForm()).
   if (state.trips.length === 0) {
     return (
       '<div class="section-head"><h1>Your trips</h1>' +
-        '<button class="btn btn-accent" data-write-only data-action="new-trip">' + icon('plus') + ' New trip</button></div>' +
+        '<button class="btn btn-accent" data-action="new-trip">' + icon('plus') + ' New trip</button></div>' +
       '<div class="empty-state">' + icon('compass') +
         '<h3>No trips yet</h3>' +
         '<p>Add a trip to start planning destinations, activities, transport and accommodation — with expenses tracked across currencies as you go.</p>' +
@@ -2130,6 +2653,16 @@ function renderDashboard() {
     var status = tripStatus(trip);
     var spend = tripSpend(trip);
     var statusLabel = status === 'ongoing' ? 'In progress' : (status === 'past' ? 'Past' : 'Upcoming');
+    // Edit/Delete on the card itself are full-scope-only (Superuser,
+    // admin grant, or the uber-user) — a "user"/"viewer" grant can see
+    // this trip's card (it's in their `state.trips` at all) but never
+    // touch the trip's own name/dates, let alone delete it.
+    var cardActions = canFullyEditTrip(trip)
+      ? '<div class="card-actions">' +
+          '<button class="btn btn-icon btn-ghost" data-action="edit-trip" data-id="' + trip.id + '" title="Edit trip">' + icon('edit') + '</button>' +
+          '<button class="btn btn-icon btn-ghost" data-action="delete-trip" data-id="' + trip.id + '" title="Delete trip">' + icon('trash') + '</button>' +
+        '</div>'
+      : '';
     return (
       '<div class="trip-card" data-action="open-trip" data-id="' + trip.id + '">' +
         '<div class="trip-card-top">' +
@@ -2142,17 +2675,14 @@ function renderDashboard() {
           '<span>' + icon('pin') + ' <b>' + trip.destinations.length + '</b> areas</span>' +
           '<span>' + icon('wallet') + ' <b>' + money(spend.known, trip.homeCurrency) + '</b>' + (spend.unknownCount ? ' <span class="rate-missing">+' + spend.unknownCount + ' need rate</span>' : '') + '</span>' +
         '</div>' +
-        '<div class="card-actions" data-write-only>' +
-          '<button class="btn btn-icon btn-ghost" data-action="edit-trip" data-id="' + trip.id + '" title="Edit trip">' + icon('edit') + '</button>' +
-          '<button class="btn btn-icon btn-ghost" data-action="delete-trip" data-id="' + trip.id + '" title="Delete trip">' + icon('trash') + '</button>' +
-        '</div>' +
+        cardActions +
       '</div>'
     );
   }).join('');
   return (
     '<div class="intro-note"><strong>Waypoint</strong> keeps every trip\'s destinations, activities, transport and accommodation in one place, with a day-by-day timeline that shows overnight travel and multi-area days clearly, plus expenses tracked across currencies.</div>' +
     '<div class="section-head"><h1>Your trips</h1>' +
-      '<button class="btn btn-accent" data-write-only data-action="new-trip">' + icon('plus') + ' New trip</button></div>' +
+      '<button class="btn btn-accent" data-action="new-trip">' + icon('plus') + ' New trip</button></div>' +
     '<div class="trip-grid">' + cards + '</div>'
   );
 }
@@ -2165,7 +2695,7 @@ function renderDashboard() {
 // ones below, since they're what most people actually want to look at
 // most of the time. Everything else (adding/editing the underlying data)
 // lives in TABS, in the order requested: Destinations, Transport,
-// Accommodation, Activities, then Contacts, with Expenses and Settings
+// Accommodation, Activities, then Contacts and Companions, with Expenses and Settings
 // kept at the end as before. Both arrays share the exact same "switch-tab"
 // data-action/click handler (see the click listener further down) — a
 // hero button and a regular tab button are just two different looks for
@@ -2181,20 +2711,43 @@ var TABS = [
   { key: 'accommodation', label: 'Accommodation', icon: 'bed' },
   { key: 'activities', label: 'Activities', icon: 'ticket' },
   { key: 'contacts', label: 'Contacts', icon: 'users' },
+  { key: 'companions', label: 'Companions', icon: 'companion' },
+  // Expenses is left out for a scoped "user"/"viewer" grant below (see
+  // tabsForTrip()) — the server strips expenses out of their trip data
+  // entirely (see buildResponseState() in src/worker.js), since there's
+  // no per-companion split for those and they often show what OTHER
+  // people spent, so showing an always-empty Expenses tab to them would
+  // just be misleading.
   { key: 'expenses', label: 'Expenses', icon: 'wallet' },
   { key: 'settings', label: 'Settings', icon: 'gear' }
 ];
 
+// The tab list to actually show for THIS trip — everything in TABS for
+// a full-scope role, minus Expenses for a scoped "user"/"viewer" grant.
+// Settings stays visible either way: it still holds useful read-only
+// info (currency rates) for a scoped account, even though the actual
+// rate-editing form and "Share this trip" panel on it are themselves
+// gated to full-scope roles (see renderSettingsTab()).
+function tabsForTrip(trip) {
+  if (canFullyEditTrip(trip)) return TABS;
+  return TABS.filter(function (t) { return t.key !== 'expenses'; });
+}
+
 function renderTripView() {
   var trip = currentTrip();
   if (!trip) { currentView = 'dashboard'; return renderDashboard(); }
+  // A scoped role landing on a tab that's just been filtered out (e.g.
+  // sessionStorage restored "expenses" from a previous, full-scope
+  // account on this same browser) falls back to the Timeline rather
+  // than rendering a panel for a tab that's no longer in the tab bar.
+  if (currentTab === 'expenses' && !canFullyEditTrip(trip)) currentTab = 'timeline';
   var spend = tripSpend(trip);
   var status = tripStatus(trip);
   var heroHtml = HERO_TABS.map(function (t) {
     return '<button class="hero-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '">' +
       icon(t.icon) + t.label + '</button>';
   }).join('');
-  var tabsHtml = TABS.map(function (t) {
+  var tabsHtml = tabsForTrip(trip).map(function (t) {
     return '<button class="tab-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '">' +
       icon(t.icon) + t.label + '</button>';
   }).join('');
@@ -2206,10 +2759,17 @@ function renderTripView() {
     case 'accommodation': panel = renderAccommodationTab(trip); break;
     case 'map': panel = renderMapTab(trip); break;
     case 'contacts': panel = renderContactsTab(trip); break;
+    case 'companions': panel = renderCompanionsTab(trip); break;
     case 'expenses': panel = renderExpensesTab(trip); break;
     case 'settings': panel = renderSettingsTab(trip); break;
     default: panel = renderTimelineTab(trip);
   }
+  var headerActions = canFullyEditTrip(trip)
+    ? '<div class="card-actions">' +
+        '<button class="btn btn-icon btn-ghost" data-action="edit-trip" data-id="' + trip.id + '" title="Edit trip">' + icon('edit') + '</button>' +
+        '<button class="btn btn-icon btn-ghost" data-action="delete-trip" data-id="' + trip.id + '" title="Delete trip">' + icon('trash') + '</button>' +
+      '</div>'
+    : '';
   return (
     '<div class="trip-header">' +
       '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + ' All trips</button>' +
@@ -2217,15 +2777,12 @@ function renderTripView() {
         '<div><h1>' + esc(trip.name) + '</h1>' +
           '<div class="trip-meta">' +
             '<span>' + (trip.startDate ? formatDateShort(trip.startDate) : '?') + ' – ' + (trip.endDate ? formatDateShort(trip.endDate) : '?') + '</span>' +
-            '<span><b>' + money(spend.known, trip.homeCurrency) + '</b> spent so far' +
+            (canFullyEditTrip(trip) ? '<span><b>' + money(spend.known, trip.homeCurrency) + '</b> spent so far' +
               (spend.unknownCount ? ' · <button class="warn-link" data-action="switch-tab" data-tab="settings">' + spend.unknownCount + ' need an exchange rate</button>' : '') +
-            '</span>' +
+            '</span>' : '') +
           '</div>' +
         '</div>' +
-        '<div class="card-actions" data-write-only>' +
-          '<button class="btn btn-icon btn-ghost" data-action="edit-trip" data-id="' + trip.id + '" title="Edit trip">' + icon('edit') + '</button>' +
-          '<button class="btn btn-icon btn-ghost" data-action="delete-trip" data-id="' + trip.id + '" title="Delete trip">' + icon('trash') + '</button>' +
-        '</div>' +
+        headerActions +
       '</div>' +
     '</div>' +
     '<div class="hero-row">' + heroHtml + '</div>' +
@@ -2257,45 +2814,69 @@ function costTag(trip, amount, currency, rateOverride) {
   return '<span class="tag tag-cost">' + icon('wallet') + label + '</span>';
 }
 
-function rowActions(trip, section, item, label) {
-  return '<div class="item-actions" data-write-only>' +
-    '<button class="btn btn-icon btn-ghost" data-action="edit-' + section + '" data-id="' + item.id + '" title="Edit">' + icon('edit') + '</button>' +
-    '<button class="btn btn-icon btn-ghost" data-action="delete-' + section + '" data-id="' + item.id + '" title="Delete">' + icon('trash') + '</button>' +
+// Edit/Delete buttons for one item row — which ones actually show up
+// depends on this account's permission on `trip` (see the "Per-trip
+// permissions" helpers near currentTrip() above). `taggable` should be
+// true for the four per-companion-scoped item types (destination/
+// activity/transport/accommodation), false for everything else
+// (companion/contact/expense) — those aren't tagged to a companion at
+// all, so a "user" grant never gets to edit them, only full-scope roles
+// do. Returns '' (no actions block at all) if this account can't do
+// anything to this particular row.
+function rowActions(trip, section, item) {
+  var taggable = ['destination', 'activity', 'transport', 'accommodation'].indexOf(section) !== -1;
+  var canEdit = taggable ? canEditItem(trip, item) : canFullyEditTrip(trip);
+  // Deleting is always full-scope-only — even a "user" grant, which CAN
+  // edit their own tagged items, can never delete one (see
+  // mergeUserScopedList() in src/worker.js, which silently keeps an item
+  // even if it's missing from what they submit).
+  var canDelete = canFullyEditTrip(trip);
+  if (!canEdit && !canDelete) return '';
+  return '<div class="item-actions">' +
+    (canEdit ? '<button class="btn btn-icon btn-ghost" data-action="edit-' + section + '" data-id="' + item.id + '" title="Edit">' + icon('edit') + '</button>' : '') +
+    (canDelete ? '<button class="btn btn-icon btn-ghost" data-action="delete-' + section + '" data-id="' + item.id + '" title="Delete">' + icon('trash') + '</button>' : '') +
   '</div>';
 }
 
-function emptyTab(iconName, title, body, addAction, addLabel) {
+// The "Add X" button/empty-state prompt: only ever shown to a full-scope
+// role (Superuser/admin/uber) — a "user"/"viewer" grant can never create
+// a new item of any kind, only edit ones already tagged to them (see
+// canEditItem()'s comment).
+function emptyTab(trip, iconName, title, body, addAction, addLabel) {
   return '<div class="empty-state">' + icon(iconName) + '<h3>' + esc(title) + '</h3><p>' + esc(body) + '</p>' +
-    '<div style="margin-top:14px" data-write-only><button class="btn btn-accent" data-action="' + addAction + '">' + icon('plus') + ' ' + esc(addLabel) + '</button></div></div>';
+    (canFullyEditTrip(trip) ? '<div style="margin-top:14px"><button class="btn btn-accent" data-action="' + addAction + '">' + icon('plus') + ' ' + esc(addLabel) + '</button></div>' : '') +
+    '</div>';
 }
 
-function tabHead(title, addAction, addLabel) {
+function tabHead(trip, title, addAction, addLabel) {
   return '<div class="tab-panel-head"><h2>' + esc(title) + '</h2>' +
-    '<button class="btn btn-accent" data-write-only data-action="' + addAction + '">' + icon('plus') + ' ' + esc(addLabel) + '</button></div>';
+    (canFullyEditTrip(trip) ? '<button class="btn btn-accent" data-action="' + addAction + '">' + icon('plus') + ' ' + esc(addLabel) + '</button>' : '') +
+    '</div>';
 }
 
 /* ---------- 15. Render: Destinations tab ------------------------------ */
 
 function renderDestinationsTab(trip) {
-  if (trip.destinations.length === 0) return emptyTab('pin', 'No destinations yet', 'Add the places or areas you\'ll be based in — activities and accommodation can then be tagged to them.', 'new-destination', 'Add destination');
+  if (trip.destinations.length === 0) return emptyTab(trip, 'pin', 'No destinations yet', 'Add the places or areas you\'ll be based in — activities and accommodation can then be tagged to them.', 'new-destination', 'Add destination');
   var sorted = trip.destinations.slice().sort(function (a, b) { return (a.arriveDate || '') < (b.arriveDate || '') ? -1 : 1; });
   var rows = sorted.map(function (d) {
     var tzOffset = d.timezone ? tzOffsetLabel(d.timezone) : '';
     var tzTag = d.timezone ? '<span class="tag">' + icon('clock') + esc(d.timezone) + (tzOffset ? ' (' + esc(tzOffset) + ')' : '') + '</span>' : '';
+    var destTags = tzTag + companionTags(trip, d.companions);
     return '<div class="item-row"><div class="item-icon">' + icon('pin') + '</div><div class="item-main">' +
       '<div class="item-title-row"><span class="item-title">' + esc(d.name) + (d.country ? ', ' + esc(d.country) : '') + '</span></div>' +
       '<div class="item-sub">' + formatDateShort(d.arriveDate) + ' – ' + formatDateShort(d.departDate) + '</div>' +
-      (tzTag ? '<div class="item-tags">' + tzTag + '</div>' : '') +
+      (destTags ? '<div class="item-tags">' + destTags + '</div>' : '') +
       (d.notes ? '<div class="item-sub">' + esc(d.notes) + '</div>' : '') +
       '</div>' + rowActions(trip, 'destination', d) + '</div>';
   }).join('');
-  return tabHead('Destinations', 'new-destination', 'Add destination') + '<div class="item-list">' + rows + '</div>';
+  return tabHead(trip, 'Destinations', 'new-destination', 'Add destination') + '<div class="item-list">' + rows + '</div>';
 }
 
 /* ---------- 16. Render: Activities tab -------------------------------- */
 
 function renderActivitiesTab(trip) {
-  if (trip.activities.length === 0) return emptyTab('ticket', 'No activities yet', 'Tours, museum visits, dinner reservations — anything with a date and time.', 'new-activity', 'Add activity');
+  if (trip.activities.length === 0) return emptyTab(trip, 'ticket', 'No activities yet', 'Tours, museum visits, dinner reservations — anything with a date and time.', 'new-activity', 'Add activity');
   var sorted = trip.activities.slice().sort(function (a, b) { return ((a.date || '') + (a.startTime || '')) < ((b.date || '') + (b.startTime || '')) ? -1 : 1; });
   var rows = sorted.map(function (a) {
     var dest = a.destinationId ? byId(trip.destinations, a.destinationId) : null;
@@ -2306,6 +2887,7 @@ function renderActivitiesTab(trip) {
     if (a.bookingRef) tags.push('<span class="tag">' + icon('ticket') + esc(a.bookingRef) + copyBtn(a.bookingRef, 'booking ref') + '</span>');
     if (contact) tags.push('<span class="tag">' + icon('user') + esc(contact.name) + '</span>');
     if (a.costAmount) tags.push(costTag(trip, a.costAmount, a.costCurrency, a.costRate));
+    if (a.companions && a.companions.length) tags.push(companionTags(trip, a.companions));
     return '<div class="item-row"><div class="item-icon">' + icon('ticket') + '</div><div class="item-main">' +
       '<div class="item-title-row"><span class="item-title">' + esc(a.title) + '</span><span class="item-sub">' + formatDateShort(a.date) + (a.startTime ? ' · ' + a.startTime : '') + (a.endTime ? '–' + a.endTime : '') + '</span></div>' +
       (a.address ? '<div class="item-sub">' + esc(a.address) + ' ' + mapsLink(a.address) + '</div>' : '') +
@@ -2313,13 +2895,13 @@ function renderActivitiesTab(trip) {
       (a.notes ? '<div class="item-sub" style="margin-top:6px">' + esc(a.notes) + '</div>' : '') +
       '</div>' + rowActions(trip, 'activity', a) + '</div>';
   }).join('');
-  return tabHead('Activities', 'new-activity', 'Add activity') + '<div class="item-list">' + rows + '</div>';
+  return tabHead(trip, 'Activities', 'new-activity', 'Add activity') + '<div class="item-list">' + rows + '</div>';
 }
 
 /* ---------- 17. Render: Transport tab ---------------------------------- */
 
 function renderTransportTab(trip) {
-  if (trip.transport.length === 0) return emptyTab('plane', 'No transport legs yet', 'Flights, trains, buses, ferries or drives — each leg can span overnight, and will show up on both days in the Timeline.', 'new-transport', 'Add transport leg');
+  if (trip.transport.length === 0) return emptyTab(trip, 'plane', 'No transport legs yet', 'Flights, trains, buses, ferries or drives — each leg can span overnight, and will show up on both days in the Timeline.', 'new-transport', 'Add transport leg');
   var sorted = trip.transport.slice().sort(function (a, b) { return (a.departDateTime || '') < (b.departDateTime || '') ? -1 : 1; });
   var rows = sorted.map(function (t) {
     var contact = t.contactId ? byId(trip.contacts, t.contactId) : null;
@@ -2333,6 +2915,7 @@ function renderTransportTab(trip) {
     if (overnight) tags.push('<span class="tag">' + icon('moon') + 'Overnight</span>');
     if (t.costAmount) tags.push(costTag(trip, t.costAmount, t.costCurrency, t.costRate));
     if (t.pointsAmount) tags.push('<span class="tag">' + icon('star') + esc(t.pointsAmount) + (t.pointsProgram ? ' ' + esc(t.pointsProgram) : ' points') + '</span>');
+    if (t.companions && t.companions.length) tags.push(companionTags(trip, t.companions));
     return '<div class="item-row"><div class="item-icon">' + icon(transportIconKey(t.mode)) + '</div><div class="item-main">' +
       '<div class="item-title-row"><span class="item-title">' + esc(t.fromLocation) + ' ' + icon('arrowRight') + ' ' + esc(t.toLocation) + (t.flightNumber ? ' <span class="item-sub" style="display:inline">(' + esc(t.flightNumber) + ')</span>' : '') + '</span></div>' +
       '<div class="item-sub">' + formatDateShort(dateOnly(t.departDateTime)) + ' ' + timeOnly(t.departDateTime) +
@@ -2341,13 +2924,13 @@ function renderTransportTab(trip) {
       (t.notes ? '<div class="item-sub" style="margin-top:6px">' + esc(t.notes) + '</div>' : '') +
       '</div>' + rowActions(trip, 'transport', t) + '</div>';
   }).join('');
-  return tabHead('Transport', 'new-transport', 'Add transport leg') + '<div class="item-list">' + rows + '</div>';
+  return tabHead(trip, 'Transport', 'new-transport', 'Add transport leg') + '<div class="item-list">' + rows + '</div>';
 }
 
 /* ---------- 18. Render: Accommodation tab ------------------------------- */
 
 function renderAccommodationTab(trip) {
-  if (trip.accommodation.length === 0) return emptyTab('bed', 'No accommodation yet', 'Hotels, hostels, apartments — check-in and check-out can each carry their own time.', 'new-accommodation', 'Add accommodation');
+  if (trip.accommodation.length === 0) return emptyTab(trip, 'bed', 'No accommodation yet', 'Hotels, hostels, apartments — check-in and check-out can each carry their own time.', 'new-accommodation', 'Add accommodation');
   var sorted = trip.accommodation.slice().sort(function (a, b) { return (a.checkIn || '') < (b.checkIn || '') ? -1 : 1; });
   var rows = sorted.map(function (ac) {
     var contact = ac.contactId ? byId(trip.contacts, ac.contactId) : null;
@@ -2355,6 +2938,7 @@ function renderAccommodationTab(trip) {
     if (ac.bookingRef) tags.push('<span class="tag">' + icon('ticket') + esc(ac.bookingRef) + copyBtn(ac.bookingRef, 'booking ref') + '</span>');
     if (contact) tags.push('<span class="tag">' + icon('user') + esc(contact.name) + '</span>');
     if (ac.costAmount) tags.push(costTag(trip, ac.costAmount, ac.costCurrency, ac.costRate));
+    if (ac.companions && ac.companions.length) tags.push(companionTags(trip, ac.companions));
     return '<div class="item-row"><div class="item-icon">' + icon('bed') + '</div><div class="item-main">' +
       '<div class="item-title-row"><span class="item-title">' + esc(ac.name) + '</span></div>' +
       '<div class="item-sub">' + formatDateShort(dateOnly(ac.checkIn)) + ' ' + timeOnly(ac.checkIn) +
@@ -2364,13 +2948,13 @@ function renderAccommodationTab(trip) {
       (ac.notes ? '<div class="item-sub" style="margin-top:6px">' + esc(ac.notes) + '</div>' : '') +
       '</div>' + rowActions(trip, 'accommodation', ac) + '</div>';
   }).join('');
-  return tabHead('Accommodation', 'new-accommodation', 'Add accommodation') + '<div class="item-list">' + rows + '</div>';
+  return tabHead(trip, 'Accommodation', 'new-accommodation', 'Add accommodation') + '<div class="item-list">' + rows + '</div>';
 }
 
 /* ---------- 19. Render: Contacts tab -------------------------------------- */
 
 function renderContactsTab(trip) {
-  if (trip.contacts.length === 0) return emptyTab('users', 'No contacts yet', 'Hotel front desks, tour operators, guides — save them here to link from activities, transport and accommodation.', 'new-contact', 'Add contact');
+  if (trip.contacts.length === 0) return emptyTab(trip, 'users', 'No contacts yet', 'Hotel front desks, tour operators, guides — save them here to link from activities, transport and accommodation.', 'new-contact', 'Add contact');
   var rows = trip.contacts.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
     var tags = [];
     if (c.phone) tags.push('<span class="tag">' + esc(c.phone) + copyBtn(c.phone, 'phone') + '</span>');
@@ -2382,7 +2966,35 @@ function renderContactsTab(trip) {
       (c.notes ? '<div class="item-sub" style="margin-top:6px">' + esc(c.notes) + '</div>' : '') +
       '</div>' + rowActions(trip, 'contact', c) + '</div>';
   }).join('');
-  return tabHead('Contacts', 'new-contact', 'Add contact') + '<div class="item-list">' + rows + '</div>';
+  return tabHead(trip, 'Contacts', 'new-contact', 'Add contact') + '<div class="item-list">' + rows + '</div>';
+}
+
+/* ---------- 19b. Render: Companions tab ------------------------------- */
+
+// Companions are who to tag on individual destinations/activities/
+// accommodation/transport (see the 'tag-picker' field type in
+// fieldHtml()) — this tab is just where you add the people, not where you
+// tag them to anything. There's deliberately no "used on N items" count
+// here: it'd mean scanning all four other lists on every render just for
+// a number nobody's asked for — if you want to know what someone's tagged
+// to, that's what each tab's own item tags already show.
+function companionTags(trip, companionIds) {
+  return (companionIds || [])
+    .map(function (id) { return byId(trip.companions, id); })
+    .filter(Boolean)
+    .map(function (c) { return '<span class="tag">' + icon('companion') + esc(c.name) + '</span>'; })
+    .join('');
+}
+
+function renderCompanionsTab(trip) {
+  if (trip.companions.length === 0) return emptyTab(trip, 'companion', 'No companions yet', 'Add the people traveling with you — then tag them to destinations, activities, accommodation and transport to track who\'s on what.', 'new-companion', 'Add companion');
+  var rows = trip.companions.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
+    return '<div class="item-row"><div class="item-icon">' + icon('companion') + '</div><div class="item-main">' +
+      '<div class="item-title-row"><span class="item-title">' + esc(c.name) + '</span></div>' +
+      (c.notes ? '<div class="item-sub">' + esc(c.notes) + '</div>' : '') +
+      '</div>' + rowActions(trip, 'companion', c) + '</div>';
+  }).join('');
+  return tabHead(trip, 'Companions', 'new-companion', 'Add companion') + '<div class="item-list">' + rows + '</div>';
 }
 
 /* ---------- 19b. Map tab ---------------------------------------------------
@@ -2757,9 +3369,13 @@ function renderExpensesTab(trip) {
   var catTiles = Object.keys(byCategory).sort(function (a, b) { return byCategory[b] - byCategory[a]; }).map(function (cat) {
     return '<div class="stat-tile"><div class="stat-label">' + esc(cat) + '</div><div class="stat-value">' + money(byCategory[cat], trip.homeCurrency) + '</div></div>';
   }).join('');
+  // Expenses is a full-scope-only tab to begin with (see tabsForTrip() —
+  // a scoped "user"/"viewer" grant never even gets a way to land here),
+  // but "Add expense" is still gated explicitly rather than assumed, in
+  // case that ever changes.
   var head = '<div class="tab-panel-head"><h2>Expenses</h2>' +
     '<div style="display:flex;gap:8px"><button class="btn" data-action="export-csv">' + icon('download') + ' Export CSV</button>' +
-    '<button class="btn btn-accent" data-write-only data-action="new-expense">' + icon('plus') + ' Add expense</button></div></div>';
+    (canFullyEditTrip(trip) ? '<button class="btn btn-accent" data-action="new-expense">' + icon('plus') + ' Add expense</button>' : '') + '</div></div>';
 
   if (lines.length === 0) {
     return head + '<div class="empty-state">' + icon('wallet') + '<h3>No expenses logged yet</h3>' +
@@ -2780,19 +3396,123 @@ function renderExpensesTab(trip) {
     '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount</th><th class="num">' + esc(trip.homeCurrency) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
+/* ---------- 21b. Render: "Share this trip" panel (Superuser only) -----
+   A trip's Superuser — its owner, or (invisibly) the site's uber-user —
+   is the only one who can decide who else gets access to THIS trip, and
+   what role they get (see canManageSharing()). This talks to two small
+   dedicated endpoints (/api/trip-grants, /api/trip-grants/revoke) rather
+   than going through the usual updateState()/persist() save path,
+   because sharing deliberately ISN'T part of a trip's regular saved
+   data the way a destination or activity is — see the big "SAVING
+   SAFELY" comment in src/worker.js for why ownerId/grants are kept
+   entirely out of the normal POST /api/data save. */
+
+var GRANT_ROLE_LABELS = {
+  admin: 'Admin — full read/write',
+  user: 'User — read/write, own items only',
+  viewer: 'Viewer — read-only, own items only'
+};
+
+function renderSharePanel(trip) {
+  var grants = (trip.grants || []).slice().sort(function (a, b) { return a.username.localeCompare(b.username); });
+  var rows = grants.map(function (g) {
+    var companion = g.companionId ? byId(trip.companions, g.companionId) : null;
+    var scopeText = (g.role === 'user' || g.role === 'viewer') ? ' as ' + (companion ? esc(companion.name) : '(companion removed)') : '';
+    return '<div class="item-row"><div class="item-icon">' + icon('user') + '</div><div class="item-main">' +
+      '<div class="item-title-row"><span class="item-title">' + esc(g.username) + '</span><span class="tag">' + esc(GRANT_ROLE_LABELS[g.role] || g.role) + scopeText + '</span></div>' +
+      '</div><div class="item-actions">' +
+        '<button class="btn btn-icon btn-ghost" data-action="revoke-grant" data-account-id="' + esc(g.accountId) + '" data-username="' + esc(g.username) + '" title="Revoke access">' + icon('trash') + '</button>' +
+      '</div></div>';
+  }).join('');
+  var companionOptions = (trip.companions || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
+    return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+  }).join('');
+  return '<div class="share-panel">' +
+    '<h3 style="font-size:15px;margin-bottom:4px">Share this trip</h3>' +
+    '<p class="field-hint" style="margin-bottom:12px">' +
+      (trip.ownerUsername ? 'Owned by ' + esc(trip.ownerUsername) + '. ' : '') +
+      'Only the owner (or the site owner) can grant or revoke access here — not even someone with Admin access to this trip can.</p>' +
+    (rows ? '<div class="item-list">' + rows + '</div>' : '<p class="field-hint">Nobody else has been given access to this trip yet.</p>') +
+    '<form id="share-form" class="share-form-row">' +
+      '<div class="field"><label>Username</label><input type="text" name="username" placeholder="an existing account" required></div>' +
+      '<div class="field"><label>Role</label><select name="role" id="share-role-select">' +
+        '<option value="user" selected>' + esc(GRANT_ROLE_LABELS.user) + '</option>' +
+        '<option value="viewer">' + esc(GRANT_ROLE_LABELS.viewer) + '</option>' +
+        '<option value="admin">' + esc(GRANT_ROLE_LABELS.admin) + '</option>' +
+      '</select></div>' +
+      '<div class="field" id="share-companion-field">' +
+        '<label>As companion</label>' +
+        '<select name="companionId">' + (companionOptions || '<option value="">Add a companion first, on the Companions tab</option>') + '</select>' +
+      '</div>' +
+      '<button type="submit" class="btn btn-primary">Share</button>' +
+    '</form>' +
+    '<p class="field-hint" style="margin-top:8px">The account has to already exist first — see "Manage accounts" (only the site owner can create one).</p>' +
+  '</div>';
+}
+
+// Both grant/revoke reload the trip data afterwards (rather than
+// patching `state` in place) — simplest way to pick up the server's
+// authoritative, freshly-recomputed `grants`/`myGrant` rather than
+// trying to guess what they'd now be.
+async function submitShareGrant(payload) {
+  try {
+    var res = await fetch('/WayPoint/api/trip-grants', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) { showToast(body.error || 'Could not share this trip.'); return; }
+    showToast('Shared with ' + payload.username);
+    state = await loadInitialState();
+    render();
+  } catch (err) {
+    showToast('Could not share this trip — check your connection and try again.');
+  }
+}
+
+function revokeGrant(tripId, accountId, username) {
+  openConfirm({
+    title: 'Revoke access?', message: 'This removes ' + username + '\'s access to this trip. They\'d need to be shared with again to get it back.', confirmLabel: 'Revoke',
+    onConfirm: async function () {
+      try {
+        var res = await fetch('/WayPoint/api/trip-grants/revoke', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tripId: tripId, accountId: accountId })
+        });
+        var body = await res.json().catch(function () { return {}; });
+        if (!res.ok) { showToast(body.error || 'Could not revoke access.'); return; }
+        showToast('Access revoked');
+        state = await loadInitialState();
+        render();
+      } catch (err) {
+        showToast('Could not revoke access — check your connection and try again.');
+      }
+    }
+  });
+}
+
 /* ---------- 22. Render: Settings tab ------------------------------------------ */
 
 function renderSettingsTab(trip) {
   var currencies = usedCurrencies(trip);
+  var canEdit = canFullyEditTrip(trip);
   var rateRows = currencies.map(function (cur) {
     var rate = trip.currencyRates[cur];
     return '<div class="field-row"><div class="field"><label>1 ' + esc(cur) + ' =</label>' +
-      '<input type="number" step="0.0001" name="rate_' + cur + '" value="' + (rate !== undefined ? esc(rate) : '') + '" placeholder="e.g. 0.79"></div>' +
+      '<input type="number" step="0.0001" name="rate_' + cur + '" value="' + (rate !== undefined ? esc(rate) : '') + '" placeholder="e.g. 0.79"' + (canEdit ? '' : ' disabled') + '></div>' +
       '<div class="field"><label>&nbsp;</label><div class="field-hint" style="margin-top:11px">' + esc(trip.homeCurrency) + ' per 1 ' + esc(cur) + '</div></div></div>';
   }).join('');
+  // The rates form itself is still shown to a scoped "user"/"viewer"
+  // grant (it's useful, honest information — what currencies this trip
+  // uses and at what rate), just with every input disabled and no Save
+  // button, rather than hidden outright the way Add/Edit/Delete controls
+  // are elsewhere. Trip-level settings like this aren't something a
+  // "user" grant can change either way (see canFullyEditTrip()).
   return (
     '<div class="tab-panel-head"><h2>Settings</h2></div>' +
-    '<form id="rates-form" data-write-only>' +
+    '<form id="rates-form">' +
       '<div class="field"><label>Home currency</label>' +
       // Hand-built rather than through suggestInputHtml() (this form
       // isn't part of the fieldHtml()/openForm() modal system), but
@@ -2801,26 +3521,27 @@ function renderSettingsTab(trip) {
       // currency/country/city/timezone/airport field — see the
       // "Generic suggestion dropdown" section further down.
       '<div class="suggest-input-wrap" style="max-width:140px">' +
-        '<input type="text" autocomplete="off" data-suggest-type="currency" maxlength="6" style="text-transform:uppercase" name="homeCurrency" value="' + esc(trip.homeCurrency) + '">' +
+        '<input type="text" autocomplete="off" data-suggest-type="currency" maxlength="6" style="text-transform:uppercase" name="homeCurrency" value="' + esc(trip.homeCurrency) + '"' + (canEdit ? '' : ' disabled') + '>' +
         '<div class="suggest-list" id="homeCurrency-suggest"></div>' +
       '</div>' +
       '<div class="field-hint">Every total on this trip converts into this currency.</div></div>' +
       (currencies.length
         ? '<div class="field"><label>Fixed exchange rates for this trip</label><div class="field-hint" style="margin-bottom:10px">Used whenever an item in that currency doesn\'t have its own rate override. One rate per currency for the whole trip, as you set up.</div><div class="rate-table">' + rateRows + '</div></div>'
         : '<p class="field-hint">No foreign-currency costs logged yet — rates will appear here once you add one.</p>') +
-      '<button type="submit" class="btn btn-primary">Save currency settings</button>' +
+      (canEdit ? '<button type="submit" class="btn btn-primary">Save currency settings</button>' : '') +
     '</form>' +
-    '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)">' +
+    (canEdit ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)">' +
       '<h3 style="font-size:15px;margin-bottom:8px">Integrations</h3>' +
       '<p class="field-hint">The "Look up" button on the transport form (Flight number field) uses the ' +
       '<strong>AeroDataBox Free Tier, through RapidAPI</strong>, to fill in the airline, airports and ' +
       'scheduled times for a flight number + date. This is a per-site setup, not something stored in this ' +
       'trip — the API key lives only as a Cloudflare Worker secret, never in this app itself.</p>' +
-    '</div>' +
-    '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)" data-write-only>' +
+    '</div>' : '') +
+    (canManageSharing(trip) ? renderSharePanel(trip) : '') +
+    (canEdit ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)">' +
       '<h3 style="font-size:15px;margin-bottom:8px">Danger zone</h3>' +
       '<button class="btn btn-danger" data-action="delete-trip" data-id="' + trip.id + '">' + icon('trash') + ' Delete this trip</button>' +
-    '</div>'
+    '</div>' : '')
   );
 }
 
@@ -2828,7 +3549,11 @@ function renderSettingsTab(trip) {
 
 function render() {
   var app = document.getElementById('app');
-  app.innerHTML = (currentView === 'trip' && currentTripId) ? renderTripView() : renderDashboard();
+  if (currentView === 'manage-users') {
+    app.innerHTML = renderManageUsersView();
+  } else {
+    app.innerHTML = (currentView === 'trip' && currentTripId) ? renderTripView() : renderDashboard();
+  }
 
   if (currentView === 'trip' && currentTab === 'map') {
     // The Map tab's HTML (including a fresh, empty #map-canvas div) was
@@ -2898,10 +3623,18 @@ document.addEventListener('click', function (e) {
     return;
   }
   if (action === 'lookup-flight') { performFlightLookup(el); return; }
+  if (action === 'logout') { doLogout(); return; }
+  if (action === 'open-manage-users') { loadAndRenderManageUsers(); return; }
+  if (action === 'new-user') { openUserForm(); return; }
+  if (action === 'edit-user') { openUserForm(managedUsers.find(function (u) { return u.id === el.dataset.id; })); return; }
+  if (action === 'delete-user') { deleteUserAccount(el.dataset.id); return; }
   if (action === 'new-trip') { openTripForm(); return; }
   if (action === 'edit-trip') { openTripForm(byId(state.trips, el.dataset.id)); return; }
   if (action === 'delete-trip') { deleteTrip(el.dataset.id); return; }
   if (action === 'export-csv') { exportCsv(trip); return; }
+  // "Share this trip" panel (Settings tab, Superuser-only — see
+  // renderSharePanel()): revoking someone's access to the CURRENT trip.
+  if (action === 'revoke-grant') { revokeGrant(currentTripId, el.dataset.accountId, el.dataset.username); return; }
 
   if (!trip) return;
   if (action === 'new-destination') { openDestinationForm(trip); return; }
@@ -2919,6 +3652,9 @@ document.addEventListener('click', function (e) {
   if (action === 'new-contact') { openContactForm(trip); return; }
   if (action === 'edit-contact') { openContactForm(trip, byId(trip.contacts, el.dataset.id)); return; }
   if (action === 'delete-contact') { deleteEntity(trip, 'contacts', el.dataset.id, 'contact'); return; }
+  if (action === 'new-companion') { openCompanionForm(trip); return; }
+  if (action === 'edit-companion') { openCompanionForm(trip, byId(trip.companions, el.dataset.id)); return; }
+  if (action === 'delete-companion') { deleteEntity(trip, 'companions', el.dataset.id, 'companion'); return; }
   if (action === 'new-expense') { openExpenseForm(trip); return; }
   if (action === 'edit-expense') { openExpenseForm(trip, byId(trip.expenses, el.dataset.id)); return; }
   if (action === 'delete-expense') { deleteEntity(trip, 'expenses', el.dataset.id, 'expense'); return; }
@@ -2944,7 +3680,60 @@ document.addEventListener('change', function (e) {
   if (container) container.innerHTML = fieldsHtml(resolveFields(cfg, values), values, cfg.trip || {});
 });
 
+// Powers the "Share this trip" form's own bit of "change something,
+// something else on screen updates" behavior (see renderSharePanel()):
+// the "As companion" field only makes sense for a "user"/"viewer" grant
+// (both are scoped to one companion), not for "admin" (full read/write,
+// nothing to scope) — so it's hidden as soon as Admin is picked, and
+// shown again for the other two roles.
+document.addEventListener('change', function (e) {
+  if (e.target.id === 'share-role-select') {
+    var companionField = document.getElementById('share-companion-field');
+    if (companionField) companionField.style.display = e.target.value === 'admin' ? 'none' : '';
+  }
+});
+
 document.addEventListener('submit', function (e) {
+  if (e.target.id === 'login-form') {
+    e.preventDefault();
+    var fdLogin = new FormData(e.target);
+    submitAuthForm('/WayPoint/api/login', { username: fdLogin.get('username'), password: fdLogin.get('password') });
+    return;
+  }
+  if (e.target.id === 'setup-form') {
+    e.preventDefault();
+    var fdSetup = new FormData(e.target);
+    submitAuthForm('/WayPoint/api/setup', { setupKey: fdSetup.get('setupKey'), username: fdSetup.get('username'), password: fdSetup.get('password') });
+    return;
+  }
+  if (e.target.id === 'user-form') {
+    e.preventDefault();
+    var fdUser = new FormData(e.target);
+    var existingId = e.target.dataset.existingId || '';
+    var userPayload = { username: fdUser.get('username') || '' };
+    var userPassword = fdUser.get('password') || '';
+    if (userPassword) userPayload.password = userPassword;
+    if (existingId) userPayload.id = existingId;
+    saveUserAccount(userPayload);
+    return;
+  }
+  if (e.target.id === 'share-form') {
+    e.preventDefault();
+    var fdShare = new FormData(e.target);
+    var shareRole = fdShare.get('role') || 'user';
+    var sharePayload = { tripId: currentTripId, username: fdShare.get('username') || '', role: shareRole };
+    // companionId is only meaningful (and only sent) for "user"/"viewer"
+    // — see permissionForTrip() in src/worker.js, which ignores it for
+    // "admin" regardless, but there's no reason to send it at all.
+    if (shareRole !== 'admin') sharePayload.companionId = fdShare.get('companionId') || '';
+    // No explicit form reset needed here on success -- submitShareGrant()
+    // reloads `state` and calls render(), which rebuilds this whole panel
+    // (and its form) fresh from the server's response either way. On
+    // failure the typed values are left exactly as they were, so nothing
+    // has to be retyped after fixing whatever the error toast reported.
+    submitShareGrant(sharePayload);
+    return;
+  }
   if (e.target.id === 'entity-form') {
     e.preventDefault();
     var cfg = window.__formConfig;
@@ -2959,6 +3748,14 @@ document.addEventListener('submit', function (e) {
   }
   if (e.target.id === 'rates-form') {
     e.preventDefault();
+    // Every input in this form is rendered `disabled` for a scoped
+    // "user"/"viewer" grant (see renderSettingsTab()), so this shouldn't
+    // normally be reachable for one at all -- this check is just a
+    // belt-and-braces guard against an unusual browser's implicit-submit
+    // behavior with a form full of disabled fields. The Worker would
+    // reject the resulting save either way (see "SAVING SAFELY" in
+    // src/worker.js), but there's no reason to even try.
+    if (!canFullyEditTrip(currentTrip())) return;
     var fd2 = new FormData(e.target);
     updateState(function (next) {
       var t = byId(next.trips, currentTripId);
@@ -2980,17 +3777,12 @@ document.addEventListener('submit', function (e) {
    page for the first time. */
 
 (async function init() {
-  // Load whatever was last saved (or a blank { trips: [] } if this is
-  // the very first visit, or the load failed) before we draw anything.
-  state = await loadInitialState();
-
-  try {
-    var nav = JSON.parse(sessionStorage.getItem('waypoint-nav') || 'null');
-    if (nav && nav.view === 'trip' && byId(state.trips, nav.tripId)) {
-      currentView = 'trip'; currentTripId = nav.tripId; currentTab = nav.tab || 'timeline';
-    }
-  } catch (e) { /* ignore malformed/unavailable sessionStorage */ }
-  render();
+  // Find out who (if anyone) is already logged in on this browser, then
+  // hand off to renderBoot() to decide what to actually show — the login
+  // screen, or (once state is loaded) the normal app. See section 4b,
+  // "Auth", further up for both of these.
+  await checkAuth();
+  await renderBoot();
 })();
 </script>
 </body>
