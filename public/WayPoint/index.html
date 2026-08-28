@@ -492,9 +492,34 @@ function esc(value) {
     .replace(/'/g, '&#39;');
 }
 
-function byId(list, id) {
-  return (list || []).find(function (x) { return x.id === id; });
+// Finds one item in `list` by its id. Most of Waypoint's data now uses a
+// typed id field name instead of a generic `id` -- a trip's own id field
+// is `tripId`, a destination's is `destinationId`, and so on (see the
+// "SCHEMA NOTE" comment in src/worker.js for why). Pass which field to
+// match against as `idField` -- e.g. byId(trip.destinations, someId,
+// 'destinationId'). Account/login records (see managedUsers below) still
+// use the plain `id` field, which is why that's the default when
+// `idField` is left out.
+function byId(list, id, idField) {
+  var field = idField || 'id';
+  return (list || []).find(function (x) { return x[field] === id; });
 }
+
+// Maps a trip item type -- however it's referred to, whether the plural
+// key it's stored under on the trip (e.g. "destinations") or the
+// singular name used in click-action strings like "edit-destination" --
+// to the name of that item's own id field. Centralised here so
+// deleteEntity() and rowActions() (further down) both stay in sync about
+// what each item type's id field is actually called.
+var ENTITY_ID_FIELDS = {
+  destination: 'destinationId', destinations: 'destinationId',
+  activity: 'activityId', activities: 'activityId',
+  transport: 'transportId',
+  accommodation: 'accommodationId',
+  contact: 'contactId', contacts: 'contactId',
+  companion: 'companionId', companions: 'companionId',
+  expense: 'expenseId', expenses: 'expenseId'
+};
 
 // Deep-clones the app state before we mutate it, so a half-finished
 // edit never leaks into the UI before it's actually saved.
@@ -697,6 +722,24 @@ var managedUsers = [];
 // This function does the fetching and always resolves to a valid
 // { trips: [...] } object, even if the request fails, so the rest of
 // the app never has to worry about a missing or malformed response.
+// True only while `state` is known to be a faithful copy of what the
+// server actually holds. Set to false the moment a load fails, which is
+// what stops persist() (below) from ever saving over real data with a
+// state that was never really loaded.
+//
+// WHY THIS EXISTS — this is the most dangerous failure mode this whole
+// app has. A trip is deleted by being LEFT OUT of what the browser sends
+// back (there's no separate delete endpoint — see "SAVING SAFELY" in
+// src/worker.js). So if a load fails and we fall back to "no trips at
+// all", the very next edit would POST an empty list and the server would
+// read that as "delete everything this account can see". For the site
+// owner's account, which can see EVERY trip, that's the entire site's
+// data gone, from one failed request and one subsequent click. The
+// server refuses a save that would delete more than one trip at once as
+// its own backstop, but the browser shouldn't be sending it in the first
+// place.
+var stateIsTrustworthy = false;
+
 async function loadInitialState() {
   try {
     var res = await fetch('/WayPoint/api/data', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
@@ -704,10 +747,12 @@ async function loadInitialState() {
     var parsed = await res.json();
     if (!parsed || typeof parsed !== 'object') parsed = {};
     if (!parsed.trips) parsed.trips = [];
+    stateIsTrustworthy = true;
     return parsed;
   } catch (e) {
     console.error('Waypoint: could not load saved data from the server', e);
-    showToastSafe('Could not load your saved trips — starting from a blank slate. Refresh to try again.');
+    stateIsTrustworthy = false;
+    showToastSafe('Could not load your trips. Your data is safe on the server, but this page can\'t show it — refresh to try again. Editing is turned off until then, so nothing here can overwrite it.');
     return { trips: [] };
   }
 }
@@ -750,6 +795,20 @@ function updateState(mutator) {
 // in the background, updating the little "Saved" / "Saving…" label in
 // the top bar so you can always tell whether your last change actually
 // made it to the server.
+// Save queue. Only ever ONE POST to /api/data is in flight at a time,
+// and if more edits happen while one is running, only the newest state
+// is sent afterwards (intermediate ones are already superseded by it —
+// every POST carries the whole picture, not a diff).
+//
+// Two real problems this avoids. First, ordering: two overlapping saves
+// can finish in either order, so without this an older state could land
+// last and quietly undo the newer edit. Second, and worse: deleting two
+// trips in quick succession used to put two requests in flight whose
+// bodies BOTH omitted the second trip, which the server (rightly) treats
+// as a suspicious multi-trip deletion and rejects outright.
+var saveInFlight = false;
+var pendingSaveState = null;
+
 async function persist(newState) {
   state = newState;
   try {
@@ -758,20 +817,53 @@ async function persist(newState) {
 
   render();
 
+  // See stateIsTrustworthy's comment above: refuse to save at all rather
+  // than risk writing a state we never successfully loaded over real
+  // data. The edit stays on screen so nothing typed is lost visually,
+  // but it is NOT saved, and the indicator says so plainly.
+  if (!stateIsTrustworthy) {
+    setSaveStatus('unsaved', 'Not saved — refresh');
+    showToast('This change was NOT saved. This page couldn\'t load your trips from the server, so it won\'t write anything back over them. Refresh the page, then make the change again.');
+    return;
+  }
+
+  if (saveInFlight) { pendingSaveState = state; return; }
+  sendSave(state);
+}
+
+// The actual network half of persist(), split out so that draining the
+// queue below doesn't re-run persist()'s render() — re-rendering for a
+// save that changed nothing on screen would, among other things, tear
+// down and rebuild the Leaflet map mid-view (see render()).
+async function sendSave(toSave) {
+  saveInFlight = true;
   setSaveStatus('saving');
   try {
     var res = await fetch('/WayPoint/api/data', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state)
+      body: JSON.stringify(toSave)
     });
-    if (!res.ok) throw new Error('Server responded with status ' + res.status);
+    if (!res.ok) {
+      // The server sends a human-readable explanation for a refused save
+      // (e.g. the multi-trip-deletion guard) — show that rather than a
+      // bare status code, since it tells the person what to actually do.
+      var body = await res.json().catch(function () { return {}; });
+      throw new Error(body.error || ('Server responded with status ' + res.status));
+    }
     setSaveStatus('saved');
   } catch (err) {
     console.error('Waypoint: save failed', err);
     setSaveStatus('error', 'Could not save');
-    showToast('Could not save your change: ' + (err && err.message ? err.message : 'unknown error') + '. Your edit is only kept in this browser tab until it saves successfully.');
+    showToast('Could not save your change: ' + (err && err.message ? err.message : 'unknown error'));
+  } finally {
+    saveInFlight = false;
+    if (pendingSaveState) {
+      var queued = pendingSaveState;
+      pendingSaveState = null;
+      sendSave(queued);
+    }
   }
 }
 
@@ -926,7 +1018,7 @@ async function renderBoot() {
   state = await loadInitialState();
   try {
     var nav = JSON.parse(sessionStorage.getItem('waypoint-nav') || 'null');
-    if (nav && nav.view === 'trip' && byId(state.trips, nav.tripId)) {
+    if (nav && nav.view === 'trip' && byId(state.trips, nav.tripId, 'tripId')) {
       currentView = 'trip'; currentTripId = nav.tripId; currentTab = nav.tab || 'timeline';
     }
   } catch (e) { /* ignore malformed/unavailable sessionStorage */ }
@@ -1193,12 +1285,12 @@ function fieldHtml(field, value, trip, allValues) {
       // uniquely-named checkbox for this companion shows up checked in
       // `allValues` instead. Either source is enough; checking both means
       // this reads correctly whichever situation produced this render.
-      var checked = (Array.isArray(val) && val.indexOf(c.id) !== -1) || (allValues && allValues[field.key + '__' + c.id]);
+      var checked = (Array.isArray(val) && val.indexOf(c.companionId) !== -1) || (allValues && allValues[field.key + '__' + c.companionId]);
       // `field.locked` (see fieldsWithTagPickerLock()) disables every
       // checkbox — a disabled checkbox is left out of the submitted
       // FormData entirely, so readTagPicker() sees no change for this
       // item regardless, matching what the Worker enforces server-side.
-      return '<label class="tag-picker-item"><input type="checkbox" name="' + field.key + '__' + c.id + '"' + (checked ? ' checked' : '') + (field.locked ? ' disabled' : '') + '> ' + esc(c.name) + '</label>';
+      return '<label class="tag-picker-item"><input type="checkbox" name="' + field.key + '__' + c.companionId + '"' + (checked ? ' checked' : '') + (field.locked ? ' disabled' : '') + '> ' + esc(c.name) + '</label>';
     }).join('');
     return '<div class="field" ' + full + '><label>' + esc(field.label) + '</label><div class="tag-picker">' + pickerItems + '</div>' +
       (field.locked ? '<div class="field-hint">Who this is tagged to isn\'t something you can change.</div>' : '') +
@@ -1307,12 +1399,12 @@ function fieldHtml(field, value, trip, allValues) {
       break;
     case 'select-destination':
       inputHtml = '<select name="' + field.key + '"><option value="">—</option>' + (trip.destinations || []).map(function (d) {
-        return '<option value="' + d.id + '" ' + (d.id === val ? 'selected' : '') + '>' + esc(d.name) + '</option>';
+        return '<option value="' + d.destinationId + '" ' + (d.destinationId === val ? 'selected' : '') + '>' + esc(d.name) + '</option>';
       }).join('') + '</select>';
       break;
     case 'select-contact':
       inputHtml = '<select name="' + field.key + '"><option value="">—</option>' + (trip.contacts || []).map(function (c) {
-        return '<option value="' + c.id + '" ' + (c.id === val ? 'selected' : '') + '>' + esc(c.name) + '</option>';
+        return '<option value="' + c.contactId + '" ' + (c.contactId === val ? 'selected' : '') + '>' + esc(c.name) + '</option>';
       }).join('') + '</select>';
       break;
     default:
@@ -1596,7 +1688,7 @@ var EXPENSE_FIELDS = [
    happens on submit (recombining them, and pushing/updating the
    record inside `updateState`). */
 
-function currentTrip() { return byId(state.trips, currentTripId); }
+function currentTrip() { return byId(state.trips, currentTripId, 'tripId'); }
 
 /* ---- Per-trip permissions ---------------------------------------------
    Every trip the server sends back carries a `myGrant` field (set by
@@ -1665,7 +1757,7 @@ function openTripForm(existing) {
     onSubmit: function (v) {
       updateState(function (next) {
         if (existing) {
-          var t = byId(next.trips, existing.id);
+          var t = byId(next.trips, existing.tripId, 'tripId');
           t.name = v.name; t.startDate = v.startDate || ''; t.endDate = v.endDate || '';
           t.homeCurrency = (v.homeCurrency || 'GBP').toUpperCase(); t.notes = v.notes || '';
           // ownerId/grants/myGrant aren't touched here at all -- they
@@ -1674,7 +1766,7 @@ function openTripForm(existing) {
           // regardless (see "SAVING SAFELY" in src/worker.js).
         } else {
           next.trips.push({
-            id: newId(), name: v.name, startDate: v.startDate || '', endDate: v.endDate || '',
+            tripId: newId(), name: v.name, startDate: v.startDate || '', endDate: v.endDate || '',
             homeCurrency: (v.homeCurrency || 'GBP').toUpperCase(), notes: v.notes || '',
             currencyRates: {}, destinations: [], activities: [], transport: [], accommodation: [], contacts: [], companions: [], expenses: [],
             // A cache of place-name -> {lat,lng} lookups for the Map tab (see
@@ -1693,7 +1785,7 @@ function openTripForm(existing) {
             ownerId: currentUser.id, ownerUsername: currentUser.username, grants: [],
             myGrant: { role: 'superuser' }
           });
-          currentTripId = next.trips[next.trips.length - 1].id;
+          currentTripId = next.trips[next.trips.length - 1].tripId;
           currentView = 'trip'; currentTab = 'timeline';
         }
       });
@@ -1708,9 +1800,9 @@ function openDestinationForm(trip, existing) {
     initial: existing || {}, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
-        var t = byId(next.trips, trip.id);
-        var rec = { id: existing ? existing.id : newId(), name: v.name, country: v.country || '', arriveDate: v.arriveDate, departDate: v.departDate, timezone: (v.timezone || '').trim(), companions: readTagPicker(v, 'companions'), notes: v.notes || '' };
-        if (existing) t.destinations[t.destinations.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        var t = byId(next.trips, trip.tripId, 'tripId');
+        var rec = { destinationId: existing ? existing.destinationId : newId(), name: v.name, country: v.country || '', arriveDate: v.arriveDate, departDate: v.departDate, timezone: (v.timezone || '').trim(), companions: readTagPicker(v, 'companions'), notes: v.notes || '' };
+        if (existing) t.destinations[t.destinations.findIndex(function (x) { return x.destinationId === existing.destinationId; })] = rec;
         else t.destinations.push(rec);
       });
     }
@@ -1724,15 +1816,15 @@ function openActivityForm(trip, existing) {
     initial: existing || {}, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
-        var t = byId(next.trips, trip.id);
+        var t = byId(next.trips, trip.tripId, 'tripId');
         var rec = {
-          id: existing ? existing.id : newId(), title: v.title, destinationId: v.destinationId || '',
+          activityId: existing ? existing.activityId : newId(), title: v.title, destinationId: v.destinationId || '',
           date: v.date, startTime: v.startTime || '', endTime: v.endTime || '',
           location: v.location || '', address: v.address || '', bookingRef: v.bookingRef || '',
           contactId: v.contactId || '', costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(),
           costRate: v.costRate || '', receiptRef: v.receiptRef || '', companions: readTagPicker(v, 'companions'), notes: v.notes || ''
         };
-        if (existing) t.activities[t.activities.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        if (existing) t.activities[t.activities.findIndex(function (x) { return x.activityId === existing.activityId; })] = rec;
         else t.activities.push(rec);
       });
     }
@@ -1809,7 +1901,7 @@ function openTransportForm(trip, existing) {
     initial: initial, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
-        var t = byId(next.trips, trip.id);
+        var t = byId(next.trips, trip.tripId, 'tripId');
         // Coordinates are only meaningful for Flight legs — every other
         // mode's "From"/"To" are city-type free text (see
         // transportFieldsForMode()), with no airport code to match
@@ -1831,7 +1923,7 @@ function openTransportForm(trip, existing) {
         var showPoints = paymentType === 'Points' || paymentType === 'Combo';
         var rateOverrideOn = v.costRateOverrideEnabled === 'on' || v.costRateOverrideEnabled === true;
         var rec = {
-          id: existing ? existing.id : newId(), mode: v.mode || 'Other', carrier: v.carrier || '',
+          transportId: existing ? existing.transportId : newId(), mode: v.mode || 'Other', carrier: v.carrier || '',
           flightNumber: v.flightNumber || '', licensePlate: v.licensePlate || '',
           fromLocation: v.fromLocation, toLocation: v.toLocation,
           fromLat: fromCoords ? fromCoords.lat : '', fromLng: fromCoords ? fromCoords.lng : '',
@@ -1846,7 +1938,7 @@ function openTransportForm(trip, existing) {
           pointsAmount: showPoints ? (v.pointsAmount || '') : '',
           receiptRef: v.receiptRef || '', companions: readTagPicker(v, 'companions'), notes: v.notes || ''
         };
-        if (existing) t.transport[t.transport.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        if (existing) t.transport[t.transport.findIndex(function (x) { return x.transportId === existing.transportId; })] = rec;
         else t.transport.push(rec);
       });
     }
@@ -2393,15 +2485,15 @@ function openAccommodationForm(trip, existing) {
     initial: initial, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
-        var t = byId(next.trips, trip.id);
+        var t = byId(next.trips, trip.tripId, 'tripId');
         var rec = {
-          id: existing ? existing.id : newId(), name: v.name, destinationId: v.destinationId || '', address: v.address || '',
+          accommodationId: existing ? existing.accommodationId : newId(), name: v.name, destinationId: v.destinationId || '', address: v.address || '',
           checkIn: combineDateTime(v.checkInDate, v.checkInTime), checkOut: combineDateTime(v.checkOutDate, v.checkOutTime),
           bookingRef: v.bookingRef || '', contactId: v.contactId || '',
           costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(), costRate: v.costRate || '',
           receiptRef: v.receiptRef || '', companions: readTagPicker(v, 'companions'), notes: v.notes || ''
         };
-        if (existing) t.accommodation[t.accommodation.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        if (existing) t.accommodation[t.accommodation.findIndex(function (x) { return x.accommodationId === existing.accommodationId; })] = rec;
         else t.accommodation.push(rec);
       });
     }
@@ -2414,9 +2506,9 @@ function openContactForm(trip, existing) {
     initial: existing || {}, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
-        var t = byId(next.trips, trip.id);
-        var rec = { id: existing ? existing.id : newId(), name: v.name, role: v.role || '', phone: v.phone || '', email: v.email || '', address: v.address || '', notes: v.notes || '' };
-        if (existing) t.contacts[t.contacts.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        var t = byId(next.trips, trip.tripId, 'tripId');
+        var rec = { contactId: existing ? existing.contactId : newId(), name: v.name, role: v.role || '', phone: v.phone || '', email: v.email || '', address: v.address || '', notes: v.notes || '' };
+        if (existing) t.contacts[t.contacts.findIndex(function (x) { return x.contactId === existing.contactId; })] = rec;
         else t.contacts.push(rec);
       });
     }
@@ -2429,9 +2521,9 @@ function openCompanionForm(trip, existing) {
     initial: existing || {}, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
-        var t = byId(next.trips, trip.id);
-        var rec = { id: existing ? existing.id : newId(), name: v.name, notes: v.notes || '' };
-        if (existing) t.companions[t.companions.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        var t = byId(next.trips, trip.tripId, 'tripId');
+        var rec = { companionId: existing ? existing.companionId : newId(), name: v.name, notes: v.notes || '' };
+        if (existing) t.companions[t.companions.findIndex(function (x) { return x.companionId === existing.companionId; })] = rec;
         else t.companions.push(rec);
         // Deliberately NOT touching every destination/activity/
         // accommodation/transport record here to rename a tag — nothing
@@ -2451,13 +2543,13 @@ function openExpenseForm(trip, existing) {
     initial: existing || { category: 'Other' }, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
-        var t = byId(next.trips, trip.id);
+        var t = byId(next.trips, trip.tripId, 'tripId');
         var rec = {
-          id: existing ? existing.id : newId(), description: v.description, category: v.category || 'Other', date: v.date,
+          expenseId: existing ? existing.expenseId : newId(), description: v.description, category: v.category || 'Other', date: v.date,
           amount: v.amount, currency: (v.currency || '').toUpperCase(), rateOverride: v.rateOverride || '',
           receiptRef: v.receiptRef || '', contactId: v.contactId || '', notes: v.notes || ''
         };
-        if (existing) t.expenses[t.expenses.findIndex(function (x) { return x.id === existing.id; })] = rec;
+        if (existing) t.expenses[t.expenses.findIndex(function (x) { return x.expenseId === existing.expenseId; })] = rec;
         else t.expenses.push(rec);
       });
     }
@@ -2465,23 +2557,24 @@ function openExpenseForm(trip, existing) {
 }
 
 function deleteEntity(trip, section, id, label) {
+  var idField = ENTITY_ID_FIELDS[section];
   openConfirm({
     title: 'Delete ' + label + '?', message: 'This can\'t be undone.', confirmLabel: 'Delete',
     onConfirm: function () {
       updateState(function (next) {
-        var t = byId(next.trips, trip.id);
-        t[section] = t[section].filter(function (x) { return x.id !== id; });
+        var t = byId(next.trips, trip.tripId, 'tripId');
+        t[section] = t[section].filter(function (x) { return x[idField] !== id; });
       });
     }
   });
 }
 
 function deleteTrip(id) {
-  var t = byId(state.trips, id);
+  var t = byId(state.trips, id, 'tripId');
   openConfirm({
     title: 'Delete trip?', message: 'This deletes "' + t.name + '" and everything in it — destinations, activities, transport, accommodation, contacts, companions and expenses. This can\'t be undone.', confirmLabel: 'Delete trip',
     onConfirm: function () {
-      updateState(function (next) { next.trips = next.trips.filter(function (x) { return x.id !== id; }); });
+      updateState(function (next) { next.trips = next.trips.filter(function (x) { return x.tripId !== id; }); });
       currentView = 'dashboard'; currentTripId = null;
     }
   });
@@ -2659,12 +2752,12 @@ function renderDashboard() {
     // touch the trip's own name/dates, let alone delete it.
     var cardActions = canFullyEditTrip(trip)
       ? '<div class="card-actions">' +
-          '<button class="btn btn-icon btn-ghost" data-action="edit-trip" data-id="' + trip.id + '" title="Edit trip">' + icon('edit') + '</button>' +
-          '<button class="btn btn-icon btn-ghost" data-action="delete-trip" data-id="' + trip.id + '" title="Delete trip">' + icon('trash') + '</button>' +
+          '<button class="btn btn-icon btn-ghost" data-action="edit-trip" data-id="' + trip.tripId + '" title="Edit trip">' + icon('edit') + '</button>' +
+          '<button class="btn btn-icon btn-ghost" data-action="delete-trip" data-id="' + trip.tripId + '" title="Delete trip">' + icon('trash') + '</button>' +
         '</div>'
       : '';
     return (
-      '<div class="trip-card" data-action="open-trip" data-id="' + trip.id + '">' +
+      '<div class="trip-card" data-action="open-trip" data-id="' + trip.tripId + '">' +
         '<div class="trip-card-top">' +
           '<div><h3>' + esc(trip.name) + '</h3><div class="trip-dates">' +
             (trip.startDate ? formatDateShort(trip.startDate) : 'No dates set') +
@@ -2766,8 +2859,8 @@ function renderTripView() {
   }
   var headerActions = canFullyEditTrip(trip)
     ? '<div class="card-actions">' +
-        '<button class="btn btn-icon btn-ghost" data-action="edit-trip" data-id="' + trip.id + '" title="Edit trip">' + icon('edit') + '</button>' +
-        '<button class="btn btn-icon btn-ghost" data-action="delete-trip" data-id="' + trip.id + '" title="Delete trip">' + icon('trash') + '</button>' +
+        '<button class="btn btn-icon btn-ghost" data-action="edit-trip" data-id="' + trip.tripId + '" title="Edit trip">' + icon('edit') + '</button>' +
+        '<button class="btn btn-icon btn-ghost" data-action="delete-trip" data-id="' + trip.tripId + '" title="Delete trip">' + icon('trash') + '</button>' +
       '</div>'
     : '';
   return (
@@ -2832,9 +2925,10 @@ function rowActions(trip, section, item) {
   // even if it's missing from what they submit).
   var canDelete = canFullyEditTrip(trip);
   if (!canEdit && !canDelete) return '';
+  var itemId = item[ENTITY_ID_FIELDS[section]];
   return '<div class="item-actions">' +
-    (canEdit ? '<button class="btn btn-icon btn-ghost" data-action="edit-' + section + '" data-id="' + item.id + '" title="Edit">' + icon('edit') + '</button>' : '') +
-    (canDelete ? '<button class="btn btn-icon btn-ghost" data-action="delete-' + section + '" data-id="' + item.id + '" title="Delete">' + icon('trash') + '</button>' : '') +
+    (canEdit ? '<button class="btn btn-icon btn-ghost" data-action="edit-' + section + '" data-id="' + itemId + '" title="Edit">' + icon('edit') + '</button>' : '') +
+    (canDelete ? '<button class="btn btn-icon btn-ghost" data-action="delete-' + section + '" data-id="' + itemId + '" title="Delete">' + icon('trash') + '</button>' : '') +
   '</div>';
 }
 
@@ -2879,8 +2973,8 @@ function renderActivitiesTab(trip) {
   if (trip.activities.length === 0) return emptyTab(trip, 'ticket', 'No activities yet', 'Tours, museum visits, dinner reservations — anything with a date and time.', 'new-activity', 'Add activity');
   var sorted = trip.activities.slice().sort(function (a, b) { return ((a.date || '') + (a.startTime || '')) < ((b.date || '') + (b.startTime || '')) ? -1 : 1; });
   var rows = sorted.map(function (a) {
-    var dest = a.destinationId ? byId(trip.destinations, a.destinationId) : null;
-    var contact = a.contactId ? byId(trip.contacts, a.contactId) : null;
+    var dest = a.destinationId ? byId(trip.destinations, a.destinationId, 'destinationId') : null;
+    var contact = a.contactId ? byId(trip.contacts, a.contactId, 'contactId') : null;
     var tags = [];
     if (a.location) tags.push('<span class="tag">' + esc(a.location) + '</span>');
     if (dest) tags.push('<span class="tag">' + icon('pin') + esc(dest.name) + '</span>');
@@ -2904,7 +2998,7 @@ function renderTransportTab(trip) {
   if (trip.transport.length === 0) return emptyTab(trip, 'plane', 'No transport legs yet', 'Flights, trains, buses, ferries or drives — each leg can span overnight, and will show up on both days in the Timeline.', 'new-transport', 'Add transport leg');
   var sorted = trip.transport.slice().sort(function (a, b) { return (a.departDateTime || '') < (b.departDateTime || '') ? -1 : 1; });
   var rows = sorted.map(function (t) {
-    var contact = t.contactId ? byId(trip.contacts, t.contactId) : null;
+    var contact = t.contactId ? byId(trip.contacts, t.contactId, 'contactId') : null;
     var overnight = dateOnly(t.departDateTime) !== dateOnly(t.arriveDateTime);
     var tags = [];
     if (t.carrier) tags.push('<span class="tag">' + esc(t.carrier) + '</span>');
@@ -2933,7 +3027,7 @@ function renderAccommodationTab(trip) {
   if (trip.accommodation.length === 0) return emptyTab(trip, 'bed', 'No accommodation yet', 'Hotels, hostels, apartments — check-in and check-out can each carry their own time.', 'new-accommodation', 'Add accommodation');
   var sorted = trip.accommodation.slice().sort(function (a, b) { return (a.checkIn || '') < (b.checkIn || '') ? -1 : 1; });
   var rows = sorted.map(function (ac) {
-    var contact = ac.contactId ? byId(trip.contacts, ac.contactId) : null;
+    var contact = ac.contactId ? byId(trip.contacts, ac.contactId, 'contactId') : null;
     var tags = [];
     if (ac.bookingRef) tags.push('<span class="tag">' + icon('ticket') + esc(ac.bookingRef) + copyBtn(ac.bookingRef, 'booking ref') + '</span>');
     if (contact) tags.push('<span class="tag">' + icon('user') + esc(contact.name) + '</span>');
@@ -2980,7 +3074,7 @@ function renderContactsTab(trip) {
 // to, that's what each tab's own item tags already show.
 function companionTags(trip, companionIds) {
   return (companionIds || [])
-    .map(function (id) { return byId(trip.companions, id); })
+    .map(function (id) { return byId(trip.companions, id, 'companionId'); })
     .filter(Boolean)
     .map(function (c) { return '<span class="tag">' + icon('companion') + esc(c.name) + '</span>'; })
     .join('');
@@ -3087,7 +3181,7 @@ function mapPointsForTrip(trip) {
   (trip.activities || []).forEach(function (a) {
     var query = a.address || a.location || '';
     if (!query && a.destinationId) {
-      var dest = byId(trip.destinations, a.destinationId);
+      var dest = byId(trip.destinations, a.destinationId, 'destinationId');
       if (dest) query = [dest.name, dest.country].filter(Boolean).join(', ');
     }
     if (query) points.push({ category: 'activities', query: query, label: a.title, sub: a.location || a.address });
@@ -3279,7 +3373,7 @@ async function initMap(trip) {
 
   if (Object.keys(newEntries).length) {
     updateState(function (next) {
-      var t = byId(next.trips, trip.id);
+      var t = byId(next.trips, trip.tripId, 'tripId');
       if (!t) return;
       t.geocodeCache = t.geocodeCache || {};
       Object.keys(newEntries).forEach(function (k) { t.geocodeCache[k] = newEntries[k]; });
@@ -3416,7 +3510,7 @@ var GRANT_ROLE_LABELS = {
 function renderSharePanel(trip) {
   var grants = (trip.grants || []).slice().sort(function (a, b) { return a.username.localeCompare(b.username); });
   var rows = grants.map(function (g) {
-    var companion = g.companionId ? byId(trip.companions, g.companionId) : null;
+    var companion = g.companionId ? byId(trip.companions, g.companionId, 'companionId') : null;
     var scopeText = (g.role === 'user' || g.role === 'viewer') ? ' as ' + (companion ? esc(companion.name) : '(companion removed)') : '';
     return '<div class="item-row"><div class="item-icon">' + icon('user') + '</div><div class="item-main">' +
       '<div class="item-title-row"><span class="item-title">' + esc(g.username) + '</span><span class="tag">' + esc(GRANT_ROLE_LABELS[g.role] || g.role) + scopeText + '</span></div>' +
@@ -3425,7 +3519,7 @@ function renderSharePanel(trip) {
       '</div></div>';
   }).join('');
   var companionOptions = (trip.companions || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
-    return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+    return '<option value="' + c.companionId + '">' + esc(c.name) + '</option>';
   }).join('');
   return '<div class="share-panel">' +
     '<h3 style="font-size:15px;margin-bottom:4px">Share this trip</h3>' +
@@ -3540,7 +3634,7 @@ function renderSettingsTab(trip) {
     (canManageSharing(trip) ? renderSharePanel(trip) : '') +
     (canEdit ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)">' +
       '<h3 style="font-size:15px;margin-bottom:8px">Danger zone</h3>' +
-      '<button class="btn btn-danger" data-action="delete-trip" data-id="' + trip.id + '">' + icon('trash') + ' Delete this trip</button>' +
+      '<button class="btn btn-danger" data-action="delete-trip" data-id="' + trip.tripId + '">' + icon('trash') + ' Delete this trip</button>' +
     '</div>' : '')
   );
 }
@@ -3629,7 +3723,7 @@ document.addEventListener('click', function (e) {
   if (action === 'edit-user') { openUserForm(managedUsers.find(function (u) { return u.id === el.dataset.id; })); return; }
   if (action === 'delete-user') { deleteUserAccount(el.dataset.id); return; }
   if (action === 'new-trip') { openTripForm(); return; }
-  if (action === 'edit-trip') { openTripForm(byId(state.trips, el.dataset.id)); return; }
+  if (action === 'edit-trip') { openTripForm(byId(state.trips, el.dataset.id, 'tripId')); return; }
   if (action === 'delete-trip') { deleteTrip(el.dataset.id); return; }
   if (action === 'export-csv') { exportCsv(trip); return; }
   // "Share this trip" panel (Settings tab, Superuser-only — see
@@ -3638,25 +3732,25 @@ document.addEventListener('click', function (e) {
 
   if (!trip) return;
   if (action === 'new-destination') { openDestinationForm(trip); return; }
-  if (action === 'edit-destination') { openDestinationForm(trip, byId(trip.destinations, el.dataset.id)); return; }
+  if (action === 'edit-destination') { openDestinationForm(trip, byId(trip.destinations, el.dataset.id, 'destinationId')); return; }
   if (action === 'delete-destination') { deleteEntity(trip, 'destinations', el.dataset.id, 'destination'); return; }
   if (action === 'new-activity') { openActivityForm(trip); return; }
-  if (action === 'edit-activity') { openActivityForm(trip, byId(trip.activities, el.dataset.id)); return; }
+  if (action === 'edit-activity') { openActivityForm(trip, byId(trip.activities, el.dataset.id, 'activityId')); return; }
   if (action === 'delete-activity') { deleteEntity(trip, 'activities', el.dataset.id, 'activity'); return; }
   if (action === 'new-transport') { openTransportForm(trip); return; }
-  if (action === 'edit-transport') { openTransportForm(trip, byId(trip.transport, el.dataset.id)); return; }
+  if (action === 'edit-transport') { openTransportForm(trip, byId(trip.transport, el.dataset.id, 'transportId')); return; }
   if (action === 'delete-transport') { deleteEntity(trip, 'transport', el.dataset.id, 'transport leg'); return; }
   if (action === 'new-accommodation') { openAccommodationForm(trip); return; }
-  if (action === 'edit-accommodation') { openAccommodationForm(trip, byId(trip.accommodation, el.dataset.id)); return; }
+  if (action === 'edit-accommodation') { openAccommodationForm(trip, byId(trip.accommodation, el.dataset.id, 'accommodationId')); return; }
   if (action === 'delete-accommodation') { deleteEntity(trip, 'accommodation', el.dataset.id, 'accommodation'); return; }
   if (action === 'new-contact') { openContactForm(trip); return; }
-  if (action === 'edit-contact') { openContactForm(trip, byId(trip.contacts, el.dataset.id)); return; }
+  if (action === 'edit-contact') { openContactForm(trip, byId(trip.contacts, el.dataset.id, 'contactId')); return; }
   if (action === 'delete-contact') { deleteEntity(trip, 'contacts', el.dataset.id, 'contact'); return; }
   if (action === 'new-companion') { openCompanionForm(trip); return; }
-  if (action === 'edit-companion') { openCompanionForm(trip, byId(trip.companions, el.dataset.id)); return; }
+  if (action === 'edit-companion') { openCompanionForm(trip, byId(trip.companions, el.dataset.id, 'companionId')); return; }
   if (action === 'delete-companion') { deleteEntity(trip, 'companions', el.dataset.id, 'companion'); return; }
   if (action === 'new-expense') { openExpenseForm(trip); return; }
-  if (action === 'edit-expense') { openExpenseForm(trip, byId(trip.expenses, el.dataset.id)); return; }
+  if (action === 'edit-expense') { openExpenseForm(trip, byId(trip.expenses, el.dataset.id, 'expenseId')); return; }
   if (action === 'delete-expense') { deleteEntity(trip, 'expenses', el.dataset.id, 'expense'); return; }
 });
 
@@ -3758,7 +3852,7 @@ document.addEventListener('submit', function (e) {
     if (!canFullyEditTrip(currentTrip())) return;
     var fd2 = new FormData(e.target);
     updateState(function (next) {
-      var t = byId(next.trips, currentTripId);
+      var t = byId(next.trips, currentTripId, 'tripId');
       t.homeCurrency = (fd2.get('homeCurrency') || t.homeCurrency).toUpperCase();
       var rates = {};
       usedCurrencies(t).forEach(function (cur) {
