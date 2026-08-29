@@ -413,6 +413,55 @@ function resolveCompanionAvatars(content, usersDoc) {
   return map;
 }
 
+/* ---- Guest vs Companion, and the access-level tag ----------------------
+ * "Guest" and "Companion" are frontend/product vocabulary, not a new
+ * field: a companion record with no `accountId` IS a Guest, and one with
+ * an `accountId` IS a Companion — see the terminology note in the big
+ * COMPANIONS & AVATARS comment above. What's new here is telling the
+ * frontend WHAT LEVEL OF ACCESS a Companion actually has on this trip —
+ * "Super" (this trip's owner, or the site's uber-user), "Admin", "User",
+ * or "Viewer" — so it can show that as a tag next to their name.
+ *
+ * That access level is exactly what permissionForTrip() already computes
+ * for the account making a request — the only thing new here is calling
+ * it for the LINKED account instead of the caller, once per linked
+ * companion, and collecting the results into a map (companionId -> role
+ * string) the same shape as resolveCompanionAvatars() above. Reusing
+ * permissionForTrip() rather than re-deriving "who owns this trip / do
+ * they have a grant" by hand means this can never quietly drift out of
+ * sync with the ACTUAL permission logic that decides what that account
+ * can really do.
+ *
+ * A companion who's linked but has no resolvable access at all (e.g.
+ * linked purely for their avatar via the standalone link action, never
+ * actually shared this trip — see handleCompanionLink()'s own comment on
+ * why linking deliberately does NOT imply access) simply gets no entry
+ * in this map; the frontend falls back to a generic "Companion" tag for
+ * that case rather than a specific access level, since there genuinely
+ * isn't one to show.
+ *
+ * Unlike `grants` (which lists every account with access, and is
+ * deliberately kept from scoped User/Viewer roles so they can't learn
+ * who else has access — see buildVisibleTrip() below), this map is sent
+ * to EVERY role that can see the trip at all. It only ever reveals a
+ * ROLE LEVEL per companion that's already visible in the companion list
+ * itself, never an accountId or username — so unlike `grants`, there's
+ * nothing here that identifies WHICH account a companion who isn't
+ * already showing their own username is linked to.
+ */
+function resolveCompanionAccessLevels(indexEntry, content, usersDoc) {
+  const map = {};
+  (content && content.companions || []).forEach(function (c) {
+    if (!c.accountId) return; // A Guest has no login, so no access level to show.
+    const account = usersDoc.users.find(function (u) { return u.id === c.accountId; });
+    if (!account) return; // Linked account has since been deleted -- nothing to resolve.
+    const perm = permissionForTrip(indexEntry, account);
+    if (perm) map[c.companionId] = perm.role; // "superuser" | "admin" | "user" | "viewer"
+    // else: linked but genuinely no access on this trip -- leave unset.
+  });
+  return map;
+}
+
 // Strips (or reasserts, from the trip's REAL stored content) `accountId`
 // on every companion in `incomingCompanions` -- see the big COMPANIONS &
 // AVATARS comment above for why this has to run on every save, for every
@@ -821,6 +870,10 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
   // safe to hand to EVERY role: it's already been reduced to just a
   // colour + an animal (or a colour alone), never a raw accountId.
   const companionAvatars = resolveCompanionAvatars(content, usersDoc);
+  // Same "safe to hand to everyone" reasoning as companionAvatars just
+  // above -- see resolveCompanionAccessLevels()'s own big comment for why
+  // this is sent to every role, unlike `grants` below it.
+  const companionAccessLevels = resolveCompanionAccessLevels(indexEntry, content, usersDoc);
 
   if (perm.role === "superuser" || perm.role === "admin") {
     const ownerAccount = usersDoc.users.find(function (u) { return u.id === indexEntry.ownerId; });
@@ -830,6 +883,7 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
       ownerUsername: ownerAccount ? ownerAccount.username : "",
       grants: resolveGrants(indexEntry, usersDoc),
       companionAvatars: companionAvatars,
+      companionAccessLevels: companionAccessLevels,
       // A full-scope role already sees `grants` (who has access to this
       // trip and as whom), so the raw accountId on each companion isn't
       // hiding anything NEW from them -- left in place here (unlike the
@@ -851,14 +905,18 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
     expenses: [],
     myGrant: perm,
     companionAvatars: companionAvatars,
+    companionAccessLevels: companionAccessLevels,
     // Unlike the full-scope branch above, a scoped "user"/"viewer" grant
     // is deliberately NOT sent the `grants` array (they must not learn
     // who else has access to this trip) -- and an unlinked-from-content
     // raw `accountId` on a companion would leak exactly the same thing
     // (which account, if any, some other person on this trip is), so it
-    // gets stripped here for the same reason. `companionAvatars` above
-    // already carries everything they're allowed to see about it: a
-    // colour and an animal, never an identity.
+    // gets stripped here for the same reason. `companionAvatars` and
+    // `companionAccessLevels` above already carry everything they're
+    // allowed to see about it: a colour, an animal, and an access-LEVEL
+    // (never a raw accountId or username) -- see
+    // resolveCompanionAccessLevels()'s own comment for why that one field
+    // is safe to share even though `grants` itself isn't.
     companions: (content.companions || []).map(function (c) {
       const copy = Object.assign({}, c);
       delete copy.accountId;
