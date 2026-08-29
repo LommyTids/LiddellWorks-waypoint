@@ -26,7 +26,7 @@
 //      else sends one.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
-const { loginAsAdmin } = require('./test-helpers');
+const { loginAsAdmin, waitForSaveToSettle } = require('./test-helpers');
 
 const PORT = 8811;
 
@@ -63,7 +63,7 @@ function waitForServer(url, tries) {
       await page.fill('input[name="endDate"]', end);
       await page.fill('input[name="homeCurrency"]', 'GBP');
       await page.click('#entity-form button[type="submit"]');
-      await page.waitForTimeout(120);
+      await waitForSaveToSettle(page);
       await page.click('[data-action="back-to-dashboard"]');
       await page.waitForTimeout(50);
     };
@@ -89,7 +89,7 @@ function waitForServer(url, tries) {
     await page.fill('input[name="arriveDate"]', '2029-01-02');
     await page.fill('input[name="departDate"]', '2029-01-04');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    await waitForSaveToSettle(page);
 
     const alphaId = await page.evaluate(() => currentTripId);
     const w1 = await writes();
@@ -102,7 +102,7 @@ function waitForServer(url, tries) {
     // ================= 3. A no-op save writes nothing =================
     await resetWrites();
     await page.evaluate(() => persist(cloneState(state)));
-    await page.waitForTimeout(150);
+    await waitForSaveToSettle(page);
     const w2 = await writes();
     console.log('3. Re-saving unchanged data writes nothing at all:',
       Object.keys(w2.trips).length === 0 && w2.index === 0, w2);
@@ -112,7 +112,7 @@ function waitForServer(url, tries) {
     await page.click('[data-action="edit-trip"]');
     await page.fill('input[name="name"]', 'Alpha Trip Renamed');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    await waitForSaveToSettle(page);
     const w3 = await writes();
     console.log('4. Renaming a trip updates the index (so the dashboard stays right):',
       w3.index === 1 && Object.keys(w3.trips).length === 1, w3);
@@ -122,7 +122,7 @@ function waitForServer(url, tries) {
     // ================= 5. Deleting ONE trip still works ===============
     await page.locator('.trip-card', { hasText: 'Gamma Trip' }).locator('[data-action="delete-trip"]').click();
     await page.click('[data-action="confirm-yes"]');
-    await page.waitForTimeout(200);
+    await waitForSaveToSettle(page);
     const afterDelete = await fetchJson('/WayPoint/api/data');
     console.log('5. Deleting a single trip works normally:',
       afterDelete.trips.length === 2 && !afterDelete.trips.some((t) => t.name === 'Gamma Trip'),
@@ -187,7 +187,7 @@ function waitForServer(url, tries) {
     await page.fill('input[name="endDate"]', '2029-07-05');
     await page.fill('input[name="homeCurrency"]', 'GBP');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(300);
+    await waitForSaveToSettle(page);
 
     const saveLabel = await page.locator('#save-indicator').textContent();
     console.log('   Save indicator warns it was not saved:', /not saved/i.test(saveLabel), JSON.stringify(saveLabel));

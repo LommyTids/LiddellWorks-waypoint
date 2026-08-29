@@ -19,7 +19,7 @@
 // account — this file is purely about what a marker actually RESOLVES to.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
-const { loginAsAdmin } = require('./test-helpers');
+const { loginAsAdmin, waitForSaveToSettle } = require('./test-helpers');
 
 const PORT = 8812;
 
@@ -169,7 +169,7 @@ function deterministicIndex(seed, listLength) {
     await page.fill('input[name="endDate"]', '2029-09-05');
     await page.fill('input[name="homeCurrency"]', 'GBP');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     const tripId = await page.evaluate(() => currentTripId);
 
     await page.click('[data-action="switch-tab"][data-tab="companions"]');
@@ -178,14 +178,14 @@ function deterministicIndex(seed, listLength) {
     await page.click('[data-action="new-companion"]');
     await page.fill('input[name="name"]', 'BobCompanion');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     // Shape (b): "CaseyCompanion" -- never linked, but given an explicit
     // smiley colour (amber) when added.
     await page.click('[data-action="new-companion"]');
     await page.fill('input[name="name"]', 'CaseyCompanion');
     await page.locator('.avatar-swatch-label[title="amber"] .avatar-swatch-btn').click();
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     // A fourth companion made purely so section 4's "scoped role sees the
     // same map" check below has something to share/scope against without
     // touching bob's link (see that section's own comment) -- created
@@ -195,7 +195,7 @@ function deterministicIndex(seed, listLength) {
     // fetch() behind its back, or the NEXT UI action would resend the
     // page's now-stale copy of `state` and silently wipe out whatever the
     // raw fetch had added (this bit a first draft of this test: adding
-    // "Dana" via raw fetch and THEN clicking "Add companion" for a later
+    // "Dana" via raw fetch and THEN clicking "Add guest" for a later
     // one erased Dana, since the click's save round-tripped the page's
     // stale pre-Dana copy of the trip). So every raw fetch() write in
     // this section happens LAST, once no more UI-driven companion
@@ -203,7 +203,7 @@ function deterministicIndex(seed, listLength) {
     await page.click('[data-action="new-companion"]');
     await page.fill('input[name="name"]', 'ScopeOnlyCompanion');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
 
     // Shape (c): "DanaCompanion" -- never linked, and never given a
     // smiley either. Added via a raw request (bypassing the UI's own
@@ -259,13 +259,13 @@ function deterministicIndex(seed, listLength) {
     // ever hold one companion's link per trip) -- exactly correct
     // behavior, but not what this step means to test. Sharing with a
     // wholly unrelated third account keeps shapes (a)/(b)/(c) above
-    // completely undisturbed. ----
-    await page.fill('#share-form input[name="username"]', 'carol');
-    await page.selectOption('#share-form select[name="role"]', 'viewer');
-    await page.waitForTimeout(30);
-    await page.selectOption('#share-form select[name="companionId"]', { label: 'ScopeOnlyCompanion' });
-    await page.click('#share-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    // completely undisturbed. A raw call to /api/trip-grants (the same
+    // endpoint the Companions tab's own "manage access" form now talks
+    // to -- see submitCompanionAccess() in index.html) rather than
+    // driving that form through the UI, since this section is well past
+    // the "no more UI companion-CRUD" boundary explained further up. ----
+    const scopeOnlyCompanionId = finalTrip.companions.find((c) => c.name === 'ScopeOnlyCompanion').companionId;
+    await fetchStatus('/WayPoint/api/trip-grants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tripId: tripId, username: 'carol', role: 'viewer', companionId: scopeOnlyCompanionId }) });
 
     await page.click('[data-action="logout"]');
     await page.waitForSelector('#login-form', { timeout: 5000 });
