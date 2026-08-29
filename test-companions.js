@@ -273,6 +273,100 @@ function waitForServer(url, tries) {
     const tripCardMarkerCount = await page.locator('.trip-card', { hasText: 'Companions Test' }).locator('.trip-card-avatars .avatar-marker').count();
     console.log('16. The dashboard trip card shows one avatar marker per companion:', tripCardMarkerCount === 2, tripCardMarkerCount);
 
+    // ================= Guest vs Companion: the one-step "Add companion"
+    // flow (create + link in a single form) -- see
+    // openAddLinkedCompanionForm()/submitAddLinkedCompanion() in
+    // index.html. This session is logged in as the uber-user ("admin"),
+    // who canLinkCompanion() this trip, so both "Add guest" and
+    // "Add companion" should be offered. =================================
+    await page.click('.trip-card', { hasText: 'Companions Test' });
+    await page.click('[data-action="switch-tab"][data-tab="companions"]');
+    console.log('17. A Superuser/Admin session sees BOTH "Add guest" and the separate "Add companion" button:',
+      (await page.locator('[data-action="new-companion"]').count()) === 1 && (await page.locator('[data-action="new-linked-companion"]').count()) === 1);
+
+    await page.click('[data-action="new-linked-companion"]');
+    await page.waitForSelector('#add-linked-companion-form', { timeout: 5000 });
+    await page.fill('#add-linked-companion-form input[name="name"]', 'Diego');
+    await page.fill('#add-linked-companion-form input[name="username"]', 'admin');
+    await page.click('#add-linked-companion-form button[type="submit"]');
+    // This one submit does THREE things in sequence under the hood --
+    // an ordinary optimistic companion-add save, a wait for it to
+    // actually land, then a call to the standalone link endpoint, which
+    // itself does a full state reload on success (see
+    // submitAddLinkedCompanion()'s own comment) -- so give it more room
+    // than the usual single-save wait.
+    await page.waitForSelector('.item-row:has-text("Diego") .tag:has-text("Super")', { timeout: 5000 });
+    const diegoTags = await page.locator('.item-row', { hasText: 'Diego' }).locator('.tag').allTextContents();
+    const diegoMarkerGlyph = (await page.locator('.item-row', { hasText: 'Diego' }).locator('.avatar-marker').first().textContent() || '').trim();
+    console.log('18. "Add companion" creates Diego already linked -- resolved access level "Super", not a plain "Guest":',
+      diegoTags.includes('Super') && !diegoTags.includes('Guest'), diegoTags);
+    console.log('    ...and Diego\'s marker is already the linked account\'s own animal, never the generic smiley:', diegoMarkerGlyph !== '☺' && diegoMarkerGlyph !== '', diegoMarkerGlyph);
+    // Confirm it happened server-side too, not just optimistically --
+    // Diego really is a new companion, really linked to the uber-user's
+    // real account id, not just something the client is pretending.
+    const afterAddLinked = await fetchJson('/WayPoint/api/data');
+    const diegoStored = afterAddLinked.trips.find((t) => t.tripId === tripId).companions.find((c) => c.name === 'Diego');
+    console.log('    ...and the server genuinely stored Diego linked to a real account id:', !!diegoStored && !!diegoStored.accountId, diegoStored && diegoStored.accountId);
+
+    // ================= New trip: "Who's coming with you?" box (see
+    // TRIP_FIELDS_NEW / parseCompanionNamesBox() in index.html) -- a
+    // quick-add box on the trip-CREATION form itself, so companions can
+    // be typed in right when a trip is first set up, not only
+    // afterwards from the Companions tab. =================================
+    await page.click('[data-action="back-to-dashboard"]');
+    await page.click('[data-action="new-trip"]');
+    const companionBoxOnNewTrip = await page.locator('textarea[name="companionNames"]').count();
+    console.log('19. The New trip form shows the "Who\'s coming with you?" box:', companionBoxOnNewTrip === 1, companionBoxOnNewTrip);
+
+    await page.fill('input[name="name"]', 'Family Roadtrip');
+    await page.fill('input[name="homeCurrency"]', 'GBP');
+    // One per line AND a comma-separated pair on one line -- exercises
+    // both separators parseCompanionNamesBox() accepts, plus blank
+    // lines in between, which should just be dropped rather than
+    // becoming an empty-named companion.
+    await page.fill('textarea[name="companionNames"]', 'Jamie\n\nTaylor, Robin');
+    await page.click('#entity-form button[type="submit"]');
+    await page.waitForTimeout(150);
+    const roadtripId = await page.evaluate(() => currentTripId);
+
+    await page.click('[data-action="switch-tab"][data-tab="companions"]');
+    const roadtripCompanionNames = (await page.locator('.item-row .item-title').allTextContents()).map((s) => s.trim());
+    console.log('20. All three names typed into the box became companions on the new trip, blank line dropped:',
+      roadtripCompanionNames.length === 3 && ['Jamie', 'Taylor', 'Robin'].every((n) => roadtripCompanionNames.includes(n)), roadtripCompanionNames);
+
+    const roadtripGuestTags = await page.locator('.item-row', { hasText: 'Jamie' }).locator('.tag').allTextContents();
+    console.log('    ...and each comes in as a plain Guest (no login), not pre-linked to anything:', roadtripGuestTags.includes('Guest'), roadtripGuestTags);
+
+    // Confirmed server-side too, not just an optimistic render.
+    const afterRoadtrip = await fetchJson('/WayPoint/api/data');
+    const roadtripStored = afterRoadtrip.trips.find((t) => t.tripId === roadtripId);
+    console.log('    ...and the server actually stored all three, none carrying an accountId:',
+      roadtripStored.companions.length === 3 && roadtripStored.companions.every((c) => !c.accountId),
+      roadtripStored.companions.map((c) => c.name));
+
+    // Leaving the box blank creates a trip with no companions at all --
+    // the box is optional, not required.
+    await page.click('[data-action="back-to-dashboard"]');
+    await page.click('[data-action="new-trip"]');
+    await page.fill('input[name="name"]', 'Solo Trip');
+    await page.fill('input[name="homeCurrency"]', 'GBP');
+    await page.click('#entity-form button[type="submit"]');
+    await page.waitForTimeout(150);
+    await page.click('[data-action="switch-tab"][data-tab="companions"]');
+    const soloEmptyState = (await page.locator('.empty-state').count()) === 1;
+    console.log('21. Leaving the box blank on a new trip creates no companions (empty state still shown):', soloEmptyState);
+
+    // And editing an EXISTING trip never shows the box -- it's a
+    // one-shot creation-time convenience, not a general companions
+    // editor (that's what the Companions tab itself is for).
+    await page.click('[data-action="back-to-dashboard"]');
+    await page.locator('.trip-card', { hasText: 'Family Roadtrip' }).locator('[data-action="edit-trip"]').click();
+    await page.waitForSelector('#entity-form', { timeout: 5000 });
+    const companionBoxOnEditTrip = await page.locator('textarea[name="companionNames"]').count();
+    console.log('22. The Edit trip form does NOT show the "Who\'s coming with you?" box:', companionBoxOnEditTrip === 0, companionBoxOnEditTrip);
+    await page.click('.modal-head [data-action="close-modal"]');
+    await page.waitForTimeout(100);
+
     console.log('\nPage errors:', errors.length ? errors : 'NONE');
     await browser.close();
   } finally {
