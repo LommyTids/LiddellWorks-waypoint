@@ -391,6 +391,17 @@ textarea { resize: vertical; min-height: 60px; }
 .tag { font-size: 11px; font-family: var(--font-mono); color: var(--ink-soft); background: var(--surface-2); border-radius: 6px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 4px; }
 .tag .icon { width: 11px; height: 11px; }
 .tag-cost { color: var(--accent); background: var(--accent-soft); }
+/* Companions tab: Guest vs Companion, and a Companion's access-level tag
+   (Super/Admin/User/Viewer) -- see renderCompanionsTab() and the
+   COMPANIONS & AVATARS comment in src/worker.js's resolveCompanionAccessLevels()
+   for what these mean and who can see them (everyone on the trip, unlike
+   the raw `grants` list itself). Colour is purely a visual hint of
+   "how much this person can do here" -- Super/Admin get the same warm
+   accent colour already used for cost tags elsewhere (most privileged,
+   most worth noticing at a glance); User/Viewer and Guest stay the plain
+   neutral grey `.tag` already used for everything else, since they're
+   not something you need to specifically notice. */
+.tag-role-superuser, .tag-role-admin { color: var(--accent); background: var(--accent-soft); }
 .item-actions { display: flex; gap: 2px; flex-shrink: 0; }
 .copy-btn { background: none; border: none; color: var(--ink-faint); cursor: pointer; padding: 2px; display: inline-flex; }
 .copy-btn:hover { color: var(--ink); }
@@ -1943,16 +1954,22 @@ function canGrantAdminRole(trip) {
   return !!g && g.role === 'superuser';
 }
 
-// Can THIS account link a companion to an account, or add a brand-new
-// companion? Linking (Phase 2) is Superuser/Admin only, same bar as
-// sharing itself -- see canShareTrip() above. Adding (Phase 3) is that
-// PLUS a "user" grant, who may append a new companion (name + smiley
-// colour only) but never link one to an account -- see
-// mergeUserScopedCompanions() in src/worker.js for exactly what a "user"
-// grant's own submission is allowed to contain.
+// Can THIS account link a companion to an account -- either upgrading an
+// existing Guest into a Companion (openCompanionLinkForm()), or adding a
+// brand-new one already linked in one step (openAddLinkedCompanionForm())?
+// Superuser/Admin only (Phase 2), same bar as sharing itself -- see
+// canShareTrip() above. Note this is a DIFFERENT, lower bar than
+// canAddCompanion() below: canAddCompanion() also covers a "user" grant
+// adding a plain Guest (Phase 3), but a "user" grant may never link one
+// to an account -- see mergeUserScopedCompanions() in src/worker.js for
+// exactly what a "user" grant's own submission is allowed to contain.
 function canLinkCompanion(trip) {
   return canShareTrip(trip);
 }
+// Can THIS account add a brand-new Guest (name + smiley colour, no
+// login)? True for Superuser/Admin (who can also add a linked Companion
+// instead -- see canLinkCompanion() above) PLUS a "user" grant, who may
+// only ever append a Guest, never a Companion.
 function canAddCompanion(trip) {
   if (canFullyEditTrip(trip)) return true;
   var g = trip && trip.myGrant;
@@ -2885,6 +2902,90 @@ async function submitCompanionLink(payload) {
   }
 }
 
+/* ---- "Add companion" -- the one-step Guest+link flow -----------------
+   Superuser/Admin only (canLinkCompanion(), same bar as re-linking an
+   existing Guest above). This is deliberately NOT a new server-side
+   endpoint: it's the exact same two actions a Superuser/Admin could
+   already do by hand -- add a guest, then link them to a username --
+   just chained together behind one form so they don't have to leave the
+   Companions tab and come back. See submitAddLinkedCompanion() below for
+   why they run strictly in that order, one fully finished before the
+   other starts. --------------------------------------------------------- */
+function openAddLinkedCompanionForm(trip) {
+  var root = document.getElementById('modal-root');
+  root.innerHTML =
+    '<div class="modal-backdrop" data-action="close-modal">' +
+      '<div class="modal">' +
+        '<div class="modal-head"><h2>Add companion</h2>' +
+          '<button class="btn btn-icon btn-ghost" data-action="close-modal">' + icon('close') + '</button></div>' +
+        '<form id="add-linked-companion-form" data-trip-id="' + esc(trip.tripId) + '">' +
+          '<div class="modal-body">' +
+            '<p class="field-hint" style="margin-bottom:14px">A companion is someone with their own Waypoint login — their marker uses their own account\'s colour + animal instead of a smiley. This does NOT by itself give that account any access to this trip — use "Share access" below the companion list for that.</p>' +
+            '<div class="field"><label>Name</label><input type="text" name="name" required placeholder="e.g. Sarah"></div>' +
+            '<div class="field"><label>Username</label><input type="text" name="username" required placeholder="an existing account"></div>' +
+          '</div>' +
+          '<div class="modal-foot">' +
+            '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+            '<button type="submit" class="btn btn-primary">Add companion</button>' +
+          '</div>' +
+        '</form>' +
+      '</div>' +
+    '</div>';
+}
+
+// Polls until the save queue is completely empty -- see persist()'s own
+// big comment further up for why only ONE POST /api/data is ever allowed
+// in flight at a time, and how a later edit collapses onto
+// `pendingSaveState` rather than firing its own overlapping request.
+// submitAddLinkedCompanion() below needs to know the NEW companion it
+// just asked updateState() to add has actually reached the server before
+// it tries to link that companion id -- handleCompanionLink() 404s on a
+// companion id the server doesn't know about yet. A short poll is a lot
+// simpler (and just as reliable) than threading a promise all the way
+// through updateState()/persist()/sendSave() for what is, in practice, a
+// rare, explicitly user-triggered action rather than a hot path.
+function waitForSaveToSettle() {
+  return new Promise(function (resolve) {
+    (function check() {
+      if (!saveInFlight && !pendingSaveState) resolve();
+      else setTimeout(check, 50);
+    })();
+  });
+}
+
+async function submitAddLinkedCompanion(payload) {
+  var name = (payload.name || '').trim();
+  var username = (payload.username || '').trim();
+  if (!name) { showToast('Enter a name.'); return; }
+  if (!username) { showToast('Enter the username to link.'); return; }
+
+  var newCompanionId = newId();
+  // Step 1: add them as an ordinary Guest first, through the SAME
+  // optimistic updateState()/persist() pipeline every other edit in this
+  // app uses -- see openCompanionForm() above for the twin of this
+  // mutator. Going through the normal queued save (rather than posting
+  // directly ourselves here) means this can never race an unrelated
+  // in-flight save and clobber it.
+  updateState(function (next) {
+    var t = byId(next.trips, payload.tripId, 'tripId');
+    t.companions.push({ companionId: newCompanionId, name: name });
+  });
+  // Step 2: wait for that save (and anything it was already queued
+  // behind) to actually finish, so the companion genuinely exists
+  // server-side before asking to link it.
+  await waitForSaveToSettle();
+  // Step 3: link it -- exactly the standalone "link to an account"
+  // action (submitCompanionLink() above), which already does its own
+  // permission check, error toast, and full state reload on success. If
+  // THIS step fails (e.g. the username doesn't exist), the person still
+  // ends up added as an ordinary Guest rather than not existing at all --
+  // submitCompanionLink()'s own error toast explains what went wrong, and
+  // the row's "Upgrade to companion" button (see renderCompanionsTab())
+  // is right there to retry once the username's sorted out, so nothing
+  // is stuck or lost either way.
+  await submitCompanionLink({ tripId: payload.tripId, companionId: newCompanionId, username: username });
+}
+
 // Self-service avatar picker (Phase 1b) -- every logged-in account can
 // change ONLY its own colour+animal here (see handleAccountAvatarUpdate()
 // in src/worker.js -- it always writes to `user.id` from the session, so
@@ -3533,18 +3634,54 @@ function companionTags(trip, companionIds) {
 // renderSharePanel() (moved here from the old Settings tab) is appended
 // for anyone who can share the trip at all (canShareTrip() — Superuser
 // or Admin).
+//
+// GUEST vs COMPANION -- this is product vocabulary, not a new data
+// field: every person on this list is stored the same way (a plain
+// "companion" record, see COMPANION_FIELDS above), and whether they're
+// shown as a "Guest" or a "Companion" is purely whether `accountId` is
+// set on them -- i.e. whether they have their own Waypoint login.
+//   - A GUEST has no login. Anyone who canAddCompanion() (a "user" grant
+//     included, Phase 3) can add one -- name + smiley colour only.
+//   - A COMPANION has one. Only canLinkCompanion() (Superuser/Admin) can
+//     create one directly, or upgrade an existing Guest into one by
+//     linking a username -- see openAddLinkedCompanionForm() and
+//     openCompanionLinkForm() below. Linking does NOT by itself grant
+//     that account any ACCESS to this trip (that's still the separate
+//     "Share access" panel below) -- it just says "this row IS that
+//     login", which is what lets their marker use their own account's
+//     colour + animal instead of a generic smiley.
+// A Companion who DOES also have access to this trip (because they're
+// its owner, the site's uber-user, or hold a grant) gets an extra tag
+// showing that access level -- Super/Admin/User/Viewer, resolved
+// server-side by resolveCompanionAccessLevels() in src/worker.js and
+// sent down as `trip.companionAccessLevels`. Unlike the raw `grants`
+// list, that map is sent to every role that can see the trip at all --
+// a deliberate choice to make everyone's standing on a trip visible to
+// everyone else on it (see resolveCompanionAccessLevels()'s own comment
+// for exactly what it does and doesn't reveal) -- so these tags render
+// the same for a Superuser and for a scoped Viewer looking at the very
+// same trip.
+var COMPANION_ACCESS_LEVEL_LABELS = { superuser: 'Super', admin: 'Admin', user: 'User', viewer: 'Viewer' };
+
 function renderCompanionsTab(trip) {
-  var canAdd = canAddCompanion(trip);
-  var canLink = canLinkCompanion(trip);
-  var head = '<div class="tab-panel-head"><h2>Companions</h2>' +
-    (canAdd ? '<button class="btn btn-accent" data-action="new-companion">' + icon('plus') + ' Add companion</button>' : '') +
-    '</div>';
+  var canAddGuest = canAddCompanion(trip);
+  var canAddLinked = canLinkCompanion(trip);
+  // Superuser/Admin get two explicit choices up front (add someone with
+  // no login, or add someone who already has one); a "user" grant only
+  // ever gets the first -- see COMPANION_FIELDS_LIMITED and
+  // mergeUserScopedCompanions() in src/worker.js for the field-level
+  // enforcement behind that restriction (this button is just the UI
+  // reflection of it, not the actual security boundary).
+  var addButtons =
+    (canAddGuest ? '<button class="btn btn-accent" data-action="new-companion">' + icon('plus') + ' Add guest</button>' : '') +
+    (canAddLinked ? '<button class="btn" data-action="new-linked-companion">' + icon('plus') + ' Add companion</button>' : '');
+  var head = '<div class="tab-panel-head"><h2>Companions</h2>' + addButtons + '</div>';
 
   var body;
   if (trip.companions.length === 0) {
-    body = '<div class="empty-state">' + icon('companion') + '<h3>No companions yet</h3>' +
-      '<p>Add the people traveling with you — then tag them to destinations, activities, accommodation and transport to track who\'s on what.</p>' +
-      (canAdd ? '<div style="margin-top:14px"><button class="btn btn-accent" data-action="new-companion">' + icon('plus') + ' Add companion</button></div>' : '') +
+    body = '<div class="empty-state">' + icon('companion') + '<h3>No one added yet</h3>' +
+      '<p>Add the people traveling with you as guests, or — if they already have their own Waypoint login — as companions, then tag them to destinations, activities, accommodation and transport to track who\'s on what.</p>' +
+      (addButtons ? '<div style="margin-top:14px">' + addButtons + '</div>' : '') +
       '</div>';
   } else {
     var rows = trip.companions.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
@@ -3560,15 +3697,42 @@ function renderCompanionsTab(trip) {
       var linkedTag = c.accountId
         ? '<span class="tag">' + icon('user') + (linkedAccount ? esc(linkedAccount.username) : 'has a login') + '</span>'
         : '';
+      // The access-level tag -- see the big comment above this function.
+      // A Guest (no accountId) always just reads "Guest". A Companion
+      // shows their actual resolved access level when there is one
+      // (Super/Admin/User/Viewer), or a generic "Companion" tag when
+      // they're linked but genuinely have no access to this trip (linked
+      // purely for their avatar, never shared -- see
+      // resolveCompanionAccessLevels()'s own comment on this case).
+      //
+      // Deliberately reading `trip.companionAvatars[...].type` here rather
+      // than `c.accountId` to decide Guest vs Companion -- accountId is
+      // stripped from a scoped "user"/"viewer" role's own companion list
+      // (see buildVisibleTrip() in src/worker.js), so `c.accountId` is
+      // ALWAYS falsy for them even when a companion genuinely IS linked.
+      // `companionAvatars` doesn't have that problem: it's already sent
+      // to every role (same as `companionAccessLevels`), and its `type`
+      // ('account' vs 'smiley') already encodes exactly this same "does
+      // this person have a login" fact for the avatar marker -- reusing
+      // it here means Guest/Companion always agrees with what the
+      // marker itself is showing, for every role, including one whose
+      // linked account has since been deleted (resolveCompanionAvatars()
+      // quietly falls back to 'smiley' in that case too, so this then
+      // correctly reads as a Guest again rather than a dangling Companion).
+      var isLinked = !!(trip.companionAvatars && trip.companionAvatars[c.companionId] && trip.companionAvatars[c.companionId].type === 'account');
+      var accessRole = trip.companionAccessLevels && trip.companionAccessLevels[c.companionId];
+      var accessTag = isLinked
+        ? '<span class="tag' + (accessRole ? ' tag-role-' + accessRole : '') + '">' + (accessRole ? esc(COMPANION_ACCESS_LEVEL_LABELS[accessRole] || accessRole) : 'Companion') + '</span>'
+        : '<span class="tag">Guest</span>';
       // A separate, second `.item-actions` group rather than trying to
       // merge into rowActions()'s own -- both are just small icon-button
       // clusters, so two side by side reads identically to one, without
       // needing rowActions() itself to know anything about linking.
-      var linkAction = canLink
-        ? '<div class="item-actions"><button class="btn btn-icon btn-ghost" data-action="link-companion" data-id="' + c.companionId + '" title="' + (c.accountId ? 'Change or remove account link' : 'Link to an account') + '">' + icon('users') + '</button></div>'
+      var linkAction = canAddLinked
+        ? '<div class="item-actions"><button class="btn btn-icon btn-ghost" data-action="link-companion" data-id="' + c.companionId + '" title="' + (c.accountId ? 'Change or remove account link' : 'Upgrade to companion (link an account)') + '">' + icon('users') + '</button></div>'
         : '';
       return '<div class="item-row"><div class="item-icon item-icon-avatar">' + companionAvatarHtml(trip, c.companionId, c.name) + '</div><div class="item-main">' +
-        '<div class="item-title-row"><span class="item-title">' + esc(c.name) + '</span>' + linkedTag + '</div>' +
+        '<div class="item-title-row"><span class="item-title">' + esc(c.name) + '</span>' + accessTag + linkedTag + '</div>' +
         (c.notes ? '<div class="item-sub">' + esc(c.notes) + '</div>' : '') +
         '</div>' + linkAction + rowActions(trip, 'companion', c) + '</div>';
     }).join('');
@@ -4301,6 +4465,7 @@ document.addEventListener('click', function (e) {
   if (action === 'edit-companion') { openCompanionForm(trip, byId(trip.companions, el.dataset.id, 'companionId')); return; }
   if (action === 'delete-companion') { deleteEntity(trip, 'companions', el.dataset.id, 'companion'); return; }
   if (action === 'link-companion') { openCompanionLinkForm(trip, byId(trip.companions, el.dataset.id, 'companionId')); return; }
+  if (action === 'new-linked-companion') { openAddLinkedCompanionForm(trip); return; }
   if (action === 'new-expense') { openExpenseForm(trip); return; }
   if (action === 'edit-expense') { openExpenseForm(trip, byId(trip.expenses, el.dataset.id, 'expenseId')); return; }
   if (action === 'delete-expense') { deleteEntity(trip, 'expenses', el.dataset.id, 'expense'); return; }
@@ -4388,6 +4553,20 @@ document.addEventListener('submit', function (e) {
       companionId: e.target.dataset.companionId,
       username: (fdLink.get('username') || '').trim()
     });
+    return;
+  }
+  if (e.target.id === 'add-linked-companion-form') {
+    e.preventDefault();
+    var fdAddLinked = new FormData(e.target);
+    submitAddLinkedCompanion({
+      tripId: e.target.dataset.tripId,
+      name: (fdAddLinked.get('name') || '').trim(),
+      username: (fdAddLinked.get('username') || '').trim()
+    });
+    // Deliberately no closeModal() here -- submitAddLinkedCompanion()'s
+    // own final step, submitCompanionLink(), already closes it on
+    // success (and leaves it open with an error toast on failure, same
+    // as filling in the standalone link form wrong would).
     return;
   }
   if (e.target.id === 'avatar-pick-form') {
