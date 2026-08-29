@@ -28,4 +28,49 @@ async function loginAs(page, username, password) {
   await page.click('#login-form button[type="submit"]');
 }
 
-module.exports = { DEFAULT_ADMIN, loginAsAdmin, loginAs };
+// Waits for the app's own in-page trip-content save to actually finish,
+// instead of guessing with a fixed page.waitForTimeout(). The app's save
+// pipeline (persist() in public/WayPoint/index.html) now spaces
+// consecutive /WayPoint/api/data saves at least MIN_SAVE_INTERVAL_MS
+// (1.1s) apart and retries a 429 with backoff, to respect Cloudflare
+// KV's one-write-per-second-per-key limit — a change added on the
+// `security-fixes` branch, after most of this file's fixed short waits
+// were originally written. A save can now genuinely take well over a
+// second, so a 80-150ms guess is no longer reliably enough time for a
+// companion/trip/grant change to have actually reached the mock server
+// — which matters here specifically because several assertions below
+// either reload the page or make a raw fetch() straight to the mock
+// server afterward, either of which needs the save to have REALLY
+// landed, not just for the browser's own optimistic UI to look right.
+//
+// saveInFlight/pendingSaveState are plain top-level `var`s in that
+// inline script, so (being no module) they're already properties of
+// `window` — this just polls the exact same two flags the app's own
+// internal waitForSaveToSettle() polls, from the Node/Playwright side.
+// If no save is in flight when this is called, it resolves on its very
+// first check — so it's safe to await after ANY action, not just ones
+// that are known to trigger a save.
+async function waitForSaveToSettle(page, timeoutMs) {
+  await page.waitForFunction(
+    function () { return !window.saveInFlight && !window.pendingSaveState; },
+    null,
+    { timeout: timeoutMs || 10000 }
+  );
+}
+
+// The companion-link form (#companion-link-form / #add-linked-companion-
+// form, submitCompanionAccess()/submitAddLinkedCompanion() in
+// public/WayPoint/index.html) does NOT go through persist()'s
+// saveInFlight/pendingSaveState queue at all -- it AWAITS its own
+// fetch() calls straight to /api/companions/link and /api/trip-grants
+// (or /revoke), then only calls closeModal() once every one of those
+// has actually finished. So waitForSaveToSettle() above (which polls
+// those two persist()-only flags) can return long before this form's
+// real work is done -- for this form specifically, the form element
+// itself being removed from the DOM (closeModal() sets #modal-root's
+// innerHTML to '') IS the actual completion signal.
+async function waitForModalToClose(page, formSelector, timeoutMs) {
+  await page.waitForSelector(formSelector, { state: 'detached', timeout: timeoutMs || 10000 });
+}
+
+module.exports = { DEFAULT_ADMIN, loginAsAdmin, loginAs, waitForSaveToSettle, waitForModalToClose };

@@ -10,7 +10,7 @@
 // session, not the permissions layer.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
-const { loginAsAdmin } = require('./test-helpers');
+const { loginAsAdmin, waitForSaveToSettle, waitForModalToClose } = require('./test-helpers');
 
 const PORT = 8808;
 
@@ -43,7 +43,7 @@ function waitForServer(url, tries) {
     await page.fill('input[name="endDate"]', '2027-11-10');
     await page.fill('input[name="homeCurrency"]', 'GBP');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    await waitForSaveToSettle(page);
     const tripId = await page.evaluate(() => currentTripId);
 
     // ---- Companions tab: empty state, then add two. ----
@@ -54,11 +54,11 @@ function waitForServer(url, tries) {
     await page.click('[data-action="new-companion"]');
     await page.fill('input[name="name"]', 'Sarah');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     await page.click('[data-action="new-companion"]');
     await page.fill('input[name="name"]', 'Mike');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     const companionRows = await page.locator('.item-list .item-row').count();
     console.log('2. Both companions listed:', companionRows === 2, companionRows);
 
@@ -72,7 +72,7 @@ function waitForServer(url, tries) {
     await page.fill('input[name="departDate"]', '2027-11-05');
     await page.locator('.tag-picker-item', { hasText: 'Sarah' }).locator('input[type="checkbox"]').check();
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     const destTagText = await page.locator('.item-row .item-tags').first().textContent();
     console.log('4. Destination row shows the "Sarah" tag:', /Sarah/.test(destTagText) && !/Mike/.test(destTagText), destTagText);
 
@@ -83,7 +83,7 @@ function waitForServer(url, tries) {
     await page.fill('input[name="date"]', '2027-11-03');
     await page.locator('.tag-picker-item', { hasText: 'Mike' }).locator('input[type="checkbox"]').check();
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     const activityTagText = await page.locator('.item-row .item-tags').first().textContent();
     console.log('5. Activity row shows the "Mike" tag:', /Mike/.test(activityTagText) && !/Sarah/.test(activityTagText), activityTagText);
 
@@ -97,7 +97,7 @@ function waitForServer(url, tries) {
     await page.locator('.tag-picker-item', { hasText: 'Sarah' }).locator('input[type="checkbox"]').check();
     await page.locator('.tag-picker-item', { hasText: 'Mike' }).locator('input[type="checkbox"]').check();
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     const transportTagText = await page.locator('.item-row .item-tags').first().textContent();
     console.log('6. Transport row shows BOTH tags:', /Sarah/.test(transportTagText) && /Mike/.test(transportTagText), transportTagText);
 
@@ -110,7 +110,7 @@ function waitForServer(url, tries) {
     await page.fill('input[name="checkOutDate"]', '2027-11-05');
     await page.locator('.tag-picker-item', { hasText: 'Sarah' }).locator('input[type="checkbox"]').check();
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     await page.locator('.item-row', { hasText: 'Riverside Guesthouse' }).locator('[data-action="edit-accommodation"]').click();
     await page.waitForTimeout(50);
     const sarahCheckedOnEdit = await page.locator('.tag-picker-item', { hasText: 'Sarah' }).locator('input[type="checkbox"]').isChecked();
@@ -125,7 +125,7 @@ function waitForServer(url, tries) {
     await page.locator('.item-row', { hasText: 'Sarah' }).locator('[data-action="edit-companion"]').click();
     await page.fill('input[name="name"]', 'Sarah T.');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     await page.click('[data-action="switch-tab"][data-tab="destinations"]');
     const renamedTagText = await page.locator('.item-row .item-tags').first().textContent();
     console.log('8. Renaming a companion updates their tag everywhere:', /Sarah T\./.test(renamedTagText), renamedTagText);
@@ -136,7 +136,7 @@ function waitForServer(url, tries) {
     await page.click('[data-action="switch-tab"][data-tab="companions"]');
     await page.locator('.item-row', { hasText: 'Mike' }).locator('[data-action="delete-companion"]').click();
     await page.click('[data-action="confirm-yes"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     await page.click('[data-action="switch-tab"][data-tab="activities"]');
     const activityTagAfterDelete = await page.locator('.item-row .item-tags').first().textContent();
     console.log('9. Deleting a tagged companion leaves the item intact, tag just gone:', activityTagAfterDelete.trim() === '', JSON.stringify(activityTagAfterDelete));
@@ -161,7 +161,7 @@ function waitForServer(url, tries) {
     const pinkRadioChecked = await page.locator('input.avatar-swatch-radio[value="pink"]').isChecked();
     console.log('10. Picking a smiley colour swatch actually checks its (hidden) radio input:', pinkRadioChecked);
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
 
     // The chosen colour actually lands on the INNER smiley glyph (its
     // `color:` style), not the outer circle's own background -- the
@@ -188,7 +188,7 @@ function waitForServer(url, tries) {
     await page.waitForSelector('#companion-link-form', { timeout: 5000 });
     await page.fill('#companion-link-form input[name="username"]', 'admin');
     await page.click('#companion-link-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    await waitForModalToClose(page, '#companion-link-form');
     const linkedTagText = await page.locator('.item-row', { hasText: 'Priya' }).locator('.tag').allTextContents();
     console.log('12. Linking Priya to the uber-user shows the "has a login" fallback tag (it has no grant to name it by):', linkedTagText.some((t) => /has a login/.test(t)), linkedTagText);
     const priyaMarkerGlyphAfterLink = (await page.locator('.item-row', { hasText: 'Priya' }).locator('.avatar-marker').first().textContent() || '').trim();
@@ -204,10 +204,10 @@ function waitForServer(url, tries) {
     await page.click('[data-action="switch-tab"][data-tab="settings"]');
     await page.fill('input[name="homeCurrency"]', 'USD');
     await page.click('#rates-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    await waitForSaveToSettle(page);
     await page.fill('input[name="homeCurrency"]', 'GBP'); // put it back for the rest of this file, while still on Settings
     await page.click('#rates-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    await waitForSaveToSettle(page);
     // Reload the whole page before checking -- persist() re-renders
     // OPTIMISTICALLY from the browser's own already-mutated copy of
     // `state`, before either save's POST has even reached the server, so
@@ -260,7 +260,7 @@ function waitForServer(url, tries) {
     await page.waitForSelector('#companion-link-form', { timeout: 5000 });
     await page.fill('#companion-link-form input[name="username"]', '');
     await page.click('#companion-link-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    await waitForModalToClose(page, '#companion-link-form');
     const linkedTagAfterUnlink = await page.locator('.item-row', { hasText: 'Priya' }).locator('.tag').allTextContents();
     const priyaMarkerGlyphAfterUnlink = (await page.locator('.item-row', { hasText: 'Priya' }).locator('.avatar-marker').first().textContent() || '').trim();
     console.log('15. Unlinking Priya removes the "linked to" tag and reverts the marker to the smiley:',
@@ -326,7 +326,7 @@ function waitForServer(url, tries) {
     // becoming an empty-named companion.
     await page.fill('textarea[name="companionNames"]', 'Jamie\n\nTaylor, Robin');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    await waitForSaveToSettle(page);
     const roadtripId = await page.evaluate(() => currentTripId);
 
     await page.click('[data-action="switch-tab"][data-tab="companions"]');
@@ -351,7 +351,7 @@ function waitForServer(url, tries) {
     await page.fill('input[name="name"]', 'Solo Trip');
     await page.fill('input[name="homeCurrency"]', 'GBP');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    await waitForSaveToSettle(page);
     await page.click('[data-action="switch-tab"][data-tab="companions"]');
     const soloEmptyState = (await page.locator('.empty-state').count()) === 1;
     console.log('21. Leaving the box blank on a new trip creates no companions (empty state still shown):', soloEmptyState);

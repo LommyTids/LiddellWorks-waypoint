@@ -8,7 +8,7 @@
 // so a reload doesn't re-geocode, and the layer toggles actually working.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
-const { loginAsAdmin } = require('./test-helpers');
+const { loginAsAdmin, waitForSaveToSettle } = require('./test-helpers');
 
 const PORT = 8788;
 let geocodeCallCount = 0;
@@ -62,7 +62,7 @@ function waitForServer(url, tries) {
     await page.fill('input[name="endDate"]', '2027-02-10');
     await page.fill('input[name="homeCurrency"]', 'GBP');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    await waitForSaveToSettle(page);
 
     // Map tab with nothing added yet -> empty state
     await page.click('[data-action="switch-tab"][data-tab="map"]');
@@ -77,14 +77,14 @@ function waitForServer(url, tries) {
     await page.fill('input[name="arriveDate"]', '2027-02-01');
     await page.fill('input[name="departDate"]', '2027-02-05');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
     await page.click('[data-action="new-destination"]');
     await page.fill('input[name="country"]', 'Nowhereville-Fakecountry');
     await page.fill('input[name="name"]', 'Nowhereville');
     await page.fill('input[name="arriveDate"]', '2027-02-05');
     await page.fill('input[name="departDate"]', '2027-02-10');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
 
     await page.click('[data-action="switch-tab"][data-tab="accommodation"]');
     await page.click('[data-action="new-accommodation"]');
@@ -93,7 +93,7 @@ function waitForServer(url, tries) {
     await page.fill('input[name="checkInDate"]', '2027-02-01');
     await page.fill('input[name="checkOutDate"]', '2027-02-05');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
 
     await page.click('[data-action="switch-tab"][data-tab="transport"]');
     await page.click('[data-action="new-transport"]');
@@ -102,7 +102,7 @@ function waitForServer(url, tries) {
     await page.fill('input[name="departDate"]', '2027-02-05');
     await page.fill('input[name="arriveDate"]', '2027-02-05');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(100);
+    await waitForSaveToSettle(page);
 
     // ---- Now visit the Map tab and let geocoding run ----
     await page.click('[data-action="switch-tab"][data-tab="map"]');
@@ -144,6 +144,15 @@ function waitForServer(url, tries) {
     console.log('   Re-checking it adds it back:', hasLayer === true);
 
     // ---- Reload and revisit the Map tab: should use the cache, not re-geocode ----
+    // A successful geocode also triggers a background save of the newly
+    // resolved coordinates into trip.geocodeCache — this needs to have
+    // actually reached the mock server before reloading below, or the
+    // reload finds an empty cache and re-geocodes everything, which is
+    // exactly what assertion 5 exists to catch. See waitForSaveToSettle()'s
+    // own comment in test-helpers.js for why a fixed short wait isn't
+    // reliably enough time any more (the security-fixes branch's save
+    // pacing/retry logic in persist()).
+    await waitForSaveToSettle(page);
     // sessionStorage remembers we were on the Map tab, so the reload lands
     // straight back there rather than the dashboard.
     await page.reload();

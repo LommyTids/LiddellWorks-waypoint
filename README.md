@@ -193,45 +193,62 @@ exactly like a trip's real owner would be treated, and it never appears
 in any trip's own sharing list.
 
 A trip's owner or Admin shares it from that trip's own **Companions**
-tab (the "Share access" panel there — it used to live on Settings, but
-who's tagged as a companion and who can log in and see the trip turned
-out to be one and the same "who's on this trip" question, so they're
-managed together now; Settings just has a one-line pointer left behind
-for anyone who remembers the old location): type the username of an
-existing account, pick a role, and — for User/Viewer — which companion
-they are on this trip. The account has to already exist (create it from
-Manage accounts first if it doesn't). An Admin's own role dropdown
-simply doesn't offer "Admin" as an option — only the owner can grant
-that. A person can be a different companion on different trips, or have
-a completely different role, or no access at all — it's all per trip.
+tab — who's tagged as a companion and who can log in and see the trip
+turned out to be one and the same "who's on this trip" question, so
+they're managed together there (Settings just has a one-line pointer
+left behind for anyone who remembers sharing living somewhere else).
+There's no separate "share this trip" step at all any more: adding
+someone as a Companion, or upgrading an existing Guest into one by
+linking a username, is what grants access — the same form that links
+the account also asks which privilege level to give them (or "No trip
+access", if they should just get their own avatar without being able
+to see or edit the trip). The account has to already exist (create it
+from Manage accounts first if it doesn't). An Admin's own privilege
+dropdown simply doesn't offer "Admin" as an option — only the owner can
+grant that, and only the owner can change or remove another Admin's
+access once granted. A person can be a different companion on different
+trips, or have a completely different role, or no access at all — it's
+all per trip. See "Guests and Companions" below for the full mechanics.
 
 ## Companions & Avatars
 
 **Guests and Companions** (Destinations/Activities/Accommodation/
 Transport tabs each gained this) — a per-trip list of the people
-actually on the trip, managed from its own Companions tab. Any
-destination, activity, accommodation booking or transport leg can be
-tagged with any number of them (a small row of checkboxes on that
-item's form), and the tags show up right on that item in the list. This
-is more than a label — it's also literally what a User/Viewer grant's
-visibility is scoped to (see above), so tagging accurately matters if
-you're planning to share a trip with anyone.
+actually on the trip, managed from its own Companions tab, which shows
+them as two clearly separate lists — **Companions** (people with their
+own login) above, **Guests** (people without one) below — rather than
+one mixed list. Any destination, activity, accommodation booking or
+transport leg can be tagged with any number of them (a small row of
+checkboxes on that item's form), and the tags show up right on that
+item in the list. This is more than a label — it's also literally what
+a User/Viewer grant's visibility is scoped to (see above), so tagging
+accurately matters if you're planning to share a trip with anyone.
 
 "Guest" and "Companion" are the two kinds of person this list can hold
 — it's the same underlying record either way (just a name, an optional
-smiley colour, and an optional account link), and which of the two you
-see is purely whether that link is set:
+smiley colour, and an optional account link), and which section you see
+them in is purely whether that link is set:
 
 - A **Guest** has no Waypoint login. Anyone who can add a person at all
   — including a **User** grant, who may only ever append (see below) —
-  can add one: just a name and a smiley colour, nothing else.
+  can add one: just a name and a smiley colour, nothing else. The "Add
+  guest" button is the plain grey one.
 - A **Companion** has their own login. Only the trip's owner or an Admin
-  can create one directly (the "Add companion" button, right next to
-  "Add guest"), or upgrade an existing Guest into one afterwards by
-  linking a username (the small link icon next to their name). Either
-  way this is the SAME action under the hood — "Add companion" is just
-  "add a Guest, then link them" chained into one form — so linking
-  itself is documented once, below.
+  can create one directly (the "Add companion" button — deliberately
+  the coloured one, next to "Add guest", matching the coloured marker a
+  Companion gets), or upgrade an existing Guest into one afterwards via
+  the link icon next to their name. **Either way, this same form also
+  asks what privilege level to give them** — Admin, User or Viewer, or
+  "No trip access" if they should just get their own avatar without
+  being able to see or edit the trip — and grants it automatically.
+  There's no separate sharing step any more: "Add companion" is "add a
+  Guest, link them to a username, and share the trip with them" chained
+  into one form, and the link icon on an existing Companion doubles as
+  the place to change their username or privilege level later. Changing
+  the username moves the grant to the new account so the old account no
+  longer retains hidden access; choosing "No trip access" revokes it
+  while leaving the account link in place, so their avatar still resolves
+  correctly.
 
 A **User** grant may add a brand-new Guest of their own (just a name and
 a smiley colour) from the Companions tab — but, like everything else a
@@ -293,17 +310,20 @@ marker becomes that account's own coloured circle + animal instead of
 the grey smiley, and (once they also have some access, see the
 access-level tags above) they pick up a role tag too. It happens two
 ways: automatically, whenever a trip's owner or an Admin shares that
-trip with someone AS a specific companion (see "Share access" above) —
-sharing already implies "this companion is that account", so it links
-itself; or explicitly, via the "Add companion" button (for a brand-new
-person) or the small link icon next to an existing Guest (owner/Admin
-only either way), which takes just a username rather than exposing any
-account-id list, and an empty username unlinks (reverting a Companion
-back to a Guest). Linking on its own never grants trip access — it only
-changes what marker (and, if applicable, tag) shows up — and revoking
-someone's trip access deliberately does **not** clear the link either
-(they're independent: one is "can this account see this trip", the
-other is "whose face is this companion's marker").
+trip with someone AS a specific companion — sharing already implies
+"this companion is that account", so it links itself; or explicitly,
+via the "Add companion" button (for a brand-new person) or the small
+link icon next to an existing Guest or Companion (owner/Admin only
+either way), which takes a username and a privilege level rather than
+exposing any account-id list, and an empty username unlinks (reverting
+a Companion back to a Guest). Linking on its own never grants trip
+access — picking "No trip access" in that same form links without
+sharing — and it only changes what marker (and, if applicable, tag)
+shows up; revoking someone's trip access (setting their privilege level
+back to "No trip access" without touching the username) deliberately
+does **not** clear the link either (they're independent: one is "can
+this account see this trip", the other is "whose face is this
+companion's marker").
 
 A companion's link (`accountId`) is treated as a protected,
 server-computed field, the same as a trip's `ownerId` — nothing a
@@ -633,34 +653,39 @@ A handful of Playwright suites live outside this repo's deployed contents
   — the first-run "set up Waypoint" screen (including a wrong setup key
   being rejected, and setup refusing to run again once an account
   exists); that creating a trip makes you its permanent Superuser
-  automatically; sharing it from the Companions tab's "Share access"
-  panel with an Admin, a User (scoped to one companion) and a Viewer
-  (scoped to a different companion); that an Admin grant gets full
-  read/write, and (as of the Companions/Avatars feature) can share the
-  trip itself as User/Viewer — with that share auto-linking the chosen
-  companion's avatar — but is refused (403) granting Admin access even
-  via a raw request, and refused revoking an admin-role grant (even
-  their own); that on a trip THEY own, an Admin's role dropdown does
-  offer Admin; that a User grant sees and can edit only their own tagged
-  items (with the Companions tag-picker locked on their edit form), never
-  sees an Add/Delete control on an EXISTING item, and never sees the
-  Expenses tab at all — but (Phase 3) DOES see an "Add guest" button of
-  their own, limited to a name and smiley colour with no Notes field,
-  and can never edit/delete/retag/link a companion (so it never sees the
-  separate "Add companion" create-and-link button either, that being
-  Superuser/Admin only), including one they just added themselves; that
-  a Viewer grant is fully read-only even for their own tagged items,
-  with no "Add guest" or "Add companion" button either; that — for the
-  Guest/Companion terminology update — a scoped User AND a scoped Viewer
-  grant both correctly see every companion's access-level tag (Super/
-  Admin/User/Viewer, or a generic "Companion" fallback for a link that's
-  outlived its own grant), for companions other than their own, proving
-  that tag really is sent to every role and not just derived from
-  something only a full-scope role can see; that an account with no
-  grant on a trip doesn't see it at all; that the site's
+  automatically; granting access via the Companions tab's "Add
+  companion" (create-and-link-and-share, one form) and the link icon's
+  privilege-level select (upgrade-and-share an existing Guest) with an
+  Admin, a User (scoped to one companion) and a Viewer (scoped to a
+  different companion); that an Admin grant gets full read/write, and
+  (as of the Companions/Avatars feature) can share the trip itself as
+  User/Viewer — with that share auto-linking the chosen companion's
+  avatar — but is refused (403) granting Admin access even via a raw
+  request, and refused revoking an admin-role grant (even their own);
+  that on a trip THEY own, an Admin's link-form privilege-level select
+  does offer Admin, but not on a trip where they're merely an Admin
+  grant themselves; that a User grant sees and can edit only their own
+  tagged items (with the Companions tag-picker locked on their edit
+  form), never sees an Add/Delete control on an EXISTING item, and never
+  sees the Expenses tab at all — but (Phase 3) DOES see an "Add guest"
+  button of their own, limited to a name and smiley colour with no Notes
+  field, and can never edit/delete/retag/link a companion (so it never
+  sees the separate "Add companion" create-and-link button either, that
+  being Superuser/Admin only), including one they just added themselves;
+  that a Viewer grant is fully read-only even for their own tagged
+  items, with no "Add guest" or "Add companion" button either; that —
+  for the Guest/Companion terminology update — a scoped User AND a
+  scoped Viewer grant both correctly see every companion's access-level
+  tag (Super/Admin/User/Viewer, or a generic "Companion" fallback for a
+  link that's outlived its own grant), for companions other than their
+  own, proving that tag really is sent to every role and not just
+  derived from something only a full-scope role can see; that revoking
+  a companion's access back to "No trip access" through that same
+  link-form select removes their visibility while leaving them linked
+  (their avatar still resolves to the account's own); that an account
+  with no grant on a trip doesn't see it at all; that the site's
   one uber-user account gets full access to a trip it was never shared
-  on and never appears in that trip's own sharing list; that revoking
-  someone's access actually removes their visibility; that the last
+  on and never appears in that trip's own sharing list; that the last
   remaining site-owner account can't be deleted; and — the most important
   check in this file — a raw `fetch()` from a "user"-scoped session,
   bypassing the UI entirely, hand-crafting a save request that tries to
@@ -714,10 +739,14 @@ match `worker.js` exactly and breaks every test.
 Every suite above has been run — including against the Companions/
 Avatars feature described earlier in this file, its later
 Guest/Companion terminology update (the "Add companion" one-step
-create-and-link form, and access-level tags sent to every role), and the
-New trip form's "Who's coming with you?" quick-add box — and passes
-(over 200 assertions across 12 suites), covering a full end-to-end pass
-of the
+create-and-link form, and access-level tags sent to every role), the
+New trip form's "Who's coming with you?" quick-add box, and the
+privilege-level-on-link update that retired the standalone "Share
+access" panel (granting/changing/revoking access now happens through
+the same link form that manages a Companion's account, and the
+Companions tab shows Companions and Guests as two segregated lists) —
+and passes (over 200 assertions across 12 suites), covering a full
+end-to-end pass of the
 permissions test's hostile `fetch()` attack scenario (now extended to
 also cover companion rename/delete/accountId-smuggling attempts) against
 the `trip_index`/`trip:<id>` storage shape. The two data-loss guards

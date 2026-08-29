@@ -1548,6 +1548,7 @@ async function handleTripGrantsUpsert(request, env, user) {
   const username = (body.username || "").trim();
   const role = body.role;
   const companionId = (body.companionId || "").trim();
+  const replaceAccountId = (body.replaceAccountId || "").trim();
   if (!tripId) return jsonError(400, "No trip specified.");
   if (!username) return jsonError(400, "Enter the username to share this trip with.");
   if (GRANT_ROLES.indexOf(role) === -1) return jsonError(400, "Role must be admin, user or viewer.");
@@ -1568,6 +1569,12 @@ async function handleTripGrantsUpsert(request, env, user) {
     // above.
     return jsonError(403, "Only this trip's owner can grant Admin access.");
   }
+  if (perm.role === "admin" && replaceAccountId) {
+    const replacedGrant = (indexEntry.grants || []).find(function (g) { return g.accountId === replaceAccountId; });
+    if (replacedGrant && replacedGrant.role === "admin") {
+      return jsonError(403, "Only this trip's owner can replace another Admin's access.");
+    }
+  }
 
   const usersDoc = await loadUsers(env);
   const targetAccount = usersDoc.users.find(function (u) { return u.username.toLowerCase() === username.toLowerCase(); });
@@ -1581,8 +1588,12 @@ async function handleTripGrantsUpsert(request, env, user) {
     if (!companionExists) return jsonError(400, "That companion isn't on this trip.");
   }
 
-  // Upsert: replace any existing grant for this account, or add a new one.
-  indexEntry.grants = (indexEntry.grants || []).filter(function (g) { return g.accountId !== targetAccount.id; });
+  // Upsert the target and, when a companion is being relinked, remove the
+  // previous account's grant in this same index write. Keeping those two
+  // changes together prevents the old account retaining invisible access.
+  indexEntry.grants = (indexEntry.grants || []).filter(function (g) {
+    return g.accountId !== targetAccount.id && (!replaceAccountId || g.accountId !== replaceAccountId);
+  });
   indexEntry.grants.push({ accountId: targetAccount.id, role: role, companionId: role === "admin" ? "" : companionId });
   await saveTripIndex(env, index);
 

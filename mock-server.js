@@ -195,6 +195,28 @@ function resolveCompanionAvatars(content) {
   return map;
 }
 
+// Mirrors resolveCompanionAccessLevels() in src/worker.js exactly — see
+// that file's big comment for the full reasoning. "Guest" (no login) vs
+// "Companion" (has one) is just product vocabulary for whether
+// `accountId` is set; what THIS resolves is a linked Companion's actual
+// access LEVEL on this trip (Super/Admin/User/Viewer, i.e. exactly what
+// permissionForTrip() would compute if that linked account were the one
+// asking), by calling permissionForTrip() for their account instead of
+// the caller's. Unlike `grants`, this map is sent to every role that can
+// see the trip at all -- it only ever reveals a role level, never an
+// accountId or username.
+function resolveCompanionAccessLevels(indexEntry, content) {
+  const map = {};
+  ((content && content.companions) || []).forEach(function (c) {
+    if (!c.accountId) return; // A Guest has no login, so no access level to show.
+    const account = users.find(function (u) { return u.id === c.accountId; });
+    if (!account) return; // Linked account has since been deleted -- nothing to resolve.
+    const perm = permissionForTrip(indexEntry, account);
+    if (perm) map[c.companionId] = perm.role;
+  });
+  return map;
+}
+
 // Mirrors reconcileCompanionAccountLinks() in src/worker.js exactly — see
 // that file's comment for the full "why reassert rather than delete"
 // reasoning. Every companion keeps EXACTLY the accountId it already has
@@ -272,6 +294,7 @@ function buildVisibleTrip(indexEntry, content, perm) {
   // Resolved once, shared by both branches -- see the COMPANIONS &
   // AVATARS comment above for why this is safe to hand to every role.
   const companionAvatars = resolveCompanionAvatars(content);
+  const companionAccessLevels = resolveCompanionAccessLevels(indexEntry, content);
 
   if (perm.role === 'superuser' || perm.role === 'admin') {
     const ownerAccount = users.find(function (u) { return u.id === indexEntry.ownerId; });
@@ -281,6 +304,7 @@ function buildVisibleTrip(indexEntry, content, perm) {
       ownerUsername: ownerAccount ? ownerAccount.username : '',
       grants: resolveGrants(indexEntry),
       companionAvatars: companionAvatars,
+      companionAccessLevels: companionAccessLevels,
     });
   }
 
@@ -295,9 +319,13 @@ function buildVisibleTrip(indexEntry, content, perm) {
     expenses: [],
     myGrant: perm,
     companionAvatars: companionAvatars,
+    companionAccessLevels: companionAccessLevels,
     // A scoped grant never sees raw accountId on a companion -- same
     // reason it never sees `grants` -- see buildVisibleTrip() in
-    // src/worker.js.
+    // src/worker.js. companionAccessLevels is different -- it's sent here
+    // too, deliberately, since it only ever reveals a role LEVEL, never
+    // an accountId or username -- see resolveCompanionAccessLevels()'s
+    // own comment above.
     companions: (content.companions || []).map(function (c) {
       const copy = Object.assign({}, c);
       delete copy.accountId;
@@ -675,6 +703,7 @@ const server = http.createServer(async (req, res) => {
       const username = (body.username || '').trim();
       const role = body.role;
       const companionId = (body.companionId || '').trim();
+      const replaceAccountId = (body.replaceAccountId || '').trim();
       if (!tripId) return sendJson(res, 400, { error: 'No trip specified.' });
       if (!username) return sendJson(res, 400, { error: 'Enter the username to share this trip with.' });
       if (GRANT_ROLES.indexOf(role) === -1) return sendJson(res, 400, { error: 'Role must be admin, user or viewer.' });
@@ -689,6 +718,12 @@ const server = http.createServer(async (req, res) => {
       }
       if (role === 'admin' && perm.role !== 'superuser') {
         return sendJson(res, 403, { error: "Only this trip's owner can grant Admin access." });
+      }
+      if (perm.role === 'admin' && replaceAccountId) {
+        const replacedGrant = (indexEntry.grants || []).find(function (g) { return g.accountId === replaceAccountId; });
+        if (replacedGrant && replacedGrant.role === 'admin') {
+          return sendJson(res, 403, { error: "Only this trip's owner can replace another Admin's access." });
+        }
       }
       const targetAccount = users.find(function (u) { return u.username.toLowerCase() === username.toLowerCase(); });
       if (!targetAccount) return sendJson(res, 404, { error: 'No account with that username exists yet — ask the site owner to create one first.' });
@@ -705,7 +740,9 @@ const server = http.createServer(async (req, res) => {
         const companionExists = ((content && content.companions) || []).some(function (c) { return c.companionId === companionId; });
         if (!companionExists) return sendJson(res, 400, { error: "That companion isn't on this trip." });
       }
-      indexEntry.grants = (indexEntry.grants || []).filter(function (g) { return g.accountId !== targetAccount.id; });
+      indexEntry.grants = (indexEntry.grants || []).filter(function (g) {
+        return g.accountId !== targetAccount.id && (!replaceAccountId || g.accountId !== replaceAccountId);
+      });
       indexEntry.grants.push({ accountId: targetAccount.id, role: role, companionId: role === 'admin' ? '' : companionId });
       // Sharing AS a specific companion is also how that companion's
       // account link gets set -- see the COMPANIONS & AVATARS comment

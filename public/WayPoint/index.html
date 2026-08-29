@@ -210,10 +210,23 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
    courtesy for a nicer UI, not the real security boundary: the Worker
    independently refuses any write it doesn't allow, regardless of what
    the page shows (see the big "SAVING SAFELY" comment in src/worker.js). */
-.share-panel { border-top: 1px solid var(--line); margin-top: 32px; padding-top: 20px; }
-.share-panel .item-list { margin-top: 12px; }
-.share-form-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-top: 10px; }
-.share-form-row .field { margin-bottom: 0; min-width: 140px; }
+/* A small row of buttons that sit right next to each other, e.g. the
+   "Add companion"/"Add guest" pair on the Companions tab (see
+   renderCompanionsTab()) -- without this, two buttons dropped straight
+   into a header that also has `justify-content: space-between` (see
+   .tab-panel-head below) become two SEPARATE flex items and end up
+   pushed apart to fill the row, rather than sitting adjacent to each
+   other the way they visually should. Wrapping them in one of these
+   makes the pair itself a single flex item instead. */
+.head-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+/* A plain sub-heading inside a tab body, splitting it into named
+   sections -- e.g. "Companions" vs "Guests" on the Companions tab.
+   Kept deliberately tiny/reusable rather than growing renderSettingsTab()'s
+   inline `style="font-size:15px..."` one-offs into a genuinely new
+   pattern -- this is that exact same look, just given a name since the
+   Companions tab now uses it twice on one screen. */
+.section-subhead { font-size: 15px; margin-bottom: 8px; }
+.section-subhead:not(:first-child) { margin-top: 28px; }
 
 /* Login / first-run setup screen — shown instead of the normal app
    whenever there's no valid session (see renderAuthScreen()/renderBoot()). */
@@ -1231,8 +1244,9 @@ async function renderBoot() {
    minimal now that permissions live on trips, not accounts (see the big
    comment near currentTrip() further down) — this screen no longer has
    anything to do with roles or which trips someone can see; that's
-   entirely up to each trip's own Superuser now, via that trip's "Share
-   this trip" panel (see renderSharePanel() further down). Reached via
+   entirely up to each trip's own Superuser (or Admin) now, via that
+   trip's own Companions tab (see openCompanionLinkForm()/
+   openAddLinkedCompanionForm() further down). Reached via
    the "Manage accounts" button in the topbar (see applyAuthUI()), which
    only ever appears for the account that's actually the uber-user — the
    server enforces the same rule independently (see src/worker.js's
@@ -1991,9 +2005,10 @@ function canFullyEditTrip(trip) {
 // has access to it -- and, as of Phase 2 of the Companions/Avatars
 // feature, so can an "admin" grant, though only as far as User/Viewer
 // (see canGrantAdminRole() below for the one thing an Admin still can't
-// do). See renderSharePanel() further down, and handleTripGrantsUpsert()/
-// handleTripGrantsRevoke() in src/worker.js for the server-side mirror
-// of this exact check.
+// do). See openCompanionLinkForm()/openAddLinkedCompanionForm() further
+// down (their privilege-level select is gated on this), and
+// handleTripGrantsUpsert()/handleTripGrantsRevoke() in src/worker.js for
+// the server-side mirror of this exact check.
 function canShareTrip(trip) {
   var g = trip && trip.myGrant;
   return !!g && (g.role === 'superuser' || g.role === 'admin');
@@ -2002,7 +2017,8 @@ function canShareTrip(trip) {
 // Only the trip's actual Superuser (its owner, or the uber-user) may
 // grant someone ELSE Admin access -- an Admin grant can share the trip,
 // but only as User or Viewer, so creating another Admin stays the
-// owner's call alone. See renderSharePanel()'s role dropdown further
+// owner's call alone. See openCompanionLinkForm()/
+// openAddLinkedCompanionForm()'s own privilege-level dropdowns further
 // down.
 function canGrantAdminRole(trip) {
   var g = trip && trip.myGrant;
@@ -2901,7 +2917,7 @@ function openCompanionForm(trip, existing) {
         // deterministic-default logic, deterministicAvatarIndex() in
         // data/avatars.js) — only ever the "smiley" shape here, never
         // "account": linking is its own separate action (see
-        // openCompanionLinkForm()/submitCompanionLink() below), and
+        // openCompanionLinkForm()/submitCompanionAccess() below), and
         // changing an already-linked companion's smiley doesn't affect
         // its resolved marker at all (the server always prefers the
         // linked account's own avatar), so there's nothing to recompute
@@ -2916,15 +2932,27 @@ function openCompanionForm(trip, existing) {
   });
 }
 
-/* ---------- Link (or unlink) a companion to an account — Phase 2 of the
-   Companions/Avatars feature. Superuser/Admin only (canLinkCompanion()),
-   and — like sharing itself — talks to its own small dedicated endpoint
-   (/api/companions/link) rather than the normal save path, for the exact
-   same reason grants do: this is identity data, not ordinary trip
+/* ---------- Link (or unlink) a companion to an account, AND manage
+   their privilege level on this trip -- Phase 2 of the Companions/
+   Avatars feature, revised to fold the old standalone "Share access"
+   panel into this same form. Superuser/Admin only (canLinkCompanion()).
+   Two small dedicated endpoints do the actual work -- /api/companions/link
+   for the account link, /api/trip-grants (and /trip-grants/revoke) for
+   the privilege level -- rather than the normal save path, for the same
+   reason as ever: this is identity/access data, not ordinary trip
    content, and needs its own server-side permission check regardless of
-   what a save would otherwise allow (see handleCompanionLink() and the
-   big COMPANIONS & AVATARS comment in src/worker.js). ------------------- */
+   what a save would otherwise allow (see handleCompanionLink()/
+   handleTripGrantsUpsert() and the big COMPANIONS & AVATARS comment in
+   src/worker.js). See submitCompanionAccess() below for how the two
+   calls fit together in one submit. ------------------------------------ */
+var GRANT_ROLE_LABELS = {
+  admin: 'Admin — full read/write',
+  user: 'User — read/write, own items only',
+  viewer: 'Viewer — read-only, own items only'
+};
+
 function openCompanionLinkForm(trip, companion) {
+  var isLinked = isCompanionLinked(trip, companion);
   // Prefills the current username when we actually have one to show --
   // only possible for a full-scope role (Superuser/admin both receive
   // `trip.grants`; a scoped role never does, and never reaches this form
@@ -2935,17 +2963,51 @@ function openCompanionLinkForm(trip, companion) {
   // rather than guessing.
   var currentGrant = companion.accountId ? (trip.grants || []).find(function (g) { return g.accountId === companion.accountId; }) : null;
   var currentUsername = currentGrant ? currentGrant.username : '';
+  // The privilege level to prefill the select with. Resolved the exact
+  // same way the access-level TAG on their row is (see
+  // renderCompanionsTab()) -- 'superuser'/'admin'/'user'/'viewer', or
+  // undefined for "linked but no access" / not linked at all.
+  var currentRole = trip.companionAccessLevels && trip.companionAccessLevels[companion.companionId];
+  var iCanGrantAdmin = canGrantAdminRole(trip);
+  // Two cases where the privilege level can't be changed from THIS form
+  // at all -- shown as a disabled select rather than hidden outright, so
+  // it's still obvious what their current standing actually is:
+  //   - 'superuser' means this account IS the trip's owner (or the
+  //     site's uber-user) -- that's not a `grants` entry at all, so
+  //     there's nothing here to upsert or revoke.
+  //   - 'admin' when *I* can't grant Admin myself (only the trip's real
+  //     owner can) -- same restriction that already applied to revoking
+  //     an Admin grant from the old Share panel, just carried over here.
+  var roleLocked = currentRole === 'superuser' || (currentRole === 'admin' && !iCanGrantAdmin);
+  var roleSelectHtml;
+  if (roleLocked) {
+    var lockedLabel = currentRole === 'superuser' ? 'Owner — can\'t be changed here' : GRANT_ROLE_LABELS.admin;
+    roleSelectHtml = '<select disabled><option selected>' + esc(lockedLabel) + '</option></select>' +
+      '<div class="field-hint">' + (currentRole === 'superuser'
+        ? 'This account already owns this trip (or is the site owner) — its access can\'t be managed here.'
+        : 'Only this trip\'s owner can change or remove another Admin\'s access.') + '</div>';
+  } else {
+    roleSelectHtml = '<select name="role">' +
+      '<option value=""' + (!currentRole ? ' selected' : '') + '>No trip access (just linked)</option>' +
+      '<option value="user"' + (currentRole === 'user' ? ' selected' : '') + '>' + esc(GRANT_ROLE_LABELS.user) + '</option>' +
+      '<option value="viewer"' + (currentRole === 'viewer' ? ' selected' : '') + '>' + esc(GRANT_ROLE_LABELS.viewer) + '</option>' +
+      (iCanGrantAdmin ? '<option value="admin"' + (currentRole === 'admin' ? ' selected' : '') + '>' + esc(GRANT_ROLE_LABELS.admin) + '</option>' : '') +
+      '</select>' +
+      '<div class="field-hint">Choosing a level shares this trip with them, scoped to ' + esc(companion.name) + '\'s own tagged items (or fully, for Admin) — leave "No trip access" if they should just get their own avatar without being able to see or edit this trip.</div>';
+  }
   var root = document.getElementById('modal-root');
   root.innerHTML =
     '<div class="modal-backdrop" data-action="close-modal">' +
       '<div class="modal">' +
-        '<div class="modal-head"><h2>Link ' + esc(companion.name) + ' to an account</h2>' +
+        '<div class="modal-head"><h2>' + esc(companion.name) + ': account &amp; access</h2>' +
           '<button class="btn btn-icon btn-ghost" data-action="close-modal">' + icon('close') + '</button></div>' +
-        '<form id="companion-link-form" data-trip-id="' + esc(trip.tripId) + '" data-companion-id="' + esc(companion.companionId) + '">' +
+        '<form id="companion-link-form" data-trip-id="' + esc(trip.tripId) + '" data-companion-id="' + esc(companion.companionId) + '" data-prior-account-id="' + esc(companion.accountId || '') + '">' +
           '<div class="modal-body">' +
-            '<p class="field-hint" style="margin-bottom:14px">Linking gives ' + esc(companion.name) + '\'s marker their own account\'s colour + animal wherever they show up on this trip — it does NOT by itself give that account any access to this trip (use "Share access" below the companion list for that).</p>' +
             '<div class="field"><label>Username</label><input type="text" name="username" placeholder="an existing account" value="' + esc(currentUsername) + '"></div>' +
-            '<div class="field-hint">Leave blank and save to remove the current link.</div>' +
+            '<div class="field-hint">' + (isLinked && !currentUsername
+              ? 'Already linked to an account, but its username isn\'t shown here (no access has been granted) — retype it if you want to change their access level below.'
+              : 'Leave blank and save to remove the current link.') + '</div>' +
+            '<div class="field"><label>Privilege level</label>' + roleSelectHtml + '</div>' +
           '</div>' +
           '<div class="modal-foot">' +
             '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
@@ -2956,39 +3018,114 @@ function openCompanionLinkForm(trip, companion) {
     '</div>';
 }
 
-async function submitCompanionLink(payload) {
+// The one function both openCompanionLinkForm() above and
+// openAddLinkedCompanionForm() below submit through -- reconciles a
+// companion's account LINK and their ACCESS grant in one go, since the
+// old "Share access" panel is gone and every place that used to grant
+// access now does it right alongside linking instead.
+//
+//   payload.username  -- '' unlinks (or, for a brand-new companion,
+//                         just never links at all).
+//   payload.role       -- '' explicitly means "No trip access" was
+//                         chosen (revoke whatever grant is there, if
+//                         any); a real role ('admin'/'user'/'viewer')
+//                         shares the trip as that role, replacing any
+//                         existing grant; `undefined` means the
+//                         privilege select was DISABLED (roleLocked, see
+//                         openCompanionLinkForm()) and shouldn't be
+//                         touched at all -- a disabled <select> is never
+//                         included in a submitted FormData, which is
+//                         exactly how the caller tells these two "no
+//                         role" cases apart.
+//   payload.priorAccountId -- the account (if any) this companion was
+//                         linked to BEFORE this submit, so a switch to
+//                         "No trip access" knows whose grant to revoke,
+//                         or a new grant knows which stale grant it must
+//                         atomically replace when the username changes.
+async function submitCompanionAccess(payload) {
+  var username = (payload.username || '').trim();
+  if (payload.role && !username) { showToast('Enter the username to grant them access.'); return; }
   try {
-    var res = await fetch('/WayPoint/api/companions/link', {
+    // Step 1: reconcile the account link.
+    var linkRes = await fetch('/WayPoint/api/companions/link', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ tripId: payload.tripId, companionId: payload.companionId, username: username })
     });
-    var body = await res.json().catch(function () { return {}; });
-    if (!res.ok) { showToast(body.error || 'Could not update that link.'); return; }
+    var linkBody = await linkRes.json().catch(function () { return {}; });
+    if (!linkRes.ok) { showToast(linkBody.error || 'Could not update that link.'); return; }
+
+    // Step 2: reconcile the access grant to match whatever privilege
+    // level was actually submitted (see this function's own comment
+    // above for what each value of payload.role means).
+    if (payload.role) {
+      var grantRes = await fetch('/WayPoint/api/trip-grants', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tripId: payload.tripId,
+          username: username,
+          role: payload.role,
+          companionId: payload.companionId,
+          replaceAccountId: payload.priorAccountId || ''
+        })
+      });
+      var grantBody = await grantRes.json().catch(function () { return {}; });
+      if (!grantRes.ok) {
+        // Linked successfully, but sharing failed (e.g. only the trip's
+        // real owner may grant Admin) -- still refresh so the successful
+        // link shows up, but say clearly the access level didn't stick.
+        showToast(grantBody.error || 'Linked, but could not set their access level.');
+        closeModal();
+        state = await loadInitialState();
+        render();
+        return;
+      }
+    } else if (payload.role === '' && payload.priorAccountId) {
+      // "No trip access" was explicitly chosen for someone who
+      // previously had a real grant. Treat a failed revoke as a failed
+      // access update; silently claiming success here could leave the old
+      // account able to open the trip after the UI says access was removed.
+      var revokeRes = await fetch('/WayPoint/api/trip-grants/revoke', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tripId: payload.tripId, accountId: payload.priorAccountId })
+      });
+      var revokeBody = await revokeRes.json().catch(function () { return {}; });
+      if (!revokeRes.ok) {
+        showToast(revokeBody.error || 'Linked, but could not remove the previous access grant.');
+        closeModal();
+        state = await loadInitialState();
+        render();
+        return;
+      }
+    }
+
     closeModal();
-    showToast(payload.username ? 'Linked to ' + payload.username : 'Link removed');
+    showToast(!username ? 'Link removed' : (payload.role ? 'Shared with ' + username : 'Linked to ' + username));
     // Reloads rather than patching `state` in place -- simplest way to
-    // pick up the server's freshly-recomputed `companionAvatars` (and,
-    // for a full-scope role, the companion's own now-changed accountId)
-    // rather than trying to guess what they'd now be. Same pattern as
-    // submitShareGrant()/revokeGrant() just above.
+    // pick up the server's freshly-recomputed `companionAvatars`/
+    // `companionAccessLevels` (and, for a full-scope role, the
+    // companion's own now-changed accountId) rather than trying to
+    // guess what they'd now be.
     state = await loadInitialState();
     render();
   } catch (err) {
-    showToast('Could not update that link — check your connection and try again.');
+    showToast('Could not update that companion\'s access — check your connection and try again.');
   }
 }
 
-/* ---- "Add companion" -- the one-step Guest+link flow -----------------
-   Superuser/Admin only (canLinkCompanion(), same bar as re-linking an
-   existing Guest above). This is deliberately NOT a new server-side
-   endpoint: it's the exact same two actions a Superuser/Admin could
-   already do by hand -- add a guest, then link them to a username --
-   just chained together behind one form so they don't have to leave the
-   Companions tab and come back. See submitAddLinkedCompanion() below for
-   why they run strictly in that order, one fully finished before the
-   other starts. --------------------------------------------------------- */
+/* ---- "Add companion" -- the one-step Guest+link+share flow -----------
+   Superuser/Admin only (canLinkCompanion(), same bar as managing an
+   existing companion's access above). This is deliberately NOT a new
+   server-side endpoint: it's the same three actions a Superuser/Admin
+   could already do by hand -- add a guest, link them to a username, and
+   share the trip with them -- just chained together behind one form so
+   they don't have to leave the Companions tab and come back. See
+   submitAddLinkedCompanion() below for why they run strictly in that
+   order, one fully finished before the next starts. --------------------- */
 function openAddLinkedCompanionForm(trip) {
+  var iCanGrantAdmin = canGrantAdminRole(trip);
   var root = document.getElementById('modal-root');
   root.innerHTML =
     '<div class="modal-backdrop" data-action="close-modal">' +
@@ -2997,9 +3134,14 @@ function openAddLinkedCompanionForm(trip) {
           '<button class="btn btn-icon btn-ghost" data-action="close-modal">' + icon('close') + '</button></div>' +
         '<form id="add-linked-companion-form" data-trip-id="' + esc(trip.tripId) + '">' +
           '<div class="modal-body">' +
-            '<p class="field-hint" style="margin-bottom:14px">A companion is someone with their own Waypoint login — their marker uses their own account\'s colour + animal instead of a smiley. This does NOT by itself give that account any access to this trip — use "Share access" below the companion list for that.</p>' +
+            '<p class="field-hint" style="margin-bottom:14px">A companion is someone with their own Waypoint login — their marker uses their own account\'s colour + animal instead of a smiley, and this shares the trip with them right away at whatever privilege level you pick below.</p>' +
             '<div class="field"><label>Name</label><input type="text" name="name" required placeholder="e.g. Sarah"></div>' +
             '<div class="field"><label>Username</label><input type="text" name="username" required placeholder="an existing account"></div>' +
+            '<div class="field"><label>Privilege level</label><select name="role" required>' +
+              '<option value="user" selected>' + esc(GRANT_ROLE_LABELS.user) + '</option>' +
+              '<option value="viewer">' + esc(GRANT_ROLE_LABELS.viewer) + '</option>' +
+              (iCanGrantAdmin ? '<option value="admin">' + esc(GRANT_ROLE_LABELS.admin) + '</option>' : '') +
+            '</select></div>' +
           '</div>' +
           '<div class="modal-foot">' +
             '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
@@ -3033,6 +3175,7 @@ function waitForSaveToSettle() {
 async function submitAddLinkedCompanion(payload) {
   var name = (payload.name || '').trim();
   var username = (payload.username || '').trim();
+  var role = payload.role || 'user';
   if (!name) { showToast('Enter a name.'); return; }
   if (!username) { showToast('Enter the username to link.'); return; }
 
@@ -3049,18 +3192,18 @@ async function submitAddLinkedCompanion(payload) {
   });
   // Step 2: wait for that save (and anything it was already queued
   // behind) to actually finish, so the companion genuinely exists
-  // server-side before asking to link it.
+  // server-side before asking to link/share it.
   await waitForSaveToSettle();
-  // Step 3: link it -- exactly the standalone "link to an account"
-  // action (submitCompanionLink() above), which already does its own
-  // permission check, error toast, and full state reload on success. If
-  // THIS step fails (e.g. the username doesn't exist), the person still
+  // Step 3: link AND share it in one go -- see submitCompanionAccess()'s
+  // own comment for exactly what that does. priorAccountId is
+  // deliberately null: this companion didn't exist a moment ago, so
+  // there's nothing to revoke regardless of what role ends up chosen. If
+  // this step fails (e.g. the username doesn't exist), the person still
   // ends up added as an ordinary Guest rather than not existing at all --
-  // submitCompanionLink()'s own error toast explains what went wrong, and
-  // the row's "Upgrade to companion" button (see renderCompanionsTab())
-  // is right there to retry once the username's sorted out, so nothing
-  // is stuck or lost either way.
-  await submitCompanionLink({ tripId: payload.tripId, companionId: newCompanionId, username: username });
+  // submitCompanionAccess()'s own error toast explains what went wrong,
+  // and the row's "Manage account & access" button (see
+  // renderCompanionsTab()) is right there to retry once it's sorted out.
+  await submitCompanionAccess({ tripId: payload.tripId, companionId: newCompanionId, username: username, role: role, priorAccountId: null });
 }
 
 // Self-service avatar picker (Phase 1b) -- every logged-in account can
@@ -3148,8 +3291,8 @@ async function submitAvatarPick(payload) {
     // Any companion linked to this account needs its resolved
     // companionAvatars entry (on every trip it's shared on) to pick up
     // the change too -- simplest correct way is the same "reload state"
-    // pattern used after submitCompanionLink()/submitShareGrant(), rather
-    // than trying to patch every trip's companionAvatars map by hand.
+    // pattern used after submitCompanionAccess(), rather than trying to
+    // patch every trip's companionAvatars map by hand.
     state = await loadInitialState();
     render();
   } catch (err) {
@@ -3706,27 +3849,33 @@ function companionTags(trip, companionIds) {
 // "who can log in and see/edit this" (accounts, via sharing). They used
 // to be two separate screens (this tab for adding a person, Settings ->
 // Share for giving an account access) that only made sense read
-// together — see claude/waypoint-companions-plan.md ("The structural
-// change") for the full reasoning. Below the companion list itself,
-// renderSharePanel() (moved here from the old Settings tab) is appended
-// for anyone who can share the trip at all (canShareTrip() — Superuser
-// or Admin).
+// together, and — as of this section's own revision below — the
+// standalone "Share access" panel that used to sit under the companion
+// list is GONE too, folded into the add/link actions themselves: see
+// claude/waypoint-companions-plan.md ("The structural change", and its
+// later "Access moves onto the companion itself" section) for the full
+// reasoning.
 //
 // GUEST vs COMPANION -- this is product vocabulary, not a new data
 // field: every person on this list is stored the same way (a plain
 // "companion" record, see COMPANION_FIELDS above), and whether they're
 // shown as a "Guest" or a "Companion" is purely whether `accountId` is
-// set on them -- i.e. whether they have their own Waypoint login.
+// set on them -- i.e. whether they have their own Waypoint login. The
+// list itself is now visually SPLIT into two sections below (see
+// renderCompanionsTab()) so the two kinds of person are never mixed
+// together in one list the way they used to be.
 //   - A GUEST has no login. Anyone who canAddCompanion() (a "user" grant
 //     included, Phase 3) can add one -- name + smiley colour only.
 //   - A COMPANION has one. Only canLinkCompanion() (Superuser/Admin) can
 //     create one directly, or upgrade an existing Guest into one by
 //     linking a username -- see openAddLinkedCompanionForm() and
-//     openCompanionLinkForm() below. Linking does NOT by itself grant
-//     that account any ACCESS to this trip (that's still the separate
-//     "Share access" panel below) -- it just says "this row IS that
-//     login", which is what lets their marker use their own account's
-//     colour + animal instead of a generic smiley.
+//     openCompanionLinkForm() below. EITHER action now also asks for a
+//     privilege level (Admin/User/Viewer, or "no trip access") right
+//     there in the same form, and grants it automatically -- this is
+//     what replaced the old separate "Share access" panel: adding or
+//     linking a companion and sharing the trip with them used to be two
+//     separate steps (add/link here, then go find them again in the
+//     share panel below), and are now genuinely one.
 // A Companion who DOES also have access to this trip (because they're
 // its owner, the site's uber-user, or hold a grant) gets an extra tag
 // showing that access level -- Super/Admin/User/Viewer, resolved
@@ -3740,83 +3889,118 @@ function companionTags(trip, companionIds) {
 // same trip.
 var COMPANION_ACCESS_LEVEL_LABELS = { superuser: 'Super', admin: 'Admin', user: 'User', viewer: 'Viewer' };
 
+// Deliberately reading `trip.companionAvatars[...].type` here rather than
+// `c.accountId` to decide Guest vs Companion -- accountId is stripped
+// from a scoped "user"/"viewer" role's own companion list (see
+// buildVisibleTrip() in src/worker.js), so `c.accountId` is ALWAYS
+// falsy for them even when a companion genuinely IS linked.
+// `companionAvatars` doesn't have that problem: it's already sent to
+// every role (same as `companionAccessLevels`), and its `type` ('account'
+// vs 'smiley') already encodes exactly this same "does this person have
+// a login" fact for the avatar marker -- reusing it here means
+// Guest/Companion always agrees with what the marker itself is showing,
+// for every role, including one whose linked account has since been
+// deleted (resolveCompanionAvatars() quietly falls back to 'smiley' in
+// that case too, so this then correctly reads as a Guest again rather
+// than a dangling Companion). Used both to decide which of the two
+// segregated lists below a companion belongs in, and by
+// openCompanionLinkForm() to word its own title/hint correctly.
+function isCompanionLinked(trip, c) {
+  return !!(trip.companionAvatars && trip.companionAvatars[c.companionId] && trip.companionAvatars[c.companionId].type === 'account');
+}
+
 function renderCompanionsTab(trip) {
   var canAddGuest = canAddCompanion(trip);
   var canAddLinked = canLinkCompanion(trip);
-  // Superuser/Admin get two explicit choices up front (add someone with
-  // no login, or add someone who already has one); a "user" grant only
-  // ever gets the first -- see COMPANION_FIELDS_LIMITED and
+  // Superuser/Admin get two explicit choices up front (add someone who
+  // already has a login and share the trip with them in one step, or
+  // add someone with no login at all); a "user" grant only ever gets
+  // the second -- see COMPANION_FIELDS_LIMITED and
   // mergeUserScopedCompanions() in src/worker.js for the field-level
   // enforcement behind that restriction (this button is just the UI
   // reflection of it, not the actual security boundary).
+  //
+  // "Add companion" deliberately gets the ACCENT (coloured) button and
+  // "Add guest" the plain grey one -- matching the same colour-coding
+  // already used for their MARKERS elsewhere on this tab (a Companion's
+  // marker is their own account's colour + animal; a Guest's is always
+  // the plain grey circle, see companionAvatarHtml()) makes the two
+  // buttons themselves an extension of that same visual language, rather
+  // than an arbitrary choice of which one looks more "primary". Wrapped
+  // in a shared .head-btn-row so the pair sits right next to each other
+  // (see that class's own comment for why that needs a wrapper at all).
   var addButtons =
-    (canAddGuest ? '<button class="btn btn-accent" data-action="new-companion">' + icon('plus') + ' Add guest</button>' : '') +
-    (canAddLinked ? '<button class="btn" data-action="new-linked-companion">' + icon('plus') + ' Add companion</button>' : '');
-  var head = '<div class="tab-panel-head"><h2>Companions</h2>' + addButtons + '</div>';
+    (canAddLinked ? '<button class="btn btn-accent" data-action="new-linked-companion">' + icon('plus') + ' Add companion</button>' : '') +
+    (canAddGuest ? '<button class="btn" data-action="new-companion">' + icon('plus') + ' Add guest</button>' : '');
+  var addButtonsRow = addButtons ? '<div class="head-btn-row">' + addButtons + '</div>' : '';
+  var head = '<div class="tab-panel-head"><h2>Companions</h2>' + addButtonsRow + '</div>';
 
-  var body;
   if (trip.companions.length === 0) {
-    body = '<div class="empty-state">' + icon('companion') + '<h3>No one added yet</h3>' +
-      '<p>Add the people traveling with you as guests, or — if they already have their own Waypoint login — as companions, then tag them to destinations, activities, accommodation and transport to track who\'s on what.</p>' +
-      (addButtons ? '<div style="margin-top:14px">' + addButtons + '</div>' : '') +
+    return head + '<div class="empty-state">' + icon('companion') + '<h3>No one added yet</h3>' +
+      '<p>Add the people traveling with you as companions if they already have their own Waypoint login (this shares the trip with them too), or as guests if they don\'t, then tag them to destinations, activities, accommodation and transport to track who\'s on what.</p>' +
+      (addButtonsRow ? '<div style="margin-top:14px">' + addButtonsRow + '</div>' : '') +
       '</div>';
-  } else {
-    var rows = trip.companions.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
-      var linkedAccount = c.accountId ? (trip.grants || []).find(function (g) { return g.accountId === c.accountId; }) : null;
-      // A companion can be linked to an account that ISN'T (or is no
-      // longer) shared on THIS trip -- see handleCompanionLink() in
-      // src/worker.js, which deliberately allows linking without also
-      // granting access. `trip.grants` only exists for a full-scope
-      // role anyway (see buildVisibleTrip() in src/worker.js), so
-      // there's often nothing to look the username up in even when
-      // `c.accountId` is present -- the linked-tag below just quietly
-      // says "has a login" in that case rather than guessing a name.
-      var linkedTag = c.accountId
-        ? '<span class="tag">' + icon('user') + (linkedAccount ? esc(linkedAccount.username) : 'has a login') + '</span>'
-        : '';
-      // The access-level tag -- see the big comment above this function.
-      // A Guest (no accountId) always just reads "Guest". A Companion
-      // shows their actual resolved access level when there is one
-      // (Super/Admin/User/Viewer), or a generic "Companion" tag when
-      // they're linked but genuinely have no access to this trip (linked
-      // purely for their avatar, never shared -- see
-      // resolveCompanionAccessLevels()'s own comment on this case).
-      //
-      // Deliberately reading `trip.companionAvatars[...].type` here rather
-      // than `c.accountId` to decide Guest vs Companion -- accountId is
-      // stripped from a scoped "user"/"viewer" role's own companion list
-      // (see buildVisibleTrip() in src/worker.js), so `c.accountId` is
-      // ALWAYS falsy for them even when a companion genuinely IS linked.
-      // `companionAvatars` doesn't have that problem: it's already sent
-      // to every role (same as `companionAccessLevels`), and its `type`
-      // ('account' vs 'smiley') already encodes exactly this same "does
-      // this person have a login" fact for the avatar marker -- reusing
-      // it here means Guest/Companion always agrees with what the
-      // marker itself is showing, for every role, including one whose
-      // linked account has since been deleted (resolveCompanionAvatars()
-      // quietly falls back to 'smiley' in that case too, so this then
-      // correctly reads as a Guest again rather than a dangling Companion).
-      var isLinked = !!(trip.companionAvatars && trip.companionAvatars[c.companionId] && trip.companionAvatars[c.companionId].type === 'account');
-      var accessRole = trip.companionAccessLevels && trip.companionAccessLevels[c.companionId];
-      var accessTag = isLinked
-        ? '<span class="tag' + (accessRole ? ' tag-role-' + accessRole : '') + '">' + (accessRole ? esc(COMPANION_ACCESS_LEVEL_LABELS[accessRole] || accessRole) : 'Companion') + '</span>'
-        : '<span class="tag">Guest</span>';
-      // A separate, second `.item-actions` group rather than trying to
-      // merge into rowActions()'s own -- both are just small icon-button
-      // clusters, so two side by side reads identically to one, without
-      // needing rowActions() itself to know anything about linking.
-      var linkAction = canAddLinked
-        ? '<div class="item-actions"><button class="btn btn-icon btn-ghost" data-action="link-companion" data-id="' + c.companionId + '" title="' + (c.accountId ? 'Change or remove account link' : 'Upgrade to companion (link an account)') + '">' + icon('users') + '</button></div>'
-        : '';
-      return '<div class="item-row"><div class="item-icon item-icon-avatar">' + companionAvatarHtml(trip, c.companionId, c.name) + '</div><div class="item-main">' +
-        '<div class="item-title-row"><span class="item-title">' + esc(c.name) + '</span>' + accessTag + linkedTag + '</div>' +
-        (c.notes ? '<div class="item-sub">' + esc(c.notes) + '</div>' : '') +
-        '</div>' + linkAction + rowActions(trip, 'companion', c) + '</div>';
-    }).join('');
-    body = '<div class="item-list">' + rows + '</div>';
   }
 
-  return head + body + (canShareTrip(trip) ? renderSharePanel(trip) : '');
+  // One row-renderer shared by both sections below -- a Companion row
+  // and a Guest row differ only in which tags/actions apply, not in
+  // their overall shape, so there's no reason to duplicate the HTML
+  // structure itself.
+  function companionRowHtml(c) {
+    var linkedAccount = c.accountId ? (trip.grants || []).find(function (g) { return g.accountId === c.accountId; }) : null;
+    // A companion can be linked to an account that ISN'T (or is no
+    // longer) shared on THIS trip -- e.g. deliberately linked with "no
+    // trip access" (see openCompanionLinkForm() below). `trip.grants`
+    // only exists for a full-scope role anyway (see buildVisibleTrip()
+    // in src/worker.js), so there's often nothing to look the username
+    // up in even when `c.accountId` is present -- the linked-tag below
+    // just quietly says "has a login" in that case rather than guessing.
+    var linkedTag = c.accountId
+      ? '<span class="tag">' + icon('user') + (linkedAccount ? esc(linkedAccount.username) : 'has a login') + '</span>'
+      : '';
+    // The access-level tag -- see the big comment above this function.
+    // A Guest (no accountId) always just reads "Guest". A Companion
+    // shows their actual resolved access level when there is one
+    // (Super/Admin/User/Viewer), or a generic "Companion" tag when
+    // they're linked but genuinely have no access to this trip (linked
+    // purely for their avatar, or explicitly given "no trip access" in
+    // openCompanionLinkForm() -- see resolveCompanionAccessLevels()'s
+    // own comment on this case).
+    var isLinked = isCompanionLinked(trip, c);
+    var accessRole = trip.companionAccessLevels && trip.companionAccessLevels[c.companionId];
+    var accessTag = isLinked
+      ? '<span class="tag' + (accessRole ? ' tag-role-' + accessRole : '') + '">' + (accessRole ? esc(COMPANION_ACCESS_LEVEL_LABELS[accessRole] || accessRole) : 'Companion') + '</span>'
+      : '<span class="tag">Guest</span>';
+    // A separate, second `.item-actions` group rather than trying to
+    // merge into rowActions()'s own -- both are just small icon-button
+    // clusters, so two side by side reads identically to one, without
+    // needing rowActions() itself to know anything about linking.
+    var linkAction = canAddLinked
+      ? '<div class="item-actions"><button class="btn btn-icon btn-ghost" data-action="link-companion" data-id="' + c.companionId + '" title="' + (isLinked ? 'Manage their account link and access level' : 'Upgrade to companion (link an account, and optionally share the trip)') + '">' + icon('users') + '</button></div>'
+      : '';
+    return '<div class="item-row"><div class="item-icon item-icon-avatar">' + companionAvatarHtml(trip, c.companionId, c.name) + '</div><div class="item-main">' +
+      '<div class="item-title-row"><span class="item-title">' + esc(c.name) + '</span>' + accessTag + linkedTag + '</div>' +
+      (c.notes ? '<div class="item-sub">' + esc(c.notes) + '</div>' : '') +
+      '</div>' + linkAction + rowActions(trip, 'companion', c) + '</div>';
+  }
+
+  var sorted = trip.companions.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
+  var companionRows = sorted.filter(function (c) { return isCompanionLinked(trip, c); });
+  var guestRows = sorted.filter(function (c) { return !isCompanionLinked(trip, c); });
+
+  // Segregated into two clearly-labelled lists rather than one mixed
+  // one -- this is what replaced the old "Share access" panel's spot at
+  // the bottom of the tab (see the big comment above this function).
+  var companionsSection = '<h3 class="section-subhead">Companions</h3>' +
+    (companionRows.length
+      ? '<div class="item-list">' + companionRows.map(companionRowHtml).join('') + '</div>'
+      : '<p class="field-hint">Nobody with a Waypoint login on this trip yet.</p>');
+  var guestsSection = '<h3 class="section-subhead">Guests</h3>' +
+    (guestRows.length
+      ? '<div class="item-list">' + guestRows.map(companionRowHtml).join('') + '</div>'
+      : '<p class="field-hint">Nobody without a login on this trip yet.</p>');
+
+  return head + companionsSection + guestsSection;
 }
 
 /* ---------- 19b. Map tab ---------------------------------------------------
@@ -4236,121 +4420,19 @@ function renderExpensesTab(trip) {
     '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount</th><th class="num">' + esc(trip.homeCurrency) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
-/* ---------- 21b. Render: "Share this trip" panel (embedded in the
-   Companions tab — see renderCompanionsTab() above for why the two live
-   together) --------------------------------------------------------------
-   A trip's Superuser — its owner, or (invisibly) the site's uber-user —
-   can share it as Admin, User or Viewer. As of Phase 2 of the
-   Companions/Avatars feature, an Admin grant can ALSO open this panel
-   and share the trip, but only as User or Viewer — see canShareTrip()/
-   canGrantAdminRole() above, which this mirrors exactly, and
-   handleTripGrantsUpsert() in src/worker.js for the server-side
-   enforcement (this UI gating is only ever a courtesy — the Worker
-   refuses an over-reaching request regardless of what this panel shows).
-   Talks to two small dedicated endpoints (/api/trip-grants,
-   /api/trip-grants/revoke) rather than going through the usual
-   updateState()/persist() save path, because sharing deliberately ISN'T
-   part of a trip's regular saved data the way a destination or activity
-   is — see the big "SAVING SAFELY" comment in src/worker.js for why
-   ownerId/grants are kept entirely out of the normal POST /api/data
-   save. Sharing as User/Viewer against a specific companion ALSO links
-   that companion to the shared account (see submitShareGrant() below and
-   the COMPANIONS & AVATARS comment in src/worker.js) — that's why the
-   panel lives here rather than staying a standalone Settings-tab form. */
-
-var GRANT_ROLE_LABELS = {
-  admin: 'Admin — full read/write',
-  user: 'User — read/write, own items only',
-  viewer: 'Viewer — read-only, own items only'
-};
-
-function renderSharePanel(trip) {
-  var iCanGrantAdmin = canGrantAdminRole(trip);
-  var grants = (trip.grants || []).slice().sort(function (a, b) { return a.username.localeCompare(b.username); });
-  var rows = grants.map(function (g) {
-    var companion = g.companionId ? byId(trip.companions, g.companionId, 'companionId') : null;
-    var scopeText = (g.role === 'user' || g.role === 'viewer') ? ' as ' + (companion ? esc(companion.name) : '(companion removed)') : '';
-    // An Admin grant can revoke a User/Viewer, but not another Admin --
-    // symmetric with not being able to GRANT Admin access. See
-    // handleTripGrantsRevoke() in src/worker.js for the real, enforced
-    // version of this same rule.
-    var canRevokeThis = iCanGrantAdmin || g.role !== 'admin';
-    return '<div class="item-row"><div class="item-icon">' + icon('user') + '</div><div class="item-main">' +
-      '<div class="item-title-row"><span class="item-title">' + esc(g.username) + '</span><span class="tag">' + esc(GRANT_ROLE_LABELS[g.role] || g.role) + scopeText + '</span></div>' +
-      '</div><div class="item-actions">' +
-        (canRevokeThis ? '<button class="btn btn-icon btn-ghost" data-action="revoke-grant" data-account-id="' + esc(g.accountId) + '" data-username="' + esc(g.username) + '" title="Revoke access">' + icon('trash') + '</button>' : '') +
-      '</div></div>';
-  }).join('');
-  var companionOptions = (trip.companions || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
-    return '<option value="' + c.companionId + '">' + esc(c.name) + '</option>';
-  }).join('');
-  return '<div class="share-panel">' +
-    '<h3 style="font-size:15px;margin-bottom:4px">Share access</h3>' +
-    '<p class="field-hint" style="margin-bottom:12px">' +
-      (trip.ownerUsername ? 'Owned by ' + esc(trip.ownerUsername) + '. ' : '') +
-      (iCanGrantAdmin
-        ? 'Give an existing account access to this trip.'
-        : 'Give an existing account User or Viewer access to this trip. Only the owner (or the site owner) can grant Admin access.') + '</p>' +
-    (rows ? '<div class="item-list">' + rows + '</div>' : '<p class="field-hint">Nobody else has been given access to this trip yet.</p>') +
-    '<form id="share-form" class="share-form-row">' +
-      '<div class="field"><label>Username</label><input type="text" name="username" placeholder="an existing account" required></div>' +
-      '<div class="field"><label>Role</label><select name="role" id="share-role-select">' +
-        '<option value="user" selected>' + esc(GRANT_ROLE_LABELS.user) + '</option>' +
-        '<option value="viewer">' + esc(GRANT_ROLE_LABELS.viewer) + '</option>' +
-        (iCanGrantAdmin ? '<option value="admin">' + esc(GRANT_ROLE_LABELS.admin) + '</option>' : '') +
-      '</select></div>' +
-      '<div class="field" id="share-companion-field">' +
-        '<label>As companion</label>' +
-        '<select name="companionId">' + (companionOptions || '<option value="">Add a companion first, above</option>') + '</select>' +
-      '</div>' +
-      '<button type="submit" class="btn btn-primary">Share</button>' +
-    '</form>' +
-    '<p class="field-hint" style="margin-top:8px">The account has to already exist first — see "Manage accounts" (only the site owner can create one). Sharing as User/Viewer against a companion also links that companion\'s avatar to this account.</p>' +
-  '</div>';
-}
-
-// Both grant/revoke reload the trip data afterwards (rather than
-// patching `state` in place) — simplest way to pick up the server's
-// authoritative, freshly-recomputed `grants`/`myGrant` rather than
-// trying to guess what they'd now be.
-async function submitShareGrant(payload) {
-  try {
-    var res = await fetch('/WayPoint/api/trip-grants', {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    var body = await res.json().catch(function () { return {}; });
-    if (!res.ok) { showToast(body.error || 'Could not share this trip.'); return; }
-    showToast('Shared with ' + payload.username);
-    state = await loadInitialState();
-    render();
-  } catch (err) {
-    showToast('Could not share this trip — check your connection and try again.');
-  }
-}
-
-function revokeGrant(tripId, accountId, username) {
-  openConfirm({
-    title: 'Revoke access?', message: 'This removes ' + username + '\'s access to this trip. They\'d need to be shared with again to get it back.', confirmLabel: 'Revoke',
-    onConfirm: async function () {
-      try {
-        var res = await fetch('/WayPoint/api/trip-grants/revoke', {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tripId: tripId, accountId: accountId })
-        });
-        var body = await res.json().catch(function () { return {}; });
-        if (!res.ok) { showToast(body.error || 'Could not revoke access.'); return; }
-        showToast('Access revoked');
-        state = await loadInitialState();
-        render();
-      } catch (err) {
-        showToast('Could not revoke access — check your connection and try again.');
-      }
-    }
-  });
-}
+/* ---------- 21b. (formerly) the "Share this trip" panel ----------------
+   Used to be embedded here, at the bottom of the Companions tab -- a
+   standalone panel listing every grant with a revoke button, plus its
+   own form to share the trip with an existing account. It's gone now:
+   granting access moved onto the companion-link form itself (see
+   openCompanionLinkForm()/openAddLinkedCompanionForm()/
+   submitCompanionAccess() further up, and the Companions tab's own
+   split into "Companions"/"Guests" sections in renderCompanionsTab()),
+   so there's no separate place left that needs a dedicated list-plus-
+   form UI just for sharing. GRANT_ROLE_LABELS, and the /api/trip-grants
+   + /api/trip-grants/revoke endpoints this used to talk to, are all
+   still very much alive -- see submitCompanionAccess() above for where
+   they're used from instead. */
 
 /* ---------- 22. Render: Settings tab ------------------------------------------ */
 
@@ -4397,11 +4479,11 @@ function renderSettingsTab(trip) {
       'trip — the API key lives only as a Cloudflare Worker secret, never in this app itself.</p>' +
     '</div>' : '') +
     // The old "Share this trip" form used to live here -- it's now part
-    // of the Companions tab (see renderCompanionsTab()/renderSharePanel()
-    // above), since who can log in and see this trip and who's tagged as
-    // a companion on it turned out to be one and the same "who's on this
-    // trip" question. Just a pointer for anyone who remembers it being
-    // here.
+    // of the Companions tab (see openCompanionLinkForm()/
+    // openAddLinkedCompanionForm() above), since who can log in and see
+    // this trip and who's tagged as a companion on it turned out to be
+    // one and the same "who's on this trip" question. Just a pointer for
+    // anyone who remembers it being here.
     (canShareTrip(trip) ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)">' +
       '<h3 style="font-size:15px;margin-bottom:8px">Sharing</h3>' +
       '<p class="field-hint">Manage who has access to this trip from the <button class="warn-link" data-action="switch-tab" data-tab="companions">Companions tab</button>.</p>' +
@@ -4518,9 +4600,6 @@ document.addEventListener('click', function (e) {
   if (action === 'edit-trip') { openTripForm(byId(state.trips, el.dataset.id, 'tripId')); return; }
   if (action === 'delete-trip') { deleteTrip(el.dataset.id); return; }
   if (action === 'export-csv') { exportCsv(trip); return; }
-  // "Share this trip" panel (Settings tab, Superuser-only — see
-  // renderSharePanel()): revoking someone's access to the CURRENT trip.
-  if (action === 'revoke-grant') { revokeGrant(currentTripId, el.dataset.accountId, el.dataset.username); return; }
 
   if (!trip) return;
   if (action === 'new-destination') { openDestinationForm(trip); return; }
@@ -4568,19 +4647,6 @@ document.addEventListener('change', function (e) {
   if (container) container.innerHTML = fieldsHtml(resolveFields(cfg, values), values, cfg.trip || {});
 });
 
-// Powers the "Share this trip" form's own bit of "change something,
-// something else on screen updates" behavior (see renderSharePanel()):
-// the "As companion" field only makes sense for a "user"/"viewer" grant
-// (both are scoped to one companion), not for "admin" (full read/write,
-// nothing to scope) — so it's hidden as soon as Admin is picked, and
-// shown again for the other two roles.
-document.addEventListener('change', function (e) {
-  if (e.target.id === 'share-role-select') {
-    var companionField = document.getElementById('share-companion-field');
-    if (companionField) companionField.style.display = e.target.value === 'admin' ? 'none' : '';
-  }
-});
-
 document.addEventListener('submit', function (e) {
   if (e.target.id === 'login-form') {
     e.preventDefault();
@@ -4605,30 +4671,21 @@ document.addEventListener('submit', function (e) {
     saveUserAccount(userPayload);
     return;
   }
-  if (e.target.id === 'share-form') {
-    e.preventDefault();
-    var fdShare = new FormData(e.target);
-    var shareRole = fdShare.get('role') || 'user';
-    var sharePayload = { tripId: currentTripId, username: fdShare.get('username') || '', role: shareRole };
-    // companionId is only meaningful (and only sent) for "user"/"viewer"
-    // — see permissionForTrip() in src/worker.js, which ignores it for
-    // "admin" regardless, but there's no reason to send it at all.
-    if (shareRole !== 'admin') sharePayload.companionId = fdShare.get('companionId') || '';
-    // No explicit form reset needed here on success -- submitShareGrant()
-    // reloads `state` and calls render(), which rebuilds this whole panel
-    // (and its form) fresh from the server's response either way. On
-    // failure the typed values are left exactly as they were, so nothing
-    // has to be retyped after fixing whatever the error toast reported.
-    submitShareGrant(sharePayload);
-    return;
-  }
   if (e.target.id === 'companion-link-form') {
     e.preventDefault();
     var fdLink = new FormData(e.target);
-    submitCompanionLink({
+    submitCompanionAccess({
       tripId: e.target.dataset.tripId,
       companionId: e.target.dataset.companionId,
-      username: (fdLink.get('username') || '').trim()
+      username: (fdLink.get('username') || '').trim(),
+      // fd.has('role') is false when the privilege select was rendered
+      // disabled (see openCompanionLinkForm()'s roleLocked case) -- a
+      // disabled field is never included in a submitted FormData at
+      // all, which is exactly how submitCompanionAccess() tells "leave
+      // access untouched" apart from "'' was actually chosen" (see its
+      // own comment on what each value of payload.role means).
+      role: fdLink.has('role') ? (fdLink.get('role') || '') : undefined,
+      priorAccountId: e.target.dataset.priorAccountId || null
     });
     return;
   }
@@ -4638,12 +4695,13 @@ document.addEventListener('submit', function (e) {
     submitAddLinkedCompanion({
       tripId: e.target.dataset.tripId,
       name: (fdAddLinked.get('name') || '').trim(),
-      username: (fdAddLinked.get('username') || '').trim()
+      username: (fdAddLinked.get('username') || '').trim(),
+      role: fdAddLinked.get('role') || 'user'
     });
     // Deliberately no closeModal() here -- submitAddLinkedCompanion()'s
-    // own final step, submitCompanionLink(), already closes it on
+    // own final step, submitCompanionAccess(), already closes it on
     // success (and leaves it open with an error toast on failure, same
-    // as filling in the standalone link form wrong would).
+    // as filling in the standalone link/access form wrong would).
     return;
   }
   if (e.target.id === 'avatar-pick-form') {

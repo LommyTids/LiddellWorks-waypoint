@@ -7,7 +7,7 @@
 // the old Artifact-only version couldn't be tested for in this sandbox).
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
-const { loginAsAdmin } = require('./test-helpers');
+const { loginAsAdmin, waitForSaveToSettle } = require('./test-helpers');
 const path = require('path');
 
 const PORT = 8787;
@@ -66,7 +66,15 @@ function waitForServer(url, tries) {
     await page.fill('input[name="departDate"]', '2027-01-05');
     await page.fill('input[name="timezone"]', 'Asia/Tokyo');
     await page.click('#entity-form button[type="submit"]');
-    await page.waitForTimeout(150);
+    // A fixed page.waitForTimeout() here isn't reliably enough time for
+    // this second save to actually reach the mock server before the
+    // reload below — see waitForSaveToSettle()'s own comment in
+    // test-helpers.js for why (the security-fixes branch's save-pacing).
+    // Unlike the FIRST save above (which explicitly waits for the
+    // "Saved" indicator text before moving on), this one only had a
+    // fixed 150ms wait, which is exactly why the destination could still
+    // be mid-save when the page reloads immediately after.
+    await waitForSaveToSettle(page);
 
     // ---- Reload the page entirely: does loadInitialState() fetch what persist() saved? ----
     // sessionStorage remembers we were last on the trip's destinations tab,
