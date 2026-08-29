@@ -154,25 +154,29 @@ Permissions are **per trip**, not a single global role on the account:
 
 - **Superuser** — whoever creates a trip becomes its permanent,
   non-transferable owner, with full read/write on it, and — the one
-  thing only they can do — grant or revoke Admin access, and link or
-  unlink a companion to an account. Ownership can't be handed to someone
-  else.
+  thing only they can do — grant or revoke Admin access. Ownership can't
+  be handed to someone else.
 - **Admin** *(a role the owner can grant)* — full read/write on that one
   trip, same as the owner, and (as of the Companions/Avatars feature,
   below) can also share it themselves — but only as User or Viewer,
   never as another Admin, and can revoke a User/Viewer grant but never
   another Admin's. Only the trip's actual owner can touch an admin-role
-  grant at all, in either direction.
+  grant at all, in either direction. An Admin can also do everything the
+  owner can with **Guests and Companions** (see below) — add either
+  kind, and link or unlink a Guest to/from an account — that bar is
+  "Superuser or Admin" throughout, not "Superuser only".
 - **User** *(a role the owner or an Admin can grant, scoped to one
   companion)* — can see and edit only the items on that trip already
   tagged with the one
-  companion they've been linked to (see "Companions", below) — their own
-  accommodation, their own flights, that kind of thing. They can change
-  details on those items, but can't create new items, delete anything,
-  retag anything, or touch the trip's own name/dates/notes, its
-  companions list, or its contacts.
+  companion they've been linked to (see "Guests and Companions", below)
+  — their own accommodation, their own flights, that kind of thing. They
+  can change details on those items, but can't create new items, delete
+  anything, retag anything, or touch the trip's own name/dates/notes,
+  its contacts, or an existing companion — they may only add a new
+  Guest of their own.
 - **Viewer** *(a role the owner can grant, scoped to one companion)* —
-  the same scoping as User, but read-only.
+  the same scoping as User, but read-only, including for companions:
+  a Viewer can't add anyone at all.
 
 A trip nobody's shared with you is genuinely absent from what the server
 sends back — not hidden in the UI, invisible. Expenses are always left
@@ -203,21 +207,70 @@ a completely different role, or no access at all — it's all per trip.
 
 ## Companions & Avatars
 
-**Companions** (Destinations/Activities/Accommodation/Transport tabs
-each gained this) — a per-trip list of the people actually on the trip,
-managed from its own Companions tab. Any destination, activity,
-accommodation booking or transport leg can be tagged with any number of
-them (a small row of checkboxes on that item's form), and the tags show
-up right on that item in the list. This is more than a label — it's
-also literally what a User/Viewer grant's visibility is scoped to (see
-above), so tagging accurately matters if you're planning to share a trip
-with anyone. As of this update, a **User** grant may also add a
-brand-new companion of their own (just a name and a smiley colour,
-nothing else) from that same tab — but, like everything else a User
-grant can do, only append: they can't edit, delete, retag, or link one
-that already exists, and there's deliberately no Notes field on their
+**Guests and Companions** (Destinations/Activities/Accommodation/
+Transport tabs each gained this) — a per-trip list of the people
+actually on the trip, managed from its own Companions tab. Any
+destination, activity, accommodation booking or transport leg can be
+tagged with any number of them (a small row of checkboxes on that
+item's form), and the tags show up right on that item in the list. This
+is more than a label — it's also literally what a User/Viewer grant's
+visibility is scoped to (see above), so tagging accurately matters if
+you're planning to share a trip with anyone.
+
+"Guest" and "Companion" are the two kinds of person this list can hold
+— it's the same underlying record either way (just a name, an optional
+smiley colour, and an optional account link), and which of the two you
+see is purely whether that link is set:
+
+- A **Guest** has no Waypoint login. Anyone who can add a person at all
+  — including a **User** grant, who may only ever append (see below) —
+  can add one: just a name and a smiley colour, nothing else.
+- A **Companion** has their own login. Only the trip's owner or an Admin
+  can create one directly (the "Add companion" button, right next to
+  "Add guest"), or upgrade an existing Guest into one afterwards by
+  linking a username (the small link icon next to their name). Either
+  way this is the SAME action under the hood — "Add companion" is just
+  "add a Guest, then link them" chained into one form — so linking
+  itself is documented once, below.
+
+A **User** grant may add a brand-new Guest of their own (just a name and
+a smiley colour) from the Companions tab — but, like everything else a
+User grant can do, only append: they can't edit, delete, retag, or link
+one that already exists (so they never see the "Add companion" button,
+only "Add guest"), and there's deliberately no Notes field on their
 version of the form, since a User's submission would never keep one
 anyway.
+
+The **New trip** form itself also has a quick "Who's coming with you?"
+box — a plain multi-line text box, one name per line (a comma also
+works as a separator), that turns straight into a set of brand-new
+Guests the moment the trip is created, so you don't have to immediately
+jump to the Companions tab afterwards just to type the same names in
+again. It's deliberately name-only (no smiley colour, no account
+linking) to keep trip creation itself quick — everything else (colours,
+notes, upgrading someone to a Companion) is still just a trip away on
+the Companions tab. This box only appears when creating a trip, never
+when editing an existing one (see `TRIP_FIELDS_NEW` vs `TRIP_FIELDS`,
+and `parseCompanionNamesBox()`, in `public/WayPoint/index.html`).
+
+A Companion who also has some level of access to THIS trip — because
+they're its owner, the site's uber-user, or hold a grant — gets an
+extra tag showing that access level right on their row: **Super**
+(owner or uber-user), **Admin**, **User**, or **Viewer**. A Companion
+who's linked but genuinely has no access to this trip (linked purely so
+their avatar shows correctly, never actually shared — see "Linking"
+below) gets a plain generic "Companion" tag instead, since there's no
+specific level to show. Unlike the `grants` list itself — which a
+scoped User/Viewer is deliberately never sent, so they can't learn who
+else has access to a trip they can barely see into themselves — this
+access-level tag IS sent to every role that can see the trip at all, by
+design: it's a much narrower disclosure (a role level per companion, no
+`accountId` or username attached) than the full sharing list, and the
+tradeoff was made deliberately so that "how much can this person here
+do" is visible to everyone on the trip, not just its owner and Admins.
+See `resolveCompanionAccessLevels()` in `src/worker.js` for exactly what
+it does and doesn't reveal, and why it's safe to send that widely even
+though `grants` isn't.
 
 **Avatars** — every account gets a small coloured circle with an animal
 face, self-picked from the topbar (click your own name/swatch) — 10
@@ -226,28 +279,31 @@ colours × 16 animals, both fixed allowlists (see `AVATAR_COLOR_TOKENS`/
 `public/WayPoint/data/avatars.js`). Nobody's forced to pick one — until
 you do, you get a stable, deterministic default (always the same one,
 computed from your account id, never random) rather than a blank
-circle. A companion who ISN'T linked to any account gets a different
-look on purpose — a fixed grey circle with a smiley in a colour whoever
-added them chose (or, again, a deterministic default if nobody ever
-did) — so a marker tells you at a glance whether that person can log in
-at all. These markers show up next to a companion's name everywhere one
-appears: item rows, the tag-picker, the Timeline, and — new — each trip
-card on the dashboard now shows a small row of everyone on that trip
-(capped, with a "+N" bubble for the overflow).
+circle. A Guest gets a different look on purpose — a fixed grey circle
+with a smiley in a colour whoever added them chose (or, again, a
+deterministic default if nobody ever did) — so a marker tells you at a
+glance whether that person can log in at all. These markers show up
+next to a companion's name everywhere one appears: item rows, the
+tag-picker, the Timeline, and — new — each trip card on the dashboard
+now shows a small row of everyone on that trip (capped, with a "+N"
+bubble for the overflow).
 
-**Linking a companion to an account** turns their marker into that
-account's own coloured circle + animal instead of the grey smiley. It
-happens two ways: automatically, whenever a trip's owner or an Admin
-shares that trip with someone AS a specific companion (see "Share
-access" above) — sharing already implies "this companion is that
-account", so it links itself; or explicitly, via a small link button
-next to any companion in the list (owner/Admin only), which takes just
-a username rather than exposing any account-id list, and an empty
-username unlinks. Linking on its own never grants trip access — it only
-changes what marker shows up — and revoking someone's trip access
-deliberately does **not** clear the link either (they're independent:
-one is "can this account see this trip", the other is "whose face is
-this companion's marker").
+**Linking** a Guest to an account turns them into a Companion — their
+marker becomes that account's own coloured circle + animal instead of
+the grey smiley, and (once they also have some access, see the
+access-level tags above) they pick up a role tag too. It happens two
+ways: automatically, whenever a trip's owner or an Admin shares that
+trip with someone AS a specific companion (see "Share access" above) —
+sharing already implies "this companion is that account", so it links
+itself; or explicitly, via the "Add companion" button (for a brand-new
+person) or the small link icon next to an existing Guest (owner/Admin
+only either way), which takes just a username rather than exposing any
+account-id list, and an empty username unlinks (reverting a Companion
+back to a Guest). Linking on its own never grants trip access — it only
+changes what marker (and, if applicable, tag) shows up — and revoking
+someone's trip access deliberately does **not** clear the link either
+(they're independent: one is "can this account see this trip", the
+other is "whose face is this companion's marker").
 
 A companion's link (`accountId`) is treated as a protected,
 server-computed field, the same as a trip's `ownerId` — nothing a
@@ -267,8 +323,9 @@ Two small new endpoints support all this: `POST
 /WayPoint/api/account/avatar` (any logged-in account sets only its own
 colour/animal, rejecting anything outside the two allowlists) and
 `POST /WayPoint/api/companions/link` (owner/Admin only, links or
-unlinks one companion by username). Neither is reachable by a scoped
-User/Viewer grant.
+unlinks one companion by username — this is also what the one-step "Add
+companion" form calls, right after adding the person as an ordinary
+Guest). Neither is reachable by a scoped User/Viewer grant.
 
 See the big "WHO IS ALLOWED IN" and "SAVING SAFELY" comments at the top
 of `src/worker.js` for the full design (password hashing, session
@@ -546,7 +603,19 @@ A handful of Playwright suites live outside this repo's deployed contents
   never-linked companion being refused even from a full-scope session
   (while a real, legitimate link in that same request survives
   untouched), unlinking reverting the marker back to a smiley, and the
-  dashboard trip card showing one avatar marker per companion.
+  dashboard trip card showing one avatar marker per companion; and,
+  added for the Guest/Companion terminology update: the one-step "Add
+  companion" form (create a brand-new person already linked to a
+  username, right next to "Add guest") creating them genuinely linked —
+  correct marker, correct access-level tag — verified against the
+  server's own stored copy, not just the optimistic render; and, added
+  for the New trip form's "Who's coming with you?" box: the box only
+  shows up while creating a trip (never editing one); typing several
+  names — one per line, plus a comma-separated pair on one line, with a
+  blank line in between — turns into that many brand-new Guests the
+  moment the trip is created (verified server-side, none carrying an
+  `accountId`); and leaving the box empty creates a trip with no
+  companions at all, same as before this feature existed.
 - A dedicated test for the avatar half of the Companions/Avatars feature
   (`test-avatars.js`) — the colour/animal palette allowlists rejecting
   anything not on either list; the self-service avatar picker (topbar
@@ -575,12 +644,20 @@ A handful of Playwright suites live outside this repo's deployed contents
   offer Admin; that a User grant sees and can edit only their own tagged
   items (with the Companions tag-picker locked on their edit form), never
   sees an Add/Delete control on an EXISTING item, and never sees the
-  Expenses tab at all — but (Phase 3) DOES see an "Add companion" button
-  of their own, limited to a name and smiley colour with no Notes field,
-  and can never edit/delete/retag/link a companion, including one they
-  just added themselves; that a Viewer grant is fully read-only even for
-  their own tagged items, with no "Add companion" button either; that an
-  account with no grant on a trip doesn't see it at all; that the site's
+  Expenses tab at all — but (Phase 3) DOES see an "Add guest" button of
+  their own, limited to a name and smiley colour with no Notes field,
+  and can never edit/delete/retag/link a companion (so it never sees the
+  separate "Add companion" create-and-link button either, that being
+  Superuser/Admin only), including one they just added themselves; that
+  a Viewer grant is fully read-only even for their own tagged items,
+  with no "Add guest" or "Add companion" button either; that — for the
+  Guest/Companion terminology update — a scoped User AND a scoped Viewer
+  grant both correctly see every companion's access-level tag (Super/
+  Admin/User/Viewer, or a generic "Companion" fallback for a link that's
+  outlived its own grant), for companions other than their own, proving
+  that tag really is sent to every role and not just derived from
+  something only a full-scope role can see; that an account with no
+  grant on a trip doesn't see it at all; that the site's
   one uber-user account gets full access to a trip it was never shared
   on and never appears in that trip's own sharing list; that revoking
   someone's access actually removes their visibility; that the last
@@ -635,8 +712,12 @@ match `worker.js` exactly and breaks every test.
   no equivalent and needs none.
 
 Every suite above has been run — including against the Companions/
-Avatars feature described earlier in this file — and passes (over 200
-assertions across 12 suites), covering a full end-to-end pass of the
+Avatars feature described earlier in this file, its later
+Guest/Companion terminology update (the "Add companion" one-step
+create-and-link form, and access-level tags sent to every role), and the
+New trip form's "Who's coming with you?" quick-add box — and passes
+(over 200 assertions across 12 suites), covering a full end-to-end pass
+of the
 permissions test's hostile `fetch()` attack scenario (now extended to
 also cover companion rename/delete/accountId-smuggling attempts) against
 the `trip_index`/`trip:<id>` storage shape. The two data-loss guards
