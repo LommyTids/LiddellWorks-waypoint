@@ -5,7 +5,9 @@
   "description": "Waypoint travel planner, self-hosted on liddellworks.com/WayPoint via a Cloudflare Worker + KV.",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test": "node test-security.mjs",
+    "test:security": "node test-security.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

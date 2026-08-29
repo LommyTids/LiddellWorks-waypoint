@@ -244,6 +244,7 @@ function tripContentKey(tripId) {
 // the trip data above, so listing/editing accounts never touches (or risks
 // corrupting) anyone's trips, and vice versa. Unchanged by this pass.
 const USERS_KEY = "users";
+const USERS_INITIALIZED_KEY = "users_initialized";
 
 // An empty index/trip shape, for a brand-new install (or a trip/account
 // list that's never been written to yet) — so nothing else in this file
@@ -270,6 +271,12 @@ const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const PBKDF2_ITERATIONS = 100000;
 const PBKDF2_HASH_BYTES = 32; // 256 bits
 const SALT_BYTES = 16;
+
+// Best-effort per-isolate throttle. A Cloudflare zone-level rate-limit rule
+// should also cover this route because separate isolates do not share memory.
+const LOGIN_WINDOW_MS = 5 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 8;
+const loginAttempts = new Map();
 
 // The only roles that can be GRANTED to someone on a trip (via
 // /api/trip-grants below). "superuser" is deliberately not in this list —
@@ -518,6 +525,8 @@ function assignCompanionAccountId(content, companionId, accountId) {
 
 export default {
   async fetch(request, env, ctx) {
+    try {
+    return await (async function () {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -612,6 +621,13 @@ export default {
     // the rest of the site instead. No auth check here — see the big
     // comment at the top of this file for why that's intentional.
     return env.ASSETS.fetch(request);
+    })();
+    } catch (err) {
+      if (err && err.name === "UsersStorageError") {
+        return jsonError(503, "Account storage is unavailable or corrupt. Setup and login are disabled until it is repaired.");
+      }
+      throw err;
+    }
   },
 };
 
@@ -693,6 +709,124 @@ const TRIP_CONTENT_FIELDS = [
   "destinations", "activities", "transport", "accommodation", "contacts",
   "expenses", "companions", "geocodeCache",
 ];
+
+// Client data is hostile input even when it came from our own page: a scoped
+// account can call the API directly, and stored strings are later rendered by
+// more privileged accounts. Only these fields may cross the storage boundary.
+const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const SAFE_DATE_PATTERN = /^$|^\d{4}-\d{2}-\d{2}$/;
+const SAFE_TIME_PATTERN = /^$|^\d{2}:\d{2}$/;
+const SAFE_DATETIME_PATTERN = /^$|^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
+const SAFE_CURRENCY_PATTERN = /^$|^[A-Z]{3}$/;
+const MAX_ITEMS_PER_LIST = 1000;
+
+const ITEM_FIELDS = {
+  destinations: ["destinationId", "name", "country", "arriveDate", "departDate", "timezone", "companions", "notes"],
+  activities: ["activityId", "title", "destinationId", "date", "startTime", "endTime", "location", "address", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes"],
+  transport: ["transportId", "mode", "carrier", "flightNumber", "licensePlate", "fromLocation", "toLocation", "departDateTime", "arriveDateTime", "paymentType", "costCurrency", "costAmount", "costRate", "pointsProgram", "pointsAmount", "bookingRef", "contactId", "receiptRef", "companions", "notes", "fromLat", "fromLng", "toLat", "toLng"],
+  accommodation: ["accommodationId", "name", "destinationId", "address", "checkIn", "checkOut", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes"],
+  contacts: ["contactId", "name", "role", "phone", "email", "address", "notes"],
+  expenses: ["expenseId", "description", "category", "date", "amount", "currency", "rateOverride", "receiptRef", "contactId", "notes"],
+  companions: ["companionId", "name", "notes", "avatar", "accountId"],
+};
+
+const ITEM_ID_FIELDS = {
+  destinations: "destinationId", activities: "activityId", transport: "transportId",
+  accommodation: "accommodationId", contacts: "contactId", expenses: "expenseId", companions: "companionId",
+};
+
+function safeText(value, max) {
+  return String(value === undefined || value === null ? "" : value).slice(0, max || 300);
+}
+
+function safeId(value, allowEmpty) {
+  const id = safeText(value, 128);
+  if (!id && allowEmpty) return "";
+  if (!SAFE_ID_PATTERN.test(id)) throw new Error("Invalid identifier in trip data.");
+  return id;
+}
+
+function safeNumeric(value) {
+  if (value === "" || value === null || value === undefined) return "";
+  const number = Number(value);
+  if (!Number.isFinite(number) || Math.abs(number) > 1e12) throw new Error("Invalid numeric value in trip data.");
+  return typeof value === "number" ? number : String(number);
+}
+
+function sanitizeItem(listKey, item) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Invalid item in trip data.");
+  const output = {};
+  ITEM_FIELDS[listKey].forEach(function (key) {
+    if (!Object.prototype.hasOwnProperty.call(item, key)) return;
+    const value = item[key];
+    if (key === ITEM_ID_FIELDS[listKey]) output[key] = safeId(value, false);
+    else if (/Id$/.test(key)) output[key] = safeId(value, true);
+    else if (key === "companions") output[key] = Array.isArray(value) ? value.slice(0, 100).map(function (id) { return safeId(id, false); }) : [];
+    else if (key === "departDateTime" || key === "arriveDateTime" || key === "checkIn" || key === "checkOut") {
+      const dateTime = safeText(value, 16);
+      if (!SAFE_DATETIME_PATTERN.test(dateTime)) throw new Error("Invalid date/time in trip data.");
+      output[key] = dateTime;
+    } else if (/Date$/.test(key) || key === "date") {
+      const date = safeText(value, 10);
+      if (!SAFE_DATE_PATTERN.test(date)) throw new Error("Invalid date in trip data.");
+      output[key] = date;
+    } else if (/Time$/.test(key)) {
+      const time = safeText(value, 5);
+      if (!SAFE_TIME_PATTERN.test(time)) throw new Error("Invalid time in trip data.");
+      output[key] = time;
+    } else if (key === "currency" || key === "costCurrency") {
+      const currency = safeText(value, 3).toUpperCase();
+      if (!SAFE_CURRENCY_PATTERN.test(currency)) throw new Error("Invalid currency in trip data.");
+      output[key] = currency;
+    } else if (["costAmount", "costRate", "amount", "rateOverride", "pointsAmount", "fromLat", "fromLng", "toLat", "toLng"].indexOf(key) !== -1) {
+      output[key] = safeNumeric(value);
+    } else if (key === "avatar") {
+      const smiley = value && value.smiley;
+      if (isValidAvatarColor(smiley)) output.avatar = { smiley: smiley };
+    } else {
+      output[key] = safeText(value, key === "notes" ? 5000 : 500);
+    }
+  });
+  return output;
+}
+
+function sanitizeTripContent(trip) {
+  if (!trip || typeof trip !== "object" || Array.isArray(trip)) throw new Error("Invalid trip data.");
+  const output = {
+    name: safeText(trip.name, 200),
+    startDate: safeText(trip.startDate, 10),
+    endDate: safeText(trip.endDate, 10),
+    homeCurrency: safeText(trip.homeCurrency, 3).toUpperCase(),
+    notes: safeText(trip.notes, 10000),
+  };
+  if (!SAFE_DATE_PATTERN.test(output.startDate) || !SAFE_DATE_PATTERN.test(output.endDate)) throw new Error("Invalid trip date.");
+  if (!SAFE_CURRENCY_PATTERN.test(output.homeCurrency)) throw new Error("Invalid home currency.");
+
+  Object.keys(ITEM_FIELDS).forEach(function (listKey) {
+    const list = Array.isArray(trip[listKey]) ? trip[listKey] : [];
+    if (list.length > MAX_ITEMS_PER_LIST) throw new Error("Too many items in trip data.");
+    output[listKey] = list.map(function (item) { return sanitizeItem(listKey, item); });
+  });
+
+  output.currencyRates = {};
+  Object.keys(trip.currencyRates || {}).slice(0, 100).forEach(function (currency) {
+    const code = safeText(currency, 3).toUpperCase();
+    if (!SAFE_CURRENCY_PATTERN.test(code) || !code) return;
+    const rate = Number(trip.currencyRates[currency]);
+    if (Number.isFinite(rate) && rate > 0 && rate <= 1e9) output.currencyRates[code] = rate;
+  });
+
+  output.geocodeCache = {};
+  Object.keys(trip.geocodeCache || {}).slice(0, 500).forEach(function (place) {
+    const coords = trip.geocodeCache[place];
+    const lat = coords && Number(coords.lat);
+    const lng = coords && Number(coords.lng);
+    if (place.length <= 500 && Number.isFinite(lat) && lat >= -90 && lat <= 90 && Number.isFinite(lng) && lng >= -180 && lng <= 180) {
+      output.geocodeCache[place] = { lat: lat, lng: lng };
+    }
+  });
+  return output;
+}
 
 /**
  * One-time migration from the old single "state" blob into the new
@@ -865,6 +999,10 @@ function resolveGrants(indexEntry, usersDoc) {
  * description below for the full shape.
  */
 function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
+  const revision = Number.isInteger(content && content._revision) ? content._revision : 0;
+  // Normalize stored data again on the way out. This protects upgraded
+  // deployments from values written by an older, less strict Worker.
+  content = sanitizeTripContent(content);
   // Resolved once, shared by both branches below -- see the big
   // COMPANIONS & AVATARS comment near AVATAR_COLOR_TOKENS for why this is
   // safe to hand to EVERY role: it's already been reduced to just a
@@ -884,6 +1022,7 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
       grants: resolveGrants(indexEntry, usersDoc),
       companionAvatars: companionAvatars,
       companionAccessLevels: companionAccessLevels,
+      revision: revision,
       // A full-scope role already sees `grants` (who has access to this
       // trip and as whom), so the raw accountId on each companion isn't
       // hiding anything NEW from them -- left in place here (unlike the
@@ -897,15 +1036,36 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
   // "user" / "viewer": scoped to their own tagged items only.
   const companionId = perm.companionId;
   const taggedTo = function (item) { return (item.companions || []).indexOf(companionId) !== -1; };
-  return Object.assign({ tripId: indexEntry.tripId }, content, {
-    destinations: (content.destinations || []).filter(taggedTo),
-    activities: (content.activities || []).filter(taggedTo),
-    accommodation: (content.accommodation || []).filter(taggedTo),
-    transport: (content.transport || []).filter(taggedTo),
+  const destinations = (content.destinations || []).filter(taggedTo);
+  const activities = (content.activities || []).filter(taggedTo);
+  const accommodation = (content.accommodation || []).filter(taggedTo);
+  const transport = (content.transport || []).filter(taggedTo);
+  const referencedContactIds = {};
+  activities.concat(accommodation, transport).forEach(function (item) {
+    if (item.contactId) referencedContactIds[item.contactId] = true;
+  });
+  // Build a new response rather than cloning the full trip. In particular,
+  // geocodeCache keys contain raw place/address text and must not reveal
+  // locations belonging only to someone else's hidden items.
+  return {
+    tripId: indexEntry.tripId,
+    name: content.name,
+    startDate: content.startDate,
+    endDate: content.endDate,
+    homeCurrency: content.homeCurrency,
+    notes: content.notes,
+    currencyRates: content.currencyRates,
+    destinations: destinations,
+    activities: activities,
+    accommodation: accommodation,
+    transport: transport,
+    contacts: (content.contacts || []).filter(function (contact) { return !!referencedContactIds[contact.contactId]; }),
     expenses: [],
+    geocodeCache: {},
     myGrant: perm,
     companionAvatars: companionAvatars,
     companionAccessLevels: companionAccessLevels,
+    revision: revision,
     // Unlike the full-scope branch above, a scoped "user"/"viewer" grant
     // is deliberately NOT sent the `grants` array (they must not learn
     // who else has access to this trip) -- and an unlinked-from-content
@@ -922,7 +1082,7 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
       delete copy.accountId;
       return copy;
     }),
-  });
+  };
   // No ownerId/grants added at all for a scoped account -- see the class
   // comment on the old buildResponseState() this replaces: a scoped
   // account has no business knowing who else has access to a trip they
@@ -1013,6 +1173,15 @@ async function handlePost(request, env, user) {
   if (!submitted || !Array.isArray(submitted.trips)) {
     return jsonError(400, "Request body didn't look like trip data (expected { trips: [...] }).");
   }
+  try {
+    submitted.trips.forEach(function (trip) {
+      if (!trip || typeof trip !== "object") throw new Error("Invalid trip entry.");
+      safeId(trip.tripId, false);
+      sanitizeTripContent(trip);
+    });
+  } catch (err) {
+    return jsonError(400, err && err.message ? err.message : "Invalid trip data.");
+  }
 
   const index = await loadTripIndex(env);
   const indexById = {};
@@ -1071,8 +1240,28 @@ async function handlePost(request, env, user) {
       "or failed to load. Refresh the page and try your change again.");
   }
 
+  // Optimistic-concurrency preflight: reject a stale browser snapshot before
+  // writing anything. Existing KV documents start at revision zero and pick
+  // up a server-owned revision on their first actual change.
+  const storedContentByTripId = {};
+  for (const indexEntry of index.trips) {
+    const incoming = submittedById[indexEntry.tripId];
+    if (!incoming) continue;
+    const perm = permissionForTrip(indexEntry, user);
+    if (!perm || perm.role === "viewer") continue;
+    const storedContent = await loadTripContent(env, indexEntry.tripId);
+    storedContentByTripId[indexEntry.tripId] = storedContent;
+    if (storedContent === null) continue;
+    const storedRevision = Number.isInteger(storedContent._revision) ? storedContent._revision : 0;
+    const incomingRevision = Number.isInteger(incoming.revision) ? incoming.revision : 0;
+    if (incomingRevision !== storedRevision) {
+      return jsonError(409, "This trip changed in another session. Refresh to load the newest version before saving again.");
+    }
+  }
+
   let indexChanged = false;
   const nextIndexTrips = [];
+  const revisions = {};
 
   // ---- Every EXISTING trip: apply exactly what this account's REAL
   // permission on it (from the stored index) allows. ----
@@ -1104,7 +1293,9 @@ async function handlePost(request, env, user) {
         continue;
       }
       const newContent = stripClientOwnershipFields(incoming);
-      const storedContent = await loadTripContent(env, indexEntry.tripId);
+      const storedContent = Object.prototype.hasOwnProperty.call(storedContentByTripId, indexEntry.tripId)
+        ? storedContentByTripId[indexEntry.tripId]
+        : await loadTripContent(env, indexEntry.tripId);
       // A companion's accountId is protected exactly like ownerId/tripId
       // above -- see the big COMPANIONS & AVATARS comment near
       // AVATAR_COLOR_TOKENS for why even a full-scope Superuser/admin
@@ -1115,8 +1306,14 @@ async function handlePost(request, env, user) {
       if (newContent.companions) {
         newContent.companions = reconcileCompanionAccountLinks(storedContent, newContent.companions);
       }
-      if (JSON.stringify(newContent) !== JSON.stringify(storedContent)) {
+      const storedComparable = storedContent ? sanitizeTripContent(storedContent) : null;
+      const storedRevision = Number.isInteger(storedContent && storedContent._revision) ? storedContent._revision : 0;
+      if (JSON.stringify(newContent) !== JSON.stringify(storedComparable)) {
+        newContent._revision = storedRevision + 1;
         await saveTripContent(env, indexEntry.tripId, newContent);
+        revisions[indexEntry.tripId] = newContent._revision;
+      } else {
+        revisions[indexEntry.tripId] = storedRevision;
       }
       const nextEntry = Object.assign({}, indexEntry, {
         name: newContent.name || "",
@@ -1142,10 +1339,16 @@ async function handlePost(request, env, user) {
       nextIndexTrips.push(indexEntry);
       continue;
     }
-    const storedContent = await loadTripContent(env, indexEntry.tripId);
+    const storedContent = Object.prototype.hasOwnProperty.call(storedContentByTripId, indexEntry.tripId)
+      ? storedContentByTripId[indexEntry.tripId]
+      : await loadTripContent(env, indexEntry.tripId);
     const mergedContent = mergeUserScopedTrip(storedContent, incoming, perm.companionId);
     if (JSON.stringify(mergedContent) !== JSON.stringify(storedContent)) {
+      mergedContent._revision = (Number.isInteger(storedContent && storedContent._revision) ? storedContent._revision : 0) + 1;
       await saveTripContent(env, indexEntry.tripId, mergedContent);
+      revisions[indexEntry.tripId] = mergedContent._revision;
+    } else {
+      revisions[indexEntry.tripId] = Number.isInteger(storedContent && storedContent._revision) ? storedContent._revision : 0;
     }
     nextIndexTrips.push(indexEntry); // A "user" grant never changes name/dates/ownership.
   }
@@ -1169,7 +1372,9 @@ async function handlePost(request, env, user) {
     if (newContent.companions) {
       newContent.companions = reconcileCompanionAccountLinks(null, newContent.companions);
     }
+    newContent._revision = 1;
     await saveTripContent(env, incoming.tripId, newContent);
+    revisions[incoming.tripId] = 1;
     nextIndexTrips.push({
       tripId: incoming.tripId,
       name: newContent.name || "",
@@ -1186,7 +1391,7 @@ async function handlePost(request, env, user) {
     await saveTripIndex(env, { trips: nextIndexTrips });
   }
 
-  return new Response(JSON.stringify({ status: "ok" }), {
+  return new Response(JSON.stringify({ status: "ok", revisions: revisions }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
@@ -1200,13 +1405,7 @@ async function handlePost(request, env, user) {
 // Also strips tripId itself -- that lives in the index/KV key, never
 // inside a trip's own content document.
 function stripClientOwnershipFields(trip) {
-  const copy = Object.assign({}, trip);
-  delete copy.tripId;
-  delete copy.ownerId;
-  delete copy.grants;
-  delete copy.myGrant;
-  delete copy.ownerUsername;
-  return copy;
+  return sanitizeTripContent(trip);
 }
 
 /**
@@ -1237,7 +1436,7 @@ function mergeUserScopedTrip(storedContent, incomingContent, companionId) {
   const stored = storedContent || {};
   const merged = Object.assign({}, stored); // Start from stored truth.
   ["destinations", "activities", "accommodation", "transport"].forEach(function (listKey) {
-    merged[listKey] = mergeUserScopedList(stored[listKey] || [], incomingContent[listKey] || [], companionId, listItemIdField(listKey));
+    merged[listKey] = mergeUserScopedList(stored[listKey] || [], incomingContent[listKey] || [], companionId, listItemIdField(listKey), listKey);
   });
   merged.companions = mergeUserScopedCompanions(stored.companions, incomingContent.companions);
   return merged;
@@ -1303,7 +1502,7 @@ function listItemIdField(listKey) {
   }[listKey];
 }
 
-function mergeUserScopedList(storedList, incomingList, companionId, idField) {
+function mergeUserScopedList(storedList, incomingList, companionId, idField, listKey) {
   const incomingById = {};
   incomingList.forEach(function (item) { if (item && item[idField]) incomingById[item[idField]] = item; });
   const taggedTo = function (item) { return (item.companions || []).indexOf(companionId) !== -1; };
@@ -1316,7 +1515,9 @@ function mergeUserScopedList(storedList, incomingList, companionId, idField) {
     // Apply their edits, but the item's own id/companions always stay as
     // stored -- a "user" grant can change an item's OTHER fields, never
     // which item it is or who it's tagged to.
-    const applied = Object.assign({}, incomingItem);
+    // Explicit schema copy prevents arbitrary properties from surviving a
+    // scoped edit and becoming stored XSS in a privileged user's browser.
+    const applied = sanitizeItem(listKey, incomingItem);
     applied[idField] = storedItem[idField];
     applied.companions = storedItem.companions;
     return applied;
@@ -1713,20 +1914,30 @@ function movementSummary(movement) {
  */
 async function loadUsers(env) {
   const saved = await env.WAYPOINT_KV.get(USERS_KEY);
-  if (!saved) return { users: [] };
+  if (saved === null) {
+    const initialized = await env.WAYPOINT_KV.get(USERS_INITIALIZED_KEY);
+    if (initialized === "1") throw new UsersStorageError("Account data is missing after initialization.");
+    return { users: [] };
+  }
   try {
     const parsed = JSON.parse(saved);
-    if (!parsed || !Array.isArray(parsed.users)) return { users: [] };
+    if (!parsed || !Array.isArray(parsed.users)) throw new Error("Invalid users schema");
     return parsed;
   } catch (err) {
-    // Shouldn't happen (we're the only writer, and always write valid
-    // JSON) but fail safe rather than throwing if it ever does.
-    return { users: [] };
+    throw new UsersStorageError("Account data is malformed.");
   }
 }
 
 async function saveUsers(env, usersDoc) {
   await env.WAYPOINT_KV.put(USERS_KEY, JSON.stringify(usersDoc));
+  await env.WAYPOINT_KV.put(USERS_INITIALIZED_KEY, "1");
+}
+
+class UsersStorageError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "UsersStorageError";
+  }
 }
 
 // Strips everything sensitive (passwordSalt/passwordHash) before a user
@@ -1908,7 +2119,9 @@ async function getCurrentUser(request, env) {
   if (!payload) return null;
   const usersDoc = await loadUsers(env);
   const user = usersDoc.users.find(function (u) { return u.id === payload.uid; });
-  return user || null; // null if the account was deleted since the cookie was issued.
+  if (!user) return null;
+  if ((payload.sv || 0) !== (user.sessionVersion || 0)) return null;
+  return user;
 }
 
 /* ---- Route handlers: login / logout / whoami / setup --------------------- */
@@ -1923,6 +2136,21 @@ async function handleLogin(request, env) {
   const username = (body.username || "").trim().toLowerCase();
   const password = body.password || "";
   if (!username || !password) return jsonError(400, "Username and password are both required.");
+  if (username.length > 80 || typeof password !== "string" || password.length > 256) {
+    return jsonError(400, "Username or password was too long.");
+  }
+
+  const attemptKey = (request.headers.get("CF-Connecting-IP") || "unknown") + ":" + username;
+  const now = Date.now();
+  const recent = (loginAttempts.get(attemptKey) || []).filter(function (time) { return now - time < LOGIN_WINDOW_MS; });
+  if (recent.length >= LOGIN_MAX_ATTEMPTS) {
+    return new Response(JSON.stringify({ error: "Too many login attempts. Wait a few minutes and try again." }), {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(LOGIN_WINDOW_MS / 1000)) },
+    });
+  }
+  recent.push(now);
+  loginAttempts.set(attemptKey, recent);
 
   const usersDoc = await loadUsers(env);
   const user = usersDoc.users.find(function (u) { return u.username.toLowerCase() === username; });
@@ -1930,11 +2158,16 @@ async function handleLogin(request, env) {
   // exist or the password's wrong — doesn't help an attacker narrow down
   // which one they got wrong, at basically no cost to a genuine user.
   const genericError = function () { return jsonError(401, "Incorrect username or password."); };
+  // Unknown users still perform the same expensive derivation, closing the
+  // measurable fast-path that otherwise reveals which usernames exist.
+  const dummySalt = "00000000000000000000000000000000";
+  const dummyHash = "0000000000000000000000000000000000000000000000000000000000000000";
+  const passwordOk = await verifyPassword(password, user ? user.passwordSalt : dummySalt, user ? user.passwordHash : dummyHash);
   if (!user) return genericError();
-  const passwordOk = await verifyPassword(password, user.passwordSalt, user.passwordHash);
   if (!passwordOk) return genericError();
 
-  const token = await signSession({ uid: user.id, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }, env);
+  loginAttempts.delete(attemptKey);
+  const token = await signSession({ uid: user.id, sv: user.sessionVersion || 0, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }, env);
   // isUberUser is included here (and in handleWhoami/handleSetup below)
   // deliberately, unlike publicUser() further down — this response only
   // ever describes the CALLER'S OWN account, never anyone else's, so
@@ -2013,12 +2246,12 @@ async function handleSetup(request, env) {
   const { salt, hash } = await hashPassword(password);
   const user = {
     id: newAccountId(), username: username, passwordSalt: salt, passwordHash: hash,
-    isUberUser: true, createdAt: new Date().toISOString(),
+    isUberUser: true, sessionVersion: 0, createdAt: new Date().toISOString(),
   };
   usersDoc.users.push(user);
   await saveUsers(env, usersDoc);
 
-  const token = await signSession({ uid: user.id, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }, env);
+  const token = await signSession({ uid: user.id, sv: user.sessionVersion, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }, env);
   return new Response(JSON.stringify({ status: "ok", id: user.id, username: user.username, isUberUser: true, avatar: resolveAccountAvatar(user) }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Set-Cookie": buildSessionCookieHeader(token) },
@@ -2100,6 +2333,7 @@ async function handleUsersUpsert(request, env) {
       const { salt, hash } = await hashPassword(body.password);
       existing.passwordSalt = salt;
       existing.passwordHash = hash;
+      existing.sessionVersion = (existing.sessionVersion || 0) + 1;
     }
     await saveUsers(env, usersDoc);
     return new Response(JSON.stringify({ status: "ok", user: publicUser(existing) }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -2112,7 +2346,7 @@ async function handleUsersUpsert(request, env) {
   const { salt, hash } = await hashPassword(body.password);
   const user = {
     id: newAccountId(), username: username, passwordSalt: salt, passwordHash: hash,
-    isUberUser: false, createdAt: new Date().toISOString(),
+    isUberUser: false, sessionVersion: 0, createdAt: new Date().toISOString(),
   };
   usersDoc.users.push(user);
   await saveUsers(env, usersDoc);
