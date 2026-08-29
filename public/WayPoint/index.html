@@ -1697,6 +1697,34 @@ var TRIP_FIELDS = [
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
+// Same as TRIP_FIELDS above, plus one extra box -- ONLY used when
+// creating a brand-new trip (see openTripForm()), never when editing
+// one that already exists. Editing doesn't get this field because it's
+// a one-shot "quick add" convenience for the moment a trip is first set
+// up; re-showing it on every edit would be misleading (typing a name in
+// here again would just create ANOTHER new companion, not edit an
+// existing one -- there's no way for a plain text box to mean "edit").
+// Adding, renaming or removing companions after creation is always done
+// from the trip's own Companions tab instead (openCompanionForm(),
+// openAddLinkedCompanionForm()), which have the full picture (existing
+// companions, smiley colours, account links) that this quick box
+// deliberately leaves out to keep trip creation itself fast and simple.
+//
+// The box itself is just a plain multiline textarea -- reusing the
+// existing 'textarea' field type rather than inventing a new one -- with
+// its contents parsed into brand-new Guest companion records at submit
+// time (see openTripForm()'s onSubmit). It's built this way rather than
+// with the 'tag-picker' field type used elsewhere (e.g. DESTINATION_FIELDS'
+// "Companions" field) because tag-picker can only PICK FROM a trip's
+// EXISTING companions (see fieldHtml()'s 'tag-picker' case) -- and a
+// trip that's still being created has no companions yet for it to pick
+// from.
+var TRIP_FIELDS_NEW = TRIP_FIELDS.concat([
+  { key: 'companionNames', label: 'Who\'s coming with you? (optional)', type: 'textarea', wide: true,
+    placeholder: 'One name per line -- e.g.\nAlex\nSam',
+    hint: 'Each name becomes a guest on this trip (no login) -- you can link any of them to a Waypoint username, or add more people, from the Companions tab afterwards.' }
+]);
+
 var DESTINATION_FIELDS = [
   { key: 'country', label: 'Country', type: 'country', placeholder: 'e.g. Thailand' },
   { key: 'name', label: 'Place / area', type: 'city', required: true, placeholder: 'e.g. Chiang Mai' },
@@ -2003,10 +2031,24 @@ function defaultHomeCurrency() {
   return (last && last.homeCurrency) || 'GBP';
 }
 
+// Splits the "Who's coming with you?" textarea (see TRIP_FIELDS_NEW)
+// into a list of trimmed, non-empty names -- one per line, but a comma
+// also works as a separator in case someone types "Alex, Sam" on a
+// single line instead. Duplicates aren't filtered out: if someone
+// genuinely types the same name twice that's their call, and two
+// guests are allowed to share a name anyway (companions are matched by
+// id everywhere, never by name -- see e.g. readTagPicker()).
+function parseCompanionNamesBox(text) {
+  return (text || '').split(/[\n,]/).map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+}
+
 function openTripForm(existing) {
   openForm({
     title: existing ? 'Edit trip' : 'New trip',
-    fields: TRIP_FIELDS,
+    // The extra "Who's coming with you?" box only makes sense while
+    // FIRST setting a trip up -- see TRIP_FIELDS_NEW's own comment for
+    // why it's deliberately left off the Edit form.
+    fields: existing ? TRIP_FIELDS : TRIP_FIELDS_NEW,
     initial: existing || { homeCurrency: defaultHomeCurrency() },
     submitLabel: existing ? 'Save changes' : 'Create trip',
     onSubmit: function (v) {
@@ -2020,10 +2062,18 @@ function openTripForm(existing) {
           // the Worker only ever trusts its OWN stored copy of them
           // regardless (see "SAVING SAFELY" in src/worker.js).
         } else {
+          // Turn whatever was typed into the "Who's coming with you?"
+          // box into brand-new Guest companion records (name only, no
+          // login, no smiley colour picked yet -- same minimal shape
+          // openCompanionForm() creates when no colour is chosen). Each
+          // needs its own fresh id, same as any other companion.
+          var newCompanions = parseCompanionNamesBox(v.companionNames).map(function (name) {
+            return { companionId: newId(), name: name, notes: '' };
+          });
           next.trips.push({
             tripId: newId(), name: v.name, startDate: v.startDate || '', endDate: v.endDate || '',
             homeCurrency: (v.homeCurrency || 'GBP').toUpperCase(), notes: v.notes || '',
-            currencyRates: {}, destinations: [], activities: [], transport: [], accommodation: [], contacts: [], companions: [], expenses: [],
+            currencyRates: {}, destinations: [], activities: [], transport: [], accommodation: [], contacts: [], companions: newCompanions, expenses: [],
             // A cache of place-name -> {lat,lng} lookups for the Map tab (see
             // the Map section further down), so the same place is only ever
             // looked up once, not re-fetched on every visit. {} for a new
