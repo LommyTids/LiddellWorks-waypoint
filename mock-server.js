@@ -139,6 +139,95 @@ function publicUser(u) {
 function countUberUsers() { return users.filter(function (u) { return u.isUberUser; }).length; }
 
 /* ============================================================================
+ * COMPANIONS & AVATARS — a direct mirror of the big comment of the same
+ * name near AVATAR_COLOR_TOKENS in src/worker.js. Short version: every
+ * account gets a self-picked coloured circle + animal; every companion
+ * NOT linked to an account gets a fixed grey circle + a chosen-colour
+ * smiley. The link lives on the companion (`accountId`), resolved by a
+ * plain local lookup (resolveCompanionAvatars() below) — and, because a
+ * companion is part of a trip's regular content (something even a "user"
+ * grant gets to submit changes to), `accountId` is treated as a
+ * server-computed, protected field exactly like `ownerId`/`tripId` — see
+ * reconcileCompanionAccountLinks() below, and src/worker.js for the full
+ * reasoning. ==========================================================*/
+
+const AVATAR_COLOR_TOKENS = ['red', 'orange', 'amber', 'green', 'teal', 'cyan', 'blue', 'indigo', 'purple', 'pink'];
+const AVATAR_ANIMAL_TOKENS = ['penguin', 'lion', 'fox', 'owl', 'panda', 'koala', 'tiger', 'elephant', 'giraffe', 'rabbit', 'bear', 'wolf', 'cat', 'dog', 'monkey', 'dolphin'];
+
+function isValidAvatarColor(token) { return AVATAR_COLOR_TOKENS.indexOf(token) !== -1; }
+function isValidAvatarAnimal(token) { return AVATAR_ANIMAL_TOKENS.indexOf(token) !== -1; }
+
+// Mirrors deterministicIndex() in src/worker.js exactly (and
+// deterministicAvatarIndex() in public/WayPoint/data/avatars.js) — a
+// stable "what would this default to" fallback so a marker never renders
+// blank before someone actually picks a colour/animal.
+function deterministicIndex(seed, listLength) {
+  let hash = 0;
+  const text = String(seed || '');
+  for (let i = 0; i < text.length; i++) {
+    hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  }
+  return hash % listLength;
+}
+
+function resolveAccountAvatar(account) {
+  const saved = account && account.avatar;
+  const color = (saved && isValidAvatarColor(saved.color)) ? saved.color : AVATAR_COLOR_TOKENS[deterministicIndex(account && account.id, AVATAR_COLOR_TOKENS.length)];
+  const animal = (saved && isValidAvatarAnimal(saved.animal)) ? saved.animal : AVATAR_ANIMAL_TOKENS[deterministicIndex((account && account.id) + ':animal', AVATAR_ANIMAL_TOKENS.length)];
+  return { color: color, animal: animal };
+}
+
+function resolveCompanionAvatars(content) {
+  const map = {};
+  ((content && content.companions) || []).forEach(function (c) {
+    if (c.accountId) {
+      const account = users.find(function (u) { return u.id === c.accountId; });
+      if (account) {
+        const avatar = resolveAccountAvatar(account);
+        map[c.companionId] = { type: 'account', color: avatar.color, animal: avatar.animal };
+        return;
+      }
+    }
+    const savedSmiley = c.avatar && c.avatar.smiley;
+    const color = isValidAvatarColor(savedSmiley) ? savedSmiley : AVATAR_COLOR_TOKENS[deterministicIndex(c.companionId, AVATAR_COLOR_TOKENS.length)];
+    map[c.companionId] = { type: 'smiley', color: color };
+  });
+  return map;
+}
+
+// Mirrors reconcileCompanionAccountLinks() in src/worker.js exactly — see
+// that file's comment for the full "why reassert rather than delete"
+// reasoning. Every companion keeps EXACTLY the accountId it already has
+// in storage, no matter what the client submitted for it.
+function reconcileCompanionAccountLinks(storedContent, incomingCompanions) {
+  const storedAccountIdByCompanionId = {};
+  ((storedContent && storedContent.companions) || []).forEach(function (c) {
+    storedAccountIdByCompanionId[c.companionId] = c.accountId || null;
+  });
+  return (incomingCompanions || []).map(function (c) {
+    const copy = Object.assign({}, c);
+    const real = Object.prototype.hasOwnProperty.call(storedAccountIdByCompanionId, c.companionId)
+      ? storedAccountIdByCompanionId[c.companionId]
+      : null;
+    if (real) copy.accountId = real; else delete copy.accountId;
+    return copy;
+  });
+}
+
+// Mirrors assignCompanionAccountId() in src/worker.js exactly.
+function assignCompanionAccountId(content, companionId, accountId) {
+  (content.companions || []).forEach(function (c) {
+    if (accountId && c.accountId === accountId && c.companionId !== companionId) {
+      delete c.accountId;
+    }
+  });
+  const target = (content.companions || []).find(function (c) { return c.companionId === companionId; });
+  if (!target) return content;
+  if (accountId) target.accountId = accountId; else delete target.accountId;
+  return content;
+}
+
+/* ============================================================================
  * Permission resolution + trip storage helpers — a direct mirror of the
  * equivalents in src/worker.js (permissionForTrip(), resolveGrants(),
  * buildVisibleTrip(), buildResponseState()). See that file's big "SAVING
@@ -180,6 +269,10 @@ function resolveGrants(indexEntry) {
 // frontend expects for one visible trip. Mirrors buildVisibleTrip() in
 // src/worker.js exactly.
 function buildVisibleTrip(indexEntry, content, perm) {
+  // Resolved once, shared by both branches -- see the COMPANIONS &
+  // AVATARS comment above for why this is safe to hand to every role.
+  const companionAvatars = resolveCompanionAvatars(content);
+
   if (perm.role === 'superuser' || perm.role === 'admin') {
     const ownerAccount = users.find(function (u) { return u.id === indexEntry.ownerId; });
     return Object.assign({ tripId: indexEntry.tripId }, content, {
@@ -187,6 +280,7 @@ function buildVisibleTrip(indexEntry, content, perm) {
       myGrant: perm,
       ownerUsername: ownerAccount ? ownerAccount.username : '',
       grants: resolveGrants(indexEntry),
+      companionAvatars: companionAvatars,
     });
   }
 
@@ -200,6 +294,15 @@ function buildVisibleTrip(indexEntry, content, perm) {
     transport: (content.transport || []).filter(taggedTo),
     expenses: [],
     myGrant: perm,
+    companionAvatars: companionAvatars,
+    // A scoped grant never sees raw accountId on a companion -- same
+    // reason it never sees `grants` -- see buildVisibleTrip() in
+    // src/worker.js.
+    companions: (content.companions || []).map(function (c) {
+      const copy = Object.assign({}, c);
+      delete copy.accountId;
+      return copy;
+    }),
   });
   // No ownerId/grants added at all for a scoped account -- see the class
   // comment on buildVisibleTrip() in src/worker.js: a scoped account has
@@ -280,7 +383,38 @@ function mergeUserScopedTrip(storedContent, incomingContent, companionId) {
   ['destinations', 'activities', 'accommodation', 'transport'].forEach(function (listKey) {
     merged[listKey] = mergeUserScopedList(stored[listKey] || [], incomingContent[listKey] || [], companionId, listItemIdField(listKey));
   });
+  // Phase 3 of Companions/Avatars: a "user" grant may APPEND a brand-new
+  // companion, but can't touch an existing one -- see
+  // mergeUserScopedCompanions() below and its counterpart in
+  // src/worker.js for the full reasoning.
+  merged.companions = mergeUserScopedCompanions(stored.companions, incomingContent.companions);
   return merged;
+}
+
+const MAX_COMPANIONS_PER_TRIP = 100; // Mirrors src/worker.js -- sanity backstop, not a real limit.
+
+// Mirrors mergeUserScopedCompanions() in src/worker.js exactly.
+function mergeUserScopedCompanions(storedCompanions, incomingCompanions) {
+  const stored = storedCompanions || [];
+  const storedIds = {};
+  stored.forEach(function (c) { storedIds[c.companionId] = true; });
+
+  const appended = [];
+  const seenNewIds = {};
+  (incomingCompanions || []).forEach(function (c) {
+    if (!c || !c.companionId) return;
+    if (storedIds[c.companionId]) return;
+    if (seenNewIds[c.companionId]) return;
+    if (stored.length + appended.length >= MAX_COMPANIONS_PER_TRIP) return;
+    const name = String(c.name || '').trim().slice(0, 80);
+    if (!name) return;
+    seenNewIds[c.companionId] = true;
+    const sanitized = { companionId: c.companionId, name: name };
+    const smiley = c.avatar && c.avatar.smiley;
+    if (isValidAvatarColor(smiley)) sanitized.avatar = { smiley: smiley };
+    appended.push(sanitized);
+  });
+  return stored.concat(appended);
 }
 
 // Counts how many times each trip's CONTENT was actually written, and how
@@ -370,6 +504,13 @@ function applySafeMergeSave(submitted, user) {
         return;
       }
       const newContent = stripClientOwnershipFields(incoming);
+      // A companion's accountId is protected exactly like ownerId/tripId
+      // -- see the COMPANIONS & AVATARS comment above and
+      // reconcileCompanionAccountLinks() in src/worker.js for why even a
+      // full-scope save can't be trusted to carry it through unmodified.
+      if (newContent.companions) {
+        newContent.companions = reconcileCompanionAccountLinks(tripContents[indexEntry.tripId], newContent.companions);
+      }
       writeTripContent(indexEntry.tripId, newContent);
       const nextEntry = Object.assign({}, indexEntry, {
         name: newContent.name || '',
@@ -404,6 +545,11 @@ function applySafeMergeSave(submitted, user) {
     if (createdTripIds[incoming.tripId]) return; // Same new id listed twice.
     createdTripIds[incoming.tripId] = true;
     const newContent = stripClientOwnershipFields(incoming);
+    // A brand-new trip has no stored content yet -- every companion on it
+    // gets accountId stripped, same reasoning as src/worker.js.
+    if (newContent.companions) {
+      newContent.companions = reconcileCompanionAccountLinks(null, newContent.companions);
+    }
     writeTripContent(incoming.tripId, newContent);
     nextIndexTrips.push({
       tripId: incoming.tripId,
@@ -448,7 +594,7 @@ const server = http.createServer(async (req, res) => {
     if (!user || user.password !== (body.password || '')) return sendJson(res, 401, { error: 'Incorrect username or password.' });
     const token = newToken();
     sessions[token] = { uid: user.id };
-    return sendJson(res, 200, { status: 'ok', id: user.id, username: user.username, isUberUser: !!user.isUberUser }, { 'Set-Cookie': 'wp_session=' + token + '; Path=/WayPoint; HttpOnly; SameSite=Lax' });
+    return sendJson(res, 200, { status: 'ok', id: user.id, username: user.username, isUberUser: !!user.isUberUser, avatar: resolveAccountAvatar(user) }, { 'Set-Cookie': 'wp_session=' + token + '; Path=/WayPoint; HttpOnly; SameSite=Lax' });
   }
   if (urlPath === '/WayPoint/api/logout' && req.method === 'POST') {
     const token = parseCookies(req).wp_session;
@@ -458,7 +604,7 @@ const server = http.createServer(async (req, res) => {
   if (urlPath === '/WayPoint/api/whoami' && req.method === 'GET') {
     const user = currentUser(req);
     if (!user) return sendJson(res, 200, { loggedIn: false, setupNeeded: users.length === 0 });
-    return sendJson(res, 200, { loggedIn: true, id: user.id, username: user.username, isUberUser: !!user.isUberUser });
+    return sendJson(res, 200, { loggedIn: true, id: user.id, username: user.username, isUberUser: !!user.isUberUser, avatar: resolveAccountAvatar(user) });
   }
   if (urlPath === '/WayPoint/api/setup' && req.method === 'POST') {
     if (users.length > 0) return sendJson(res, 403, { error: 'Setup has already been completed — ask the site owner for an account instead.' });
@@ -471,7 +617,7 @@ const server = http.createServer(async (req, res) => {
     users.push(user);
     const token = newToken();
     sessions[token] = { uid: user.id };
-    return sendJson(res, 200, { status: 'ok', id: user.id, username: user.username, isUberUser: true }, { 'Set-Cookie': 'wp_session=' + token + '; Path=/WayPoint; HttpOnly; SameSite=Lax' });
+    return sendJson(res, 200, { status: 'ok', id: user.id, username: user.username, isUberUser: true, avatar: resolveAccountAvatar(user) }, { 'Set-Cookie': 'wp_session=' + token + '; Path=/WayPoint; HttpOnly; SameSite=Lax' });
   }
 
   // ---- Everything else under /api/ needs a session ---------------------
@@ -518,9 +664,10 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { status: 'ok' });
     }
 
-    // ---- Sharing a trip (grant/revoke) -- owner (or the uber-user) only,
-    // mirroring handleTripGrantsUpsert()/handleTripGrantsRevoke() in
-    // src/worker.js. ------------------------------------------------------
+    // ---- Sharing a trip (grant/revoke) -- owner or Admin (Admin can only
+    // grant/revoke User/Viewer, never Admin), mirroring
+    // handleTripGrantsUpsert()/handleTripGrantsRevoke() in src/worker.js.
+    // ------------------------------------------------------
     if (urlPath === '/WayPoint/api/trip-grants' && req.method === 'POST') {
       let body;
       try { body = await readJsonBody(req); } catch (e) { return sendJson(res, 400, { error: 'Request body was not valid JSON.' }); }
@@ -536,20 +683,36 @@ const server = http.createServer(async (req, res) => {
       }
       const indexEntry = tripIndex.trips.find(function (t) { return t.tripId === tripId; });
       if (!indexEntry) return sendJson(res, 404, { error: 'That trip no longer exists.' });
-      if (!(user.isUberUser || indexEntry.ownerId === user.id)) {
-        return sendJson(res, 403, { error: "Only this trip's owner can decide who has access to it." });
+      const perm = permissionForTrip(indexEntry, user);
+      if (!perm || (perm.role !== 'superuser' && perm.role !== 'admin')) {
+        return sendJson(res, 403, { error: "Only this trip's owner or an Admin can share it." });
+      }
+      if (role === 'admin' && perm.role !== 'superuser') {
+        return sendJson(res, 403, { error: "Only this trip's owner can grant Admin access." });
       }
       const targetAccount = users.find(function (u) { return u.username.toLowerCase() === username.toLowerCase(); });
       if (!targetAccount) return sendJson(res, 404, { error: 'No account with that username exists yet — ask the site owner to create one first.' });
       if (targetAccount.id === indexEntry.ownerId) return sendJson(res, 400, { error: 'That account already owns this trip.' });
       if (targetAccount.isUberUser) return sendJson(res, 400, { error: 'That account already has full access to everything.' });
+      let content = null;
       if (role === 'user' || role === 'viewer') {
-        const content = tripContents[tripId];
+        // Cloned (rather than the live tripContents[tripId] reference) so
+        // writeTripContent()'s before/after JSON comparison further down
+        // is meaningful -- same reason loadTripContent() in src/worker.js
+        // always hands back a freshly-parsed object, never the exact
+        // in-memory value that's about to be saved back over it.
+        content = tripContents[tripId] ? JSON.parse(JSON.stringify(tripContents[tripId])) : null;
         const companionExists = ((content && content.companions) || []).some(function (c) { return c.companionId === companionId; });
         if (!companionExists) return sendJson(res, 400, { error: "That companion isn't on this trip." });
       }
       indexEntry.grants = (indexEntry.grants || []).filter(function (g) { return g.accountId !== targetAccount.id; });
       indexEntry.grants.push({ accountId: targetAccount.id, role: role, companionId: role === 'admin' ? '' : companionId });
+      // Sharing AS a specific companion is also how that companion's
+      // account link gets set -- see the COMPANIONS & AVATARS comment
+      // and handleTripGrantsUpsert() in src/worker.js.
+      if (content && (role === 'user' || role === 'viewer')) {
+        writeTripContent(tripId, assignCompanionAccountId(content, companionId, targetAccount.id));
+      }
       return sendJson(res, 200, { status: 'ok', grants: resolveGrants(indexEntry) });
     }
     if (urlPath === '/WayPoint/api/trip-grants/revoke' && req.method === 'POST') {
@@ -559,11 +722,60 @@ const server = http.createServer(async (req, res) => {
       if (!tripId || !accountId) return sendJson(res, 400, { error: 'Missing trip or account.' });
       const indexEntry = tripIndex.trips.find(function (t) { return t.tripId === tripId; });
       if (!indexEntry) return sendJson(res, 404, { error: 'That trip no longer exists.' });
-      if (!(user.isUberUser || indexEntry.ownerId === user.id)) {
-        return sendJson(res, 403, { error: "Only this trip's owner can decide who has access to it." });
+      const perm = permissionForTrip(indexEntry, user);
+      if (!perm || (perm.role !== 'superuser' && perm.role !== 'admin')) {
+        return sendJson(res, 403, { error: "Only this trip's owner or an Admin can change who has access to it." });
+      }
+      if (perm.role === 'admin') {
+        const targetGrant = (indexEntry.grants || []).find(function (g) { return g.accountId === accountId; });
+        if (targetGrant && targetGrant.role === 'admin') {
+          return sendJson(res, 403, { error: "Only this trip's owner can remove another Admin's access." });
+        }
       }
       indexEntry.grants = (indexEntry.grants || []).filter(function (g) { return g.accountId !== accountId; });
+      // Deliberately does NOT clear the companion's accountId link -- see
+      // handleTripGrantsRevoke() in src/worker.js for why.
       return sendJson(res, 200, { status: 'ok' });
+    }
+
+    // ---- Linking (or, with an empty username, unlinking) a companion to
+    // an account -- mirrors handleCompanionLink() in src/worker.js. -------
+    if (urlPath === '/WayPoint/api/companions/link' && req.method === 'POST') {
+      let body;
+      try { body = await readJsonBody(req); } catch (e) { return sendJson(res, 400, { error: 'Request body was not valid JSON.' }); }
+      const tripId = body.tripId;
+      const companionId = body.companionId;
+      const username = (body.username || '').trim();
+      if (!tripId || !companionId) return sendJson(res, 400, { error: 'Missing trip or companion.' });
+      const indexEntry = tripIndex.trips.find(function (t) { return t.tripId === tripId; });
+      if (!indexEntry) return sendJson(res, 404, { error: 'That trip no longer exists.' });
+      const perm = permissionForTrip(indexEntry, user);
+      if (!perm || (perm.role !== 'superuser' && perm.role !== 'admin')) {
+        return sendJson(res, 403, { error: "Only this trip's owner or an Admin can link a companion to an account." });
+      }
+      const content = tripContents[tripId] ? JSON.parse(JSON.stringify(tripContents[tripId])) : null;
+      const companion = ((content && content.companions) || []).find(function (c) { return c.companionId === companionId; });
+      if (!companion) return sendJson(res, 404, { error: "That companion isn't on this trip." });
+      let accountId = null;
+      if (username) {
+        const account = users.find(function (u) { return u.username.toLowerCase() === username.toLowerCase(); });
+        if (!account) return sendJson(res, 404, { error: 'No account with that username exists yet — ask the site owner to create one first.' });
+        accountId = account.id;
+      }
+      writeTripContent(tripId, assignCompanionAccountId(content, companionId, accountId));
+      return sendJson(res, 200, { status: 'ok' });
+    }
+
+    // ---- Self-service avatar picker -- any logged-in account may set
+    // their OWN avatar. Mirrors handleAccountAvatarUpdate() in
+    // src/worker.js. --------------------------------------------------
+    if (urlPath === '/WayPoint/api/account/avatar' && req.method === 'POST') {
+      let body;
+      try { body = await readJsonBody(req); } catch (e) { return sendJson(res, 400, { error: 'Request body was not valid JSON.' }); }
+      if (!isValidAvatarColor(body.color)) return sendJson(res, 400, { error: 'Pick one of the available colours.' });
+      if (!isValidAvatarAnimal(body.animal)) return sendJson(res, 400, { error: 'Pick one of the available animals.' });
+      user.avatar = { color: body.color, animal: body.animal };
+      return sendJson(res, 200, { status: 'ok', avatar: resolveAccountAvatar(user) });
     }
 
     // ---- Account management (site owner / uber-user only) ---------------

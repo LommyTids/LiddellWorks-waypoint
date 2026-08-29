@@ -125,7 +125,9 @@ there the next time you visit.
   `/api/users*` — the account/session system; `/api/trip-grants` and
   `/api/trip-grants/revoke` — sharing a trip, see "Accounts and
   permissions" below and the big comment at the top of this file;
-  answers `/WayPoint/api/flight-lookup` by proxying a flight number +
+  `/api/account/avatar` and `/api/companions/link` — the self-service
+  avatar picker and companion-to-account linking, see "Companions &
+  Avatars" below; answers `/WayPoint/api/flight-lookup` by proxying a flight number +
   date to the [AeroDataBox](https://aerodatabox.com/) API (via RapidAPI)
   and handing back the airline, airports, and scheduled local
   departure/arrival date+time — used by the "Look up" button next to
@@ -151,15 +153,19 @@ grant them access to anything.
 Permissions are **per trip**, not a single global role on the account:
 
 - **Superuser** — whoever creates a trip becomes its permanent,
-  non-transferable owner, with full read/write on it and — the one power
-  nobody else gets — control over who else has access (the "Share this
-  trip" panel on that trip's Settings tab). Ownership can't be handed to
-  someone else.
+  non-transferable owner, with full read/write on it, and — the one
+  thing only they can do — grant or revoke Admin access, and link or
+  unlink a companion to an account. Ownership can't be handed to someone
+  else.
 - **Admin** *(a role the owner can grant)* — full read/write on that one
-  trip, same as the owner, except they can't grant or revoke anyone
-  else's access — sharing stays the owner's call alone.
-- **User** *(a role the owner can grant, scoped to one companion)* — can
-  see and edit only the items on that trip already tagged with the one
+  trip, same as the owner, and (as of the Companions/Avatars feature,
+  below) can also share it themselves — but only as User or Viewer,
+  never as another Admin, and can revoke a User/Viewer grant but never
+  another Admin's. Only the trip's actual owner can touch an admin-role
+  grant at all, in either direction.
+- **User** *(a role the owner or an Admin can grant, scoped to one
+  companion)* — can see and edit only the items on that trip already
+  tagged with the one
   companion they've been linked to (see "Companions", below) — their own
   accommodation, their own flights, that kind of thing. They can change
   details on those items, but can't create new items, delete anything,
@@ -182,12 +188,20 @@ account is special; every place permissions matter just treats it
 exactly like a trip's real owner would be treated, and it never appears
 in any trip's own sharing list.
 
-A trip's owner shares it from that trip's own **Settings** tab: type the
-username of an existing account, pick a role, and — for User/Viewer —
-which companion they are on this trip. The account has to already exist
-(create it from Manage accounts first if it doesn't). A person can be a
-different companion on different trips, or have a completely different
-role, or no access at all — it's all per trip.
+A trip's owner or Admin shares it from that trip's own **Companions**
+tab (the "Share access" panel there — it used to live on Settings, but
+who's tagged as a companion and who can log in and see the trip turned
+out to be one and the same "who's on this trip" question, so they're
+managed together now; Settings just has a one-line pointer left behind
+for anyone who remembers the old location): type the username of an
+existing account, pick a role, and — for User/Viewer — which companion
+they are on this trip. The account has to already exist (create it from
+Manage accounts first if it doesn't). An Admin's own role dropdown
+simply doesn't offer "Admin" as an option — only the owner can grant
+that. A person can be a different companion on different trips, or have
+a completely different role, or no access at all — it's all per trip.
+
+## Companions & Avatars
 
 **Companions** (Destinations/Activities/Accommodation/Transport tabs
 each gained this) — a per-trip list of the people actually on the trip,
@@ -197,7 +211,64 @@ them (a small row of checkboxes on that item's form), and the tags show
 up right on that item in the list. This is more than a label — it's
 also literally what a User/Viewer grant's visibility is scoped to (see
 above), so tagging accurately matters if you're planning to share a trip
-with anyone.
+with anyone. As of this update, a **User** grant may also add a
+brand-new companion of their own (just a name and a smiley colour,
+nothing else) from that same tab — but, like everything else a User
+grant can do, only append: they can't edit, delete, retag, or link one
+that already exists, and there's deliberately no Notes field on their
+version of the form, since a User's submission would never keep one
+anyway.
+
+**Avatars** — every account gets a small coloured circle with an animal
+face, self-picked from the topbar (click your own name/swatch) — 10
+colours × 16 animals, both fixed allowlists (see `AVATAR_COLOR_TOKENS`/
+`AVATAR_ANIMAL_TOKENS` in `src/worker.js`, and their frontend twin in
+`public/WayPoint/data/avatars.js`). Nobody's forced to pick one — until
+you do, you get a stable, deterministic default (always the same one,
+computed from your account id, never random) rather than a blank
+circle. A companion who ISN'T linked to any account gets a different
+look on purpose — a fixed grey circle with a smiley in a colour whoever
+added them chose (or, again, a deterministic default if nobody ever
+did) — so a marker tells you at a glance whether that person can log in
+at all. These markers show up next to a companion's name everywhere one
+appears: item rows, the tag-picker, the Timeline, and — new — each trip
+card on the dashboard now shows a small row of everyone on that trip
+(capped, with a "+N" bubble for the overflow).
+
+**Linking a companion to an account** turns their marker into that
+account's own coloured circle + animal instead of the grey smiley. It
+happens two ways: automatically, whenever a trip's owner or an Admin
+shares that trip with someone AS a specific companion (see "Share
+access" above) — sharing already implies "this companion is that
+account", so it links itself; or explicitly, via a small link button
+next to any companion in the list (owner/Admin only), which takes just
+a username rather than exposing any account-id list, and an empty
+username unlinks. Linking on its own never grants trip access — it only
+changes what marker shows up — and revoking someone's trip access
+deliberately does **not** clear the link either (they're independent:
+one is "can this account see this trip", the other is "whose face is
+this companion's marker").
+
+A companion's link (`accountId`) is treated as a protected,
+server-computed field, the same as a trip's `ownerId` — nothing a
+client submits for it is ever trusted, for **any** role, including an
+ordinary Superuser/Admin save of the trip's own content. Every save
+re-asserts each companion's real, currently-stored link rather than
+simply stripping the field, which matters more than it might sound:
+stripping would silently wipe out every existing link the next time
+*anyone* made an unrelated change (renaming the trip, adding an
+expense) — exactly the kind of quiet data-loss bug the storage
+restructuring further up this file exists to guard against. See the big
+"COMPANIONS & AVATARS" comment near `AVATAR_COLOR_TOKENS` in
+`src/worker.js` for the full reasoning, and
+`reconcileCompanionAccountLinks()` for the actual guard.
+
+Two small new endpoints support all this: `POST
+/WayPoint/api/account/avatar` (any logged-in account sets only its own
+colour/animal, rejecting anything outside the two allowlists) and
+`POST /WayPoint/api/companions/link` (owner/Admin only, links or
+unlinks one companion by username). Neither is reachable by a scoped
+User/Viewer grant.
 
 See the big "WHO IS ALLOWED IN" and "SAVING SAFELY" comments at the top
 of `src/worker.js` for the full design (password hashing, session
@@ -465,40 +536,70 @@ A handful of Playwright suites live outside this repo's deployed contents
   via the "tag-picker" checkbox row, the tag showing up on that item's
   card, editing an item re-showing its saved tags checked correctly,
   renaming a companion updating their tag everywhere it appears (tags
-  are stored as a companionId and resolved to a name at render time), and
+  are stored as a companionId and resolved to a name at render time),
   deleting a tagged companion leaving the item itself intact with the
-  tag just quietly gone (no crash, no stale reference).
+  tag just quietly gone (no crash, no stale reference); and, added for
+  the Companions/Avatars feature: picking a smiley colour when adding a
+  companion, linking a companion to an account (and the marker switching
+  from a smiley to that account's own avatar), that link surviving an
+  unrelated save untouched, a hand-crafted accountId on a different,
+  never-linked companion being refused even from a full-scope session
+  (while a real, legitimate link in that same request survives
+  untouched), unlinking reverting the marker back to a smiley, and the
+  dashboard trip card showing one avatar marker per companion.
+- A dedicated test for the avatar half of the Companions/Avatars feature
+  (`test-avatars.js`) — the colour/animal palette allowlists rejecting
+  anything not on either list; the self-service avatar picker (topbar
+  swatch button, live two-grid preview, save) working end to end and
+  round-tripping through the server; a brand-new account already having
+  a real, deterministic default avatar before ever picking one; that
+  picking your own avatar never touches another account's; and
+  `resolveCompanionAvatars()`'s three real shapes — linked to an account
+  (inherits that account's own avatar), unlinked with an explicit smiley
+  colour chosen, and unlinked with nothing ever chosen (a stable
+  deterministic default, not re-randomised on every request) — including
+  that a SCOPED (Viewer) role's own response carries the exact same
+  resolved map as the full-scope one.
 - A dedicated test for the per-trip ownership + grants permission system
   — the first-run "set up Waypoint" screen (including a wrong setup key
   being rejected, and setup refusing to run again once an account
   exists); that creating a trip makes you its permanent Superuser
-  automatically; sharing it from the Settings tab's "Share this trip"
+  automatically; sharing it from the Companions tab's "Share access"
   panel with an Admin, a User (scoped to one companion) and a Viewer
   (scoped to a different companion); that an Admin grant gets full
-  read/write but the server itself refuses a direct attempt to manage
-  sharing (not just hides the panel); that a User grant sees and can
-  edit only their own tagged items (with the Companions tag-picker
-  locked on their edit form), never sees an Add or Delete control, and
-  never sees the Expenses tab at all; that a Viewer grant is fully
-  read-only even for their own tagged items; that an account with no
-  grant on a trip doesn't see it at all; that the site's one uber-user
-  account gets full access to a trip it was never shared on and never
-  appears in that trip's own sharing list; that revoking someone's
-  access actually removes their visibility; that the last remaining
-  site-owner account can't be deleted; and — the most important check in
-  this file — a raw `fetch()` from a "user"-scoped session, bypassing the
-  UI entirely, hand-crafting a save request that tries to rename the
-  trip, retag an item outside their scope, delete their own tagged item,
-  sneak in a brand-new item, and overwrite a completely different trip
-  they have zero access to — proving the safe per-trip merge-save
-  genuinely rejects every single one of those, not just the ones the UI
-  happens to prevent. This test (and this one alone) runs the mock
-  server with `--empty-users` (see mock-server.js) to exercise the true
-  first-run state; every other test uses mock-server.js's normal
-  pre-seeded uber-user account (`admin` / `testpass123`) via the
-  `loginAsAdmin()` helper in `test-helpers.js`, since they don't care
-  about the bootstrap flow itself and would otherwise all need to repeat
-  it.
+  read/write, and (as of the Companions/Avatars feature) can share the
+  trip itself as User/Viewer — with that share auto-linking the chosen
+  companion's avatar — but is refused (403) granting Admin access even
+  via a raw request, and refused revoking an admin-role grant (even
+  their own); that on a trip THEY own, an Admin's role dropdown does
+  offer Admin; that a User grant sees and can edit only their own tagged
+  items (with the Companions tag-picker locked on their edit form), never
+  sees an Add/Delete control on an EXISTING item, and never sees the
+  Expenses tab at all — but (Phase 3) DOES see an "Add companion" button
+  of their own, limited to a name and smiley colour with no Notes field,
+  and can never edit/delete/retag/link a companion, including one they
+  just added themselves; that a Viewer grant is fully read-only even for
+  their own tagged items, with no "Add companion" button either; that an
+  account with no grant on a trip doesn't see it at all; that the site's
+  one uber-user account gets full access to a trip it was never shared
+  on and never appears in that trip's own sharing list; that revoking
+  someone's access actually removes their visibility; that the last
+  remaining site-owner account can't be deleted; and — the most important
+  check in this file — a raw `fetch()` from a "user"-scoped session,
+  bypassing the UI entirely, hand-crafting a save request that tries to
+  rename the trip, retag an item outside their scope, delete their own
+  tagged item, sneak in a brand-new item, overwrite a completely
+  different trip they have zero access to, rename or delete an EXISTING
+  companion, and smuggle a protected `accountId` onto one — proving the
+  safe per-trip merge-save genuinely rejects every single one of those
+  (while the companion that account legitimately appended earlier
+  survives untouched), not just the ones the UI happens to prevent. This
+  test (and this one alone) runs the mock server with `--empty-users`
+  (see mock-server.js) to exercise the true first-run state; every other
+  test uses mock-server.js's normal pre-seeded uber-user account
+  (`admin` / `testpass123`) via the `loginAsAdmin()` helper in
+  `test-helpers.js`, since they don't care about the bootstrap flow
+  itself and would otherwise all need to repeat it.
 
 `mock-server.js` (the small Node HTTP server every test above runs
 against, standing in for the real Worker/KV) implements this same
@@ -533,11 +634,18 @@ match `worker.js` exactly and breaks every test.
   Both `/api/__*` endpoints exist only in the mock — the real Worker has
   no equivalent and needs none.
 
-Every suite above has been run against the per-trip storage restructuring
-and schema rename described in "How trip data is stored" and passes (166
-assertions across 11 suites) — including a full end-to-end pass of the
-permissions test's hostile `fetch()` attack scenario against the new
-`trip_index`/`trip:<id>` shape. The two data-loss guards were each
-verified by deliberately removing them and confirming the relevant test
-fails: with both removed, one failed load followed by creating a single
-trip destroys every existing trip while the UI reports "Saved".
+Every suite above has been run — including against the Companions/
+Avatars feature described earlier in this file — and passes (over 200
+assertions across 12 suites), covering a full end-to-end pass of the
+permissions test's hostile `fetch()` attack scenario (now extended to
+also cover companion rename/delete/accountId-smuggling attempts) against
+the `trip_index`/`trip:<id>` storage shape. The two data-loss guards
+around trip deletion were each verified by deliberately removing them
+and confirming the relevant test fails: with both removed, one failed
+load followed by creating a single trip destroys every existing trip
+while the UI reports "Saved". The equivalent guard for a companion's
+account link (`reconcileCompanionAccountLinks()` re-asserting the real
+stored value rather than stripping the field) was verified the same
+way: swapping it for a plain "always strip accountId" version makes
+`test-companions.js`'s "unrelated save leaves the link intact" check
+fail immediately.
