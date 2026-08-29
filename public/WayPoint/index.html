@@ -685,7 +685,7 @@ function homeValue(trip, amount, currency, rateOverride) {
 
 function money(amount, currency) {
   var n = Number(amount) || 0;
-  return (currency || '') + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return esc(currency || '') + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Turns an IANA timezone name (e.g. "Asia/Bangkok") into a short
@@ -970,6 +970,12 @@ function updateState(mutator) {
 // as a suspicious multi-trip deletion and rejects outright.
 var saveInFlight = false;
 var pendingSaveState = null;
+var lastSaveStartedAt = 0;
+var MIN_SAVE_INTERVAL_MS = 1100;
+
+function waitMs(ms) {
+  return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
 
 async function persist(newState) {
   state = newState;
@@ -1001,12 +1007,25 @@ async function sendSave(toSave) {
   saveInFlight = true;
   setSaveStatus('saving');
   try {
-    var res = await fetch('/WayPoint/api/data', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(toSave)
-    });
+    // Cloudflare KV permits only one write per second to a given key. The
+    // queue already prevents overlap; this spacing also prevents the next
+    // queued snapshot from immediately following the previous request.
+    var spacing = MIN_SAVE_INTERVAL_MS - (Date.now() - lastSaveStartedAt);
+    if (spacing > 0) await waitMs(spacing);
+
+    var res;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      lastSaveStartedAt = Date.now();
+      res = await fetch('/WayPoint/api/data', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toSave)
+      });
+      if (res.status !== 429 || attempt === 2) break;
+      var retryAfter = Number(res.headers.get('Retry-After')) || Math.pow(2, attempt + 1);
+      await waitMs(Math.min(retryAfter * 1000, 8000));
+    }
     if (!res.ok) {
       // The server sends a human-readable explanation for a refused save
       // (e.g. the multi-trip-deletion guard) — show that rather than a
@@ -1014,6 +1033,14 @@ async function sendSave(toSave) {
       var body = await res.json().catch(function () { return {}; });
       throw new Error(body.error || ('Server responded with status ' + res.status));
     }
+    var savedBody = await res.json().catch(function () { return {}; });
+    var revisions = savedBody.revisions || {};
+    [state, pendingSaveState, toSave].forEach(function (snapshot) {
+      if (!snapshot || !Array.isArray(snapshot.trips)) return;
+      snapshot.trips.forEach(function (trip) {
+        if (Object.prototype.hasOwnProperty.call(revisions, trip.tripId)) trip.revision = revisions[trip.tripId];
+      });
+    });
     setSaveStatus('saved');
   } catch (err) {
     console.error('Waypoint: save failed', err);
