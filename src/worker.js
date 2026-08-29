@@ -277,6 +277,196 @@ const SALT_BYTES = 16;
 // having created the trip (trip.ownerId) — see permissionForTrip().
 const GRANT_ROLES = ["admin", "user", "viewer"];
 
+/* ============================================================================
+ * COMPANIONS & AVATARS
+ * ----------------------------------------------------------------------------
+ * Every account gets a self-picked coloured circle + animal face (e.g.
+ * green circle, penguin). Every COMPANION who ISN'T linked to an account
+ * gets a fixed grey circle + a smiley in a colour whoever added them
+ * picked. The two looks are deliberately different — the marker itself
+ * tells you at a glance whether that person can log in. See
+ * claude/waypoint-companions-plan.md for the full design discussion.
+ *
+ * The account<->companion link lives on the COMPANION record, as an
+ * `accountId` field — not on the grant. This was a deliberate, debated
+ * choice (see the plan doc): it means a person's avatar is the same
+ * everywhere they show up on a trip, resolved by one simple local lookup
+ * (see resolveCompanionAvatars() below) rather than cross-referencing the
+ * grants array. If they haven't been added to a particular trip as a
+ * companion, they simply don't appear on it at all — there's no
+ * in-between "partially linked" state to worry about.
+ *
+ * That convenience comes with exactly one real risk, which is why
+ * `accountId` gets handled so carefully everywhere it's touched below:
+ * a companion is part of a trip's regular CONTENT (the same "trip:<id>"
+ * document as destinations/activities/etc), and content is something
+ * even a scoped "user" grant gets to submit changes to (see
+ * mergeUserScopedTrip() further down, extended in this pass to let a
+ * "user" grant append a brand-new companion). If `accountId` were just
+ * another plain field on that object, a "user" grant's own submitted
+ * content — or, for that matter, a bug anywhere else in this file — could
+ * self-assign or overwrite the link and make some companion look like a
+ * different, arbitrary account. So `accountId` is treated as a
+ * server-computed, PROTECTED field, exactly the way `ownerId`/`tripId`
+ * already are for the trip itself: it is NEVER taken from anything a
+ * client submits through the normal save endpoint (POST /api/data), no
+ * matter which role is saving — see reconcileCompanionAccountLinks()
+ * below, which every content-writing code path in handlePost() runs
+ * every companion through. The ONLY way it's ever actually set is
+ * through the two small, dedicated, permission-gated actions below
+ * (handleTripGrantsUpsert's auto-link when sharing a trip as a specific
+ * companion, and handleCompanionLink()'s standalone link/unlink action) —
+ * both restricted to a trip's Superuser or Admin, same as sharing itself.
+ *
+ * A colour or animal is always one of a small set of ALLOWLISTED tokens
+ * (e.g. "green", "penguin") — see AVATAR_COLOR_TOKENS/AVATAR_ANIMAL_TOKENS
+ * just below. The Worker validates every incoming token against its own
+ * copy of this list (never trusting the page's copy, even though the two
+ * are meant to always match — see public/WayPoint/data/avatars.js, which
+ * holds the matching hex/emoji values the FRONTEND needs to actually draw
+ * a marker). Storing anything outside this allowlist would open a path
+ * to a CSS-injection-style bug down the line if a raw stored value were
+ * ever interpolated into a style attribute — keeping the server strict
+ * about it means that mistake can never happen even if the frontend
+ * later got careless about it.
+ * ==========================================================================*/
+
+// The real allowlist — see the big comment above. Keep this in sync with
+// public/WayPoint/data/avatars.js's AVATAR_COLORS list (the frontend's
+// copy, which also carries each token's hex value — the Worker only ever
+// needs the token itself, to validate, never the hex).
+const AVATAR_COLOR_TOKENS = ["red", "orange", "amber", "green", "teal", "cyan", "blue", "indigo", "purple", "pink"];
+
+// Same idea, for the account-holder circle's animal. Keep in sync with
+// public/WayPoint/data/avatars.js's AVATAR_ANIMALS list.
+const AVATAR_ANIMAL_TOKENS = ["penguin", "lion", "fox", "owl", "panda", "koala", "tiger", "elephant", "giraffe", "rabbit", "bear", "wolf", "cat", "dog", "monkey", "dolphin"];
+
+function isValidAvatarColor(token) {
+  return AVATAR_COLOR_TOKENS.indexOf(token) !== -1;
+}
+
+function isValidAvatarAnimal(token) {
+  return AVATAR_ANIMAL_TOKENS.indexOf(token) !== -1;
+}
+
+// A stable "which colour would this default to if nobody's picked one
+// yet" index, purely so a marker never renders blank before an account
+// holder opens the avatar picker or before a companion's adder picks a
+// smiley colour — see this file's frontend counterpart,
+// deterministicAvatarIndex() in public/WayPoint/data/avatars.js, which
+// this deliberately matches so a not-yet-chosen avatar looks the same
+// wherever it's computed. Not cryptographic — it only ever picks an
+// array index.
+function deterministicIndex(seed, listLength) {
+  let hash = 0;
+  const text = String(seed || "");
+  for (let i = 0; i < text.length; i++) {
+    hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  }
+  return hash % listLength;
+}
+
+// Resolves ONE account's avatar: whatever it has saved, if both parts are
+// still valid allowlisted tokens (a colour/animal could in principle be
+// retired from the allowlist later; falling back rather than trusting a
+// stale value keeps that safe), otherwise a deterministic default from
+// the account's own id — see deterministicIndex() above. Always returns a
+// real, renderable `{ color, animal }`, never null/undefined, so callers
+// never need their own "what if nobody's picked yet" fallback.
+function resolveAccountAvatar(account) {
+  const saved = account && account.avatar;
+  const color = (saved && isValidAvatarColor(saved.color)) ? saved.color : AVATAR_COLOR_TOKENS[deterministicIndex(account && account.id, AVATAR_COLOR_TOKENS.length)];
+  const animal = (saved && isValidAvatarAnimal(saved.animal)) ? saved.animal : AVATAR_ANIMAL_TOKENS[deterministicIndex((account && account.id) + ":animal", AVATAR_ANIMAL_TOKENS.length)];
+  return { color: color, animal: animal };
+}
+
+// Resolves EVERY companion on a trip to what marker it should show, from
+// server-side truth only — see the big COMPANIONS & AVATARS comment above
+// for why this is a plain local lookup rather than anything involving
+// `grants`. Returns a map keyed by companionId so the frontend never has
+// to re-derive this itself, and — critically — never hands out a raw
+// `accountId`: only a colour and an animal (or a colour alone, for a
+// smiley), which identifies nothing on their own. This is sent to EVERY
+// role that can see the trip at all, including a scoped "user"/"viewer"
+// grant, exactly because it's already been reduced to something that
+// safe to show them (compare buildVisibleTrip(), which strips the raw
+// `accountId` field itself out of what a scoped role's own companions
+// list carries, for the same underlying reason).
+function resolveCompanionAvatars(content, usersDoc) {
+  const map = {};
+  (content && content.companions || []).forEach(function (c) {
+    if (c.accountId) {
+      const account = usersDoc.users.find(function (u) { return u.id === c.accountId; });
+      if (account) {
+        const avatar = resolveAccountAvatar(account);
+        map[c.companionId] = { type: "account", color: avatar.color, animal: avatar.animal };
+        return;
+      }
+      // Linked account has since been deleted -- fall through to the
+      // ordinary smiley resolution below, same "dangling reference just
+      // degrades gracefully" philosophy as everywhere else in this file.
+    }
+    const savedSmiley = c.avatar && c.avatar.smiley;
+    const color = isValidAvatarColor(savedSmiley) ? savedSmiley : AVATAR_COLOR_TOKENS[deterministicIndex(c.companionId, AVATAR_COLOR_TOKENS.length)];
+    map[c.companionId] = { type: "smiley", color: color };
+  });
+  return map;
+}
+
+// Strips (or reasserts, from the trip's REAL stored content) `accountId`
+// on every companion in `incomingCompanions` -- see the big COMPANIONS &
+// AVATARS comment above for why this has to run on every save, for every
+// role, not just a scoped one. The rule: a companion keeps EXACTLY the
+// accountId it already has in storage, no matter what the client sent
+// for it -- a brand-new companion (one with no matching stored
+// companionId yet) can never arrive pre-linked, since linking only ever
+// happens through the two dedicated actions below. This is deliberately
+// a "reassert the real value" rather than a "delete the field" strip:
+// simply deleting it would mean an ordinary, honest save (e.g. someone
+// tweaking the trip's currency on the Settings tab, which resubmits the
+// whole trip including its companions list exactly as it was last read)
+// would silently erase every existing account link the next time anyone
+// saved anything -- a data-loss bug in the same family as the ones the
+// storage-safety pass already fixed once this file.
+function reconcileCompanionAccountLinks(storedContent, incomingCompanions) {
+  const storedAccountIdByCompanionId = {};
+  (storedContent && storedContent.companions || []).forEach(function (c) {
+    storedAccountIdByCompanionId[c.companionId] = c.accountId || null;
+  });
+  return (incomingCompanions || []).map(function (c) {
+    const copy = Object.assign({}, c);
+    const real = Object.prototype.hasOwnProperty.call(storedAccountIdByCompanionId, c.companionId)
+      ? storedAccountIdByCompanionId[c.companionId]
+      : null; // Not a companion that exists in storage yet -- can't be linked.
+    if (real) copy.accountId = real; else delete copy.accountId;
+    return copy;
+  });
+}
+
+// Sets (or, when accountId is falsy, clears) which account companion
+// `companionId` is linked to, enforcing that an account can only ever be
+// linked to ONE companion on a given trip -- if it's currently linked to
+// a DIFFERENT companion here, that older link is cleared automatically
+// first, so the data can never end up with the same account claimed by
+// two companions on one trip at once (which would make
+// resolveCompanionAvatars() above arbitrarily inconsistent about which
+// one wins). Mutates `content` in place and returns it; the caller is
+// responsible for actually saving it back to KV. Shared by
+// handleTripGrantsUpsert() (auto-links when sharing a trip AS a specific
+// companion) and handleCompanionLink() (the standalone link/unlink
+// action) so this rule only has to be gotten right once.
+function assignCompanionAccountId(content, companionId, accountId) {
+  (content.companions || []).forEach(function (c) {
+    if (accountId && c.accountId === accountId && c.companionId !== companionId) {
+      delete c.accountId;
+    }
+  });
+  const target = (content.companions || []).find(function (c) { return c.companionId === companionId; });
+  if (!target) return content;
+  if (accountId) target.accountId = accountId; else delete target.accountId;
+  return content;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -311,15 +501,33 @@ export default {
         return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
       }
 
-      // ---- Sharing a trip (grant/revoke) -- owner (or the uber-user)
-      // only; enforced inside these handlers against the REAL stored
-      // ownerId, never anything the client claims. ----------------
+      // ---- Sharing a trip (grant/revoke) -- owner or Admin (Admin can
+      // only grant/revoke User/Viewer, never Admin); enforced inside
+      // these handlers against the REAL stored ownerId/grants, never
+      // anything the client claims. ----------------
       if (path === "/WayPoint/api/trip-grants") {
         if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
         return handleTripGrantsUpsert(request, env, user);
       }
       if (path === "/WayPoint/api/trip-grants/revoke" && request.method === "POST") {
         return handleTripGrantsRevoke(request, env, user);
+      }
+
+      // ---- Linking (or unlinking) a companion to an account -- see the
+      // big COMPANIONS & AVATARS comment near AVATAR_COLOR_TOKENS. Same
+      // owner-or-Admin permission bar as sharing a trip. ----------------
+      if (path === "/WayPoint/api/companions/link" && request.method === "POST") {
+        return handleCompanionLink(request, env, user);
+      }
+
+      // ---- Self-service avatar picker -- ANY logged-in account may set
+      // their OWN avatar (never anyone else's: handleAccountAvatarUpdate()
+      // always writes to `user`, from the session, never to a body-
+      // supplied account id). No isUberUser gate here on purpose -- this
+      // is one of the few things every account, however it's scoped on
+      // whatever trips it can see, gets to do for itself. -------------
+      if (path === "/WayPoint/api/account/avatar" && request.method === "POST") {
+        return handleAccountAvatarUpdate(request, env, user);
       }
 
       // ---- Flight lookup (reverse: flight number -> carrier + route) --
@@ -608,6 +816,12 @@ function resolveGrants(indexEntry, usersDoc) {
  * description below for the full shape.
  */
 function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
+  // Resolved once, shared by both branches below -- see the big
+  // COMPANIONS & AVATARS comment near AVATAR_COLOR_TOKENS for why this is
+  // safe to hand to EVERY role: it's already been reduced to just a
+  // colour + an animal (or a colour alone), never a raw accountId.
+  const companionAvatars = resolveCompanionAvatars(content, usersDoc);
+
   if (perm.role === "superuser" || perm.role === "admin") {
     const ownerAccount = usersDoc.users.find(function (u) { return u.id === indexEntry.ownerId; });
     return Object.assign({ tripId: indexEntry.tripId }, content, {
@@ -615,6 +829,14 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
       myGrant: perm,
       ownerUsername: ownerAccount ? ownerAccount.username : "",
       grants: resolveGrants(indexEntry, usersDoc),
+      companionAvatars: companionAvatars,
+      // A full-scope role already sees `grants` (who has access to this
+      // trip and as whom), so the raw accountId on each companion isn't
+      // hiding anything NEW from them -- left in place here (unlike the
+      // scoped branch below) since the Companions tab's "already linked
+      // to an account" UI needs it. It's still never trusted coming back
+      // IN from this same role on a save -- see
+      // reconcileCompanionAccountLinks() and handlePost() below.
     });
   }
 
@@ -628,6 +850,20 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
     transport: (content.transport || []).filter(taggedTo),
     expenses: [],
     myGrant: perm,
+    companionAvatars: companionAvatars,
+    // Unlike the full-scope branch above, a scoped "user"/"viewer" grant
+    // is deliberately NOT sent the `grants` array (they must not learn
+    // who else has access to this trip) -- and an unlinked-from-content
+    // raw `accountId` on a companion would leak exactly the same thing
+    // (which account, if any, some other person on this trip is), so it
+    // gets stripped here for the same reason. `companionAvatars` above
+    // already carries everything they're allowed to see about it: a
+    // colour and an animal, never an identity.
+    companions: (content.companions || []).map(function (c) {
+      const copy = Object.assign({}, c);
+      delete copy.accountId;
+      return copy;
+    }),
   });
   // No ownerId/grants added at all for a scoped account -- see the class
   // comment on the old buildResponseState() this replaces: a scoped
@@ -811,6 +1047,16 @@ async function handlePost(request, env, user) {
       }
       const newContent = stripClientOwnershipFields(incoming);
       const storedContent = await loadTripContent(env, indexEntry.tripId);
+      // A companion's accountId is protected exactly like ownerId/tripId
+      // above -- see the big COMPANIONS & AVATARS comment near
+      // AVATAR_COLOR_TOKENS for why even a full-scope Superuser/admin
+      // save can't be trusted to carry it through unmodified, and why
+      // this has to REASSERT the real stored value rather than just
+      // deleting the field (deleting it would erase every existing
+      // account link the next time anyone saved anything at all).
+      if (newContent.companions) {
+        newContent.companions = reconcileCompanionAccountLinks(storedContent, newContent.companions);
+      }
       if (JSON.stringify(newContent) !== JSON.stringify(storedContent)) {
         await saveTripContent(env, indexEntry.tripId, newContent);
       }
@@ -858,6 +1104,13 @@ async function handlePost(request, env, user) {
     if (createdTripIds[incoming.tripId]) continue;
     createdTripIds[incoming.tripId] = true;
     const newContent = stripClientOwnershipFields(incoming);
+    // A brand-new trip has no stored content yet, so `storedContent` is
+    // null here -- reconcileCompanionAccountLinks() treats that as "no
+    // companion can be pre-linked", stripping accountId from every one
+    // of them. Same reasoning as the existing-trip branch above.
+    if (newContent.companions) {
+      newContent.companions = reconcileCompanionAccountLinks(null, newContent.companions);
+    }
     await saveTripContent(env, incoming.tripId, newContent);
     nextIndexTrips.push({
       tripId: incoming.tripId,
@@ -902,13 +1155,20 @@ function stripClientOwnershipFields(trip) {
  * Applies a "user" grant's edits to a trip's CONTENT: only fields on items
  * that already existed AND were tagged with `companionId` in BOTH the
  * stored and the submitted version get updated. Everything else -- the
- * trip's own name/dates/notes, its companions list, its contacts, other
- * people's items -- comes back exactly as it was stored, no matter what
- * the client sent. This is what makes a "user" grant genuinely safe to
- * give write access to: even a compromised or buggy client can't use it
- * to reach outside their own tagged items. (ownerId/grants aren't part of
- * a trip's content at all any more -- they live only in the index, which
- * a "user" grant never touches regardless.)
+ * trip's own name/dates/notes, its contacts, other people's items -- comes
+ * back exactly as it was stored, no matter what the client sent. This is
+ * what makes a "user" grant genuinely safe to give write access to: even a
+ * compromised or buggy client can't use it to reach outside their own
+ * tagged items. (ownerId/grants aren't part of a trip's content at all any
+ * more -- they live only in the index, which a "user" grant never touches
+ * regardless.)
+ *
+ * ONE exception, added for Phase 3 of the Companions/Avatars feature: the
+ * companions list. A "user" grant may APPEND a brand-new companion (see
+ * mergeUserScopedCompanions() below) but still can't rename, delete or
+ * retag an EXISTING one -- and can never set an accountId on any
+ * companion, new or old (see the big COMPANIONS & AVATARS comment near
+ * AVATAR_COLOR_TOKENS for why that specifically matters).
  */
 function mergeUserScopedTrip(storedContent, incomingContent, companionId) {
   // `storedContent` can legitimately be null -- an index entry whose
@@ -921,7 +1181,55 @@ function mergeUserScopedTrip(storedContent, incomingContent, companionId) {
   ["destinations", "activities", "accommodation", "transport"].forEach(function (listKey) {
     merged[listKey] = mergeUserScopedList(stored[listKey] || [], incomingContent[listKey] || [], companionId, listItemIdField(listKey));
   });
+  merged.companions = mergeUserScopedCompanions(stored.companions, incomingContent.companions);
   return merged;
+}
+
+// Sanity backstop on how many companions one trip can ever hold -- not a
+// real business rule (this app is built for a friends-and-family group,
+// see MAX_USERS' own comment for the same reasoning), just cheap
+// insurance against a runaway script or a mistake appending hundreds of
+// companions by accident.
+const MAX_COMPANIONS_PER_TRIP = 100;
+
+// The Phase-3 half of mergeUserScopedTrip() above: lets a "user" grant
+// APPEND a brand-new companion, but nothing more. Every existing
+// companion in `storedCompanions` is carried through completely
+// untouched -- there is no way for a "user" grant to rename, delete,
+// add notes to, re-colour, or (especially) link an account to one that
+// already exists, no matter what `incomingCompanions` contains for it.
+// A genuinely NEW companion (a companionId not already in storage) gets
+// rebuilt from scratch out of only the two fields a "user" grant is
+// allowed to specify -- `name` and an optional smiley colour -- rather
+// than trusting the submitted object's other fields at all. This is
+// deliberately stricter than mergeUserScopedList() above (which merges
+// most fields of an item they already own): a "user" grant doesn't OWN
+// the companion they're adding the way they own their own tagged items,
+// so there's no "their own data" to trust here, only a name to accept.
+function mergeUserScopedCompanions(storedCompanions, incomingCompanions) {
+  const stored = storedCompanions || [];
+  const storedIds = {};
+  stored.forEach(function (c) { storedIds[c.companionId] = true; });
+
+  const appended = [];
+  const seenNewIds = {};
+  (incomingCompanions || []).forEach(function (c) {
+    if (!c || !c.companionId) return;
+    if (storedIds[c.companionId]) return; // Already exists -- can't be edited this way, see above.
+    if (seenNewIds[c.companionId]) return; // Same new id submitted twice in one request.
+    if (stored.length + appended.length >= MAX_COMPANIONS_PER_TRIP) return;
+    const name = String(c.name || "").trim().slice(0, 80);
+    if (!name) return; // A companion needs at least a name to be worth adding.
+    seenNewIds[c.companionId] = true;
+    const sanitized = { companionId: c.companionId, name: name };
+    const smiley = c.avatar && c.avatar.smiley;
+    if (isValidAvatarColor(smiley)) sanitized.avatar = { smiley: smiley };
+    // Deliberately no `notes` and no `accountId` -- name + an optional
+    // smiley colour is the whole of what a "user" grant may specify
+    // about a companion they're adding (see the plan doc's Phase 3).
+    appended.push(sanitized);
+  });
+  return stored.concat(appended);
 }
 
 // Which id field each of a trip's item lists uses -- see the "SCHEMA NOTE"
@@ -961,12 +1269,14 @@ function mergeUserScopedList(storedList, incomingList, companionId, idField) {
 }
 
 /* ---- Route handlers: sharing a trip (grant / revoke) ---------------------
- * Only a trip's Superuser (its owner) or the uber-user may change who has
- * access to it -- deliberately not even an "admin" grant, so "full
- * read/write" and "decides who else gets in" stay two separate powers,
- * exactly as asked for. Both handlers check this against the REAL stored
- * `ownerId` (now on the trip's INDEX entry, not the trip object itself),
- * never anything the client claims. ---------------------------------------- */
+ * A trip's Superuser (its owner, or the uber-user) can grant ANY role,
+ * including Admin. As of Phase 2 of the Companions/Avatars feature, an
+ * "admin" grant can ALSO share the trip -- but only as User or Viewer,
+ * never Admin -- so creating another Admin stays the owner's call alone,
+ * exactly as originally asked for ("Admin grants may share as User/Viewer
+ * only"). Both handlers check this against the REAL stored `ownerId`/
+ * `grants` (on the trip's INDEX entry, not the trip object itself), never
+ * anything the client claims. ---------------------------------------- */
 
 async function handleTripGrantsUpsert(request, env, user) {
   let body;
@@ -989,8 +1299,15 @@ async function handleTripGrantsUpsert(request, env, user) {
   const index = await loadTripIndex(env);
   const indexEntry = index.trips.find(function (t) { return t.tripId === tripId; });
   if (!indexEntry) return jsonError(404, "That trip no longer exists.");
-  if (!(user.isUberUser || indexEntry.ownerId === user.id)) {
-    return jsonError(403, "Only this trip's owner can decide who has access to it.");
+  const perm = permissionForTrip(indexEntry, user);
+  if (!perm || (perm.role !== "superuser" && perm.role !== "admin")) {
+    return jsonError(403, "Only this trip's owner or an Admin can share it.");
+  }
+  if (role === "admin" && perm.role !== "superuser") {
+    // An Admin grant can share as User/Viewer, but granting someone ELSE
+    // Admin access stays the owner's call alone -- see the class comment
+    // above.
+    return jsonError(403, "Only this trip's owner can grant Admin access.");
   }
 
   const usersDoc = await loadUsers(env);
@@ -998,8 +1315,9 @@ async function handleTripGrantsUpsert(request, env, user) {
   if (!targetAccount) return jsonError(404, "No account with that username exists yet — ask the site owner to create one first.");
   if (targetAccount.id === indexEntry.ownerId) return jsonError(400, "That account already owns this trip.");
   if (targetAccount.isUberUser) return jsonError(400, "That account already has full access to everything.");
+  let content = null;
   if (role === "user" || role === "viewer") {
-    const content = await loadTripContent(env, tripId);
+    content = await loadTripContent(env, tripId);
     const companionExists = (content && content.companions || []).some(function (c) { return c.companionId === companionId; });
     if (!companionExists) return jsonError(400, "That companion isn't on this trip.");
   }
@@ -1007,8 +1325,23 @@ async function handleTripGrantsUpsert(request, env, user) {
   // Upsert: replace any existing grant for this account, or add a new one.
   indexEntry.grants = (indexEntry.grants || []).filter(function (g) { return g.accountId !== targetAccount.id; });
   indexEntry.grants.push({ accountId: targetAccount.id, role: role, companionId: role === "admin" ? "" : companionId });
-
   await saveTripIndex(env, index);
+
+  // Sharing a trip AS a specific companion (User/Viewer) is also how that
+  // companion's account link gets set -- see the big COMPANIONS & AVATARS
+  // comment near AVATAR_COLOR_TOKENS. assignCompanionAccountId() takes
+  // care of clearing this account off any OTHER companion on this trip
+  // it might already be linked to, so the two can never both claim it at
+  // once. This is a second, separate KV write (the grant itself lives in
+  // the index, the link lives in the trip's own content) -- if it fails
+  // partway through, the grant still exists and the avatar simply falls
+  // back to the ordinary "not linked yet" smiley until this is retried
+  // (e.g. by sharing again), rather than the whole share failing.
+  if (content && (role === "user" || role === "viewer")) {
+    const linkedContent = assignCompanionAccountId(content, companionId, targetAccount.id);
+    await saveTripContent(env, tripId, linkedContent);
+  }
+
   return new Response(JSON.stringify({ status: "ok", grants: resolveGrants(indexEntry, usersDoc) }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -1029,12 +1362,88 @@ async function handleTripGrantsRevoke(request, env, user) {
   const index = await loadTripIndex(env);
   const indexEntry = index.trips.find(function (t) { return t.tripId === tripId; });
   if (!indexEntry) return jsonError(404, "That trip no longer exists.");
-  if (!(user.isUberUser || indexEntry.ownerId === user.id)) {
-    return jsonError(403, "Only this trip's owner can decide who has access to it.");
+  const perm = permissionForTrip(indexEntry, user);
+  if (!perm || (perm.role !== "superuser" && perm.role !== "admin")) {
+    return jsonError(403, "Only this trip's owner or an Admin can change who has access to it.");
+  }
+  if (perm.role === "admin") {
+    // An Admin can revoke a User/Viewer they (or the owner) shared with,
+    // but can't remove another Admin's access -- symmetric with not
+    // being able to GRANT Admin access, above. Revoking a grant that
+    // doesn't exist is harmless either way (the filter below is a no-op),
+    // so this only needs to check the case that actually matters.
+    const targetGrant = (indexEntry.grants || []).find(function (g) { return g.accountId === accountId; });
+    if (targetGrant && targetGrant.role === "admin") {
+      return jsonError(403, "Only this trip's owner can remove another Admin's access.");
+    }
   }
 
   indexEntry.grants = (indexEntry.grants || []).filter(function (g) { return g.accountId !== accountId; });
   await saveTripIndex(env, index);
+  // Deliberately does NOT clear the revoked account's companion.accountId
+  // link -- see the big COMPANIONS & AVATARS comment. Revoking access
+  // just means this account can no longer see/edit the trip; it says
+  // nothing about whether the person is still a genuine companion on
+  // it, so their avatar keeps showing correctly for everyone else who
+  // can still see this trip. Use the dedicated "unlink" action
+  // (handleCompanionLink() below, accountId: null) if the link itself
+  // was wrong and needs undoing too.
+  return new Response(JSON.stringify({ status: "ok" }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * Standalone action for linking (or, with an empty `username`, unlinking)
+ * a companion to an account WITHOUT necessarily granting that account any
+ * access to the trip -- e.g. giving an already-Admin account (who has
+ * full access some other way, or doesn't need edit access to this trip
+ * at all) their own avatar as a companion, or fixing a companion that got
+ * linked to the wrong account by handleTripGrantsUpsert() above. Same
+ * permission bar as sharing itself (Superuser or Admin) -- linking alone
+ * grants no new access, but it's still identity data about a real
+ * account, not something a scoped role should be able to touch.
+ *
+ * Takes a `username` to look up, exactly like /api/trip-grants above,
+ * rather than a raw accountId -- so this endpoint never needs the full
+ * account list handed to the page just so an Admin (who, unlike the site
+ * owner, can't open "Manage accounts") has something to pick from.
+ */
+async function handleCompanionLink(request, env, user) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (err) {
+    return jsonError(400, "Request body was not valid JSON.");
+  }
+  const tripId = body.tripId;
+  const companionId = body.companionId;
+  const username = (body.username || "").trim(); // Empty -> unlink.
+  if (!tripId || !companionId) return jsonError(400, "Missing trip or companion.");
+
+  const index = await loadTripIndex(env);
+  const indexEntry = index.trips.find(function (t) { return t.tripId === tripId; });
+  if (!indexEntry) return jsonError(404, "That trip no longer exists.");
+  const perm = permissionForTrip(indexEntry, user);
+  if (!perm || (perm.role !== "superuser" && perm.role !== "admin")) {
+    return jsonError(403, "Only this trip's owner or an Admin can link a companion to an account.");
+  }
+
+  const content = await loadTripContent(env, tripId);
+  const companion = (content && content.companions || []).find(function (c) { return c.companionId === companionId; });
+  if (!companion) return jsonError(404, "That companion isn't on this trip.");
+
+  let accountId = null;
+  if (username) {
+    const usersDoc = await loadUsers(env);
+    const account = usersDoc.users.find(function (u) { return u.username.toLowerCase() === username.toLowerCase(); });
+    if (!account) return jsonError(404, "No account with that username exists yet — ask the site owner to create one first.");
+    accountId = account.id;
+  }
+
+  const linkedContent = assignCompanionAccountId(content, companionId, accountId);
+  await saveTripContent(env, tripId, linkedContent);
   return new Response(JSON.stringify({ status: "ok" }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -1474,7 +1883,10 @@ async function handleLogin(request, env) {
   // there's no "undisclosed uber-user" leak to worry about. The frontend
   // needs this one bit to decide whether to show the "Manage accounts"
   // button (see applyAuthUI() in public/WayPoint/index.html).
-  return new Response(JSON.stringify({ status: "ok", id: user.id, username: user.username, isUberUser: !!user.isUberUser }), {
+  // `avatar` is always resolved (never null -- see resolveAccountAvatar())
+  // so the topbar has something real to draw the moment you log in, even
+  // before you've ever opened the avatar picker.
+  return new Response(JSON.stringify({ status: "ok", id: user.id, username: user.username, isUberUser: !!user.isUberUser, avatar: resolveAccountAvatar(user) }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Set-Cookie": buildSessionCookieHeader(token) },
   });
@@ -1502,7 +1914,7 @@ async function handleWhoami(request, env) {
     const usersDoc = await loadUsers(env);
     return new Response(JSON.stringify({ loggedIn: false, setupNeeded: usersDoc.users.length === 0 }), { status: 200, headers: { "Content-Type": "application/json" } });
   }
-  return new Response(JSON.stringify({ loggedIn: true, id: user.id, username: user.username, isUberUser: !!user.isUberUser }), {
+  return new Response(JSON.stringify({ loggedIn: true, id: user.id, username: user.username, isUberUser: !!user.isUberUser, avatar: resolveAccountAvatar(user) }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
@@ -1549,9 +1961,39 @@ async function handleSetup(request, env) {
   await saveUsers(env, usersDoc);
 
   const token = await signSession({ uid: user.id, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }, env);
-  return new Response(JSON.stringify({ status: "ok", id: user.id, username: user.username, isUberUser: true }), {
+  return new Response(JSON.stringify({ status: "ok", id: user.id, username: user.username, isUberUser: true, avatar: resolveAccountAvatar(user) }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Set-Cookie": buildSessionCookieHeader(token) },
+  });
+}
+
+/**
+ * Self-service avatar picker's save action -- see the big COMPANIONS &
+ * AVATARS comment near AVATAR_COLOR_TOKENS. `user` always comes from the
+ * current session (getCurrentUser(), via fetch()'s auth check above),
+ * never from anything in the request body, so there is no way for this
+ * endpoint to be used to change anyone ELSE's avatar -- every account can
+ * only ever set its own.
+ */
+async function handleAccountAvatarUpdate(request, env, user) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (err) {
+    return jsonError(400, "Request body was not valid JSON.");
+  }
+  if (!isValidAvatarColor(body.color)) return jsonError(400, "Pick one of the available colours.");
+  if (!isValidAvatarAnimal(body.animal)) return jsonError(400, "Pick one of the available animals.");
+
+  const usersDoc = await loadUsers(env);
+  const existing = usersDoc.users.find(function (u) { return u.id === user.id; });
+  if (!existing) return jsonError(404, "That account no longer exists.");
+  existing.avatar = { color: body.color, animal: body.animal };
+  await saveUsers(env, usersDoc);
+
+  return new Response(JSON.stringify({ status: "ok", avatar: resolveAccountAvatar(existing) }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
   });
 }
 
