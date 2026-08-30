@@ -22,6 +22,17 @@ one night, and a single unambiguous active destination is selected as the
 area automatically. The normal forms remain the source of truth, so the
 Timeline does not introduce a duplicate data model.
 
+New **Activities** use a category dropdown: Dining & drinks, Tour /
+experience, Show / performance, Culture & sights, Outdoor / active,
+Shopping, Wellness, Nightlife, or Other. New **Accommodation** records
+use a type dropdown: Hotel / hostel, Apartment / holiday rental,
+Guesthouse / B&B, Resort, Camping / glamping, Friends / family, Cruise
+ship, or Other. Both default to Other so older records and unusual plans
+remain valid. Their forms use progressive disclosure: Essentials are
+shown first; Booking and contact, Cost and receipt, and People and notes
+remain available in labelled expandable sections and reopen automatically
+when editing a record that already has data there.
+
 ## How it's put together
 
 - **`public/WayPoint/index.html`** — the entire app: markup, styles, and

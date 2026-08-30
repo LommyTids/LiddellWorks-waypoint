@@ -265,6 +265,17 @@ textarea { resize: vertical; min-height: 60px; }
 .field { margin-bottom: 14px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 3px; }
+.form-section + .form-section { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 20px; }
+.form-section-head { margin-bottom: 14px; }
+.form-section-head h3 { font-size: 14px; }
+.form-section-head p { margin-top: 2px; font-size: 11.5px; color: var(--ink-faint); }
+.form-details { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); margin-top: 12px; }
+.form-details summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; padding: 10px 12px; color: var(--ink); font-size: 13px; font-weight: 600; }
+.form-details summary::-webkit-details-marker { display: none; }
+.form-details summary::after { content: '+'; color: var(--ink-faint); font-size: 16px; font-weight: 400; }
+.form-details[open] summary::after { content: '−'; }
+.form-details-body { padding: 2px 12px 2px; }
+.form-details-body .field:last-child { margin-bottom: 12px; }
 .checkbox-field { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
 .checkbox-field input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
 /* The Companions "tag-picker" field (see fieldHtml()'s 'tag-picker' case)
@@ -1453,6 +1464,13 @@ function fieldsWithTagPickerLock(fields, locked) {
   return (typeof fields === 'function') ? function (values) { return lockOne(fields(values)); } : lockOne(fields);
 }
 
+function sectionsWithTagPickerLock(sections, locked) {
+  if (!locked) return sections;
+  return sections.map(function (section) {
+    return Object.assign({}, section, { fields: fieldsWithTagPickerLock(section.fields, true) });
+  });
+}
+
 function suggestInputHtml(field, val, req, suggestType, extraAttrs, placeholderFallback) {
   var placeholder = field.placeholder || placeholderFallback || '';
   return '<div class="suggest-input-wrap">' +
@@ -1686,6 +1704,37 @@ function fieldsHtml(fields, initial, trip) {
   return out;
 }
 
+function sectionHasSavedValues(section, initial) {
+  return section.fields.some(function (field) {
+    var value = initial[field.key];
+    return Array.isArray(value) ? value.length > 0 : value !== undefined && value !== null && value !== '' && value !== false;
+  });
+}
+
+// Activity and accommodation forms have enough optional booking/cost data
+// that one undivided field list feels like work before someone has even
+// recorded the core plan. Essentials stay visible; optional sections are
+// progressive disclosure, and reopen automatically when editing data they
+// already contain so nothing saved appears to have vanished.
+function formSectionsHtml(sections, initial, trip) {
+  return sections.map(function (section) {
+    var heading = '<div class="form-section-head"><h3>' + esc(section.title) + '</h3>' +
+      (section.hint ? '<p>' + esc(section.hint) + '</p>' : '') + '</div>';
+    var fields = fieldsHtml(section.fields, initial, trip);
+    if (section.collapsible) {
+      var open = section.open || sectionHasSavedValues(section, initial);
+      return '<details class="form-details"' + (open ? ' open' : '') + '><summary>' + esc(section.title) + '</summary>' +
+        '<div class="form-details-body">' + (section.hint ? '<p class="field-hint" style="margin:0 0 12px">' + esc(section.hint) + '</p>' : '') + fields + '</div></details>';
+    }
+    return '<section class="form-section">' + heading + fields + '</section>';
+  }).join('');
+}
+
+function formFieldsHtml(opts, values) {
+  if (opts.sections) return formSectionsHtml(opts.sections, values, opts.trip || {});
+  return fieldsHtml(resolveFields(opts, values), values, opts.trip || {});
+}
+
 // opts.fields is usually a plain array, but can instead be a function
 // of the form's current values — that's how the transport form swaps
 // in flight-only or car-only fields as soon as "Mode" changes. This
@@ -1705,7 +1754,7 @@ function currentFormValues(formEl) {
 }
 
 function openForm(opts) {
-  // opts: { title, fields, initial, trip, submitLabel, onSubmit,
+  // opts: { title, fields|sections, initial, trip, submitLabel, onSubmit,
   //         reactiveKey } — reactiveKey names a field (e.g. "mode"), or
   // an array of them, that when changed should recompute a
   // function-valued `fields` and re-render just the field list,
@@ -1719,7 +1768,7 @@ function openForm(opts) {
         '<div class="modal-head"><h2>' + esc(opts.title) + '</h2>' +
           '<button class="btn btn-icon btn-ghost" data-action="close-modal">' + icon('close') + '</button></div>' +
         '<form id="entity-form">' +
-          '<div class="modal-body" id="modal-fields">' + fieldsHtml(resolveFields(opts, initial), initial, opts.trip || {}) + '</div>' +
+          '<div class="modal-body" id="modal-fields">' + formFieldsHtml(opts, initial) + '</div>' +
           '<div class="modal-foot">' +
             '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
             '<button type="submit" class="btn btn-primary">' + esc(opts.submitLabel || 'Save') + '</button>' +
@@ -1782,22 +1831,33 @@ var DESTINATION_FIELDS = [
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
-var ACTIVITY_FIELDS = [
-  { key: 'title', label: 'Activity', type: 'text', required: true, wide: true },
-  { key: 'destinationId', label: 'Area', type: 'select-destination' },
-  { key: 'date', label: 'Date', type: 'date', required: true },
-  { key: 'startTime', label: 'Start time', type: 'time' },
-  { key: 'endTime', label: 'End time', type: 'time' },
-  { key: 'location', label: 'Venue', type: 'text' },
-  { key: 'address', label: 'Address', type: 'text', wide: true },
-  { key: 'bookingRef', label: 'Booking / confirmation #', type: 'text' },
-  { key: 'contactId', label: 'Contact', type: 'select-contact' },
-  { key: 'costAmount', label: 'Cost amount', type: 'number' },
-  { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
-  { key: 'costRate', label: 'Exchange rate override', type: 'number', hint: 'Optional — home-currency value of 1 unit of this currency. Leave blank to use the trip\'s fixed rate.', wide: true },
-  { key: 'receiptRef', label: 'Receipt reference', type: 'text', placeholder: 'e.g. email confirmation, photo filename', wide: true },
-  { key: 'companions', label: 'Companions', type: 'tag-picker', wide: true },
-  { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+var ACTIVITY_CATEGORIES = ['Other', 'Dining & drinks', 'Tour / experience', 'Show / performance', 'Culture & sights', 'Outdoor / active', 'Shopping', 'Wellness', 'Nightlife'];
+
+var ACTIVITY_FORM_SECTIONS = [
+  { title: 'Essentials', hint: 'Start with what it is, where it is, and when it happens.', fields: [
+    { key: 'title', label: 'Activity', type: 'text', required: true, wide: true },
+    { key: 'category', label: 'Category', type: 'select', options: ACTIVITY_CATEGORIES },
+    { key: 'destinationId', label: 'Area', type: 'select-destination' },
+    { key: 'date', label: 'Date', type: 'date', required: true, wide: true },
+    { key: 'startTime', label: 'Start time', type: 'time' },
+    { key: 'endTime', label: 'End time', type: 'time' },
+    { key: 'location', label: 'Venue', type: 'text', wide: true },
+    { key: 'address', label: 'Address', type: 'text', wide: true }
+  ] },
+  { title: 'Booking and contact', hint: 'Optional confirmation details and the person or provider to contact.', collapsible: true, fields: [
+    { key: 'bookingRef', label: 'Booking / confirmation #', type: 'text' },
+    { key: 'contactId', label: 'Contact', type: 'select-contact' }
+  ] },
+  { title: 'Cost and receipt', hint: 'Optional — activity costs also appear automatically in Expenses.', collapsible: true, fields: [
+    { key: 'costAmount', label: 'Cost amount', type: 'number' },
+    { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
+    { key: 'costRate', label: 'Exchange rate override', type: 'number', hint: 'Home-currency value of 1 unit of this currency. Leave blank to use the trip\'s fixed rate.', wide: true },
+    { key: 'receiptRef', label: 'Receipt reference', type: 'text', placeholder: 'e.g. email confirmation, photo filename', wide: true }
+  ] },
+  { title: 'People and notes', collapsible: true, fields: [
+    { key: 'companions', label: 'Companions', type: 'tag-picker', wide: true },
+    { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+  ] }
 ];
 
 // Transport fields depend on the chosen mode: a flight needs a flight
@@ -1901,22 +1961,33 @@ function transportFieldsForMode(values) {
     ]);
 }
 
-var ACCOMMODATION_FIELDS = [
-  { key: 'name', label: 'Property', type: 'text', required: true, wide: true },
-  { key: 'destinationId', label: 'Area', type: 'select-destination' },
-  { key: 'address', label: 'Address', type: 'text' },
-  { key: 'checkInDate', label: 'Check-in date', type: 'date', required: true },
-  { key: 'checkInTime', label: 'Check-in time', type: 'time' },
-  { key: 'checkOutDate', label: 'Check-out date', type: 'date', required: true },
-  { key: 'checkOutTime', label: 'Check-out time', type: 'time' },
-  { key: 'bookingRef', label: 'Booking reference', type: 'text' },
-  { key: 'contactId', label: 'Contact', type: 'select-contact' },
-  { key: 'costAmount', label: 'Total cost amount', type: 'number' },
-  { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
-  { key: 'costRate', label: 'Exchange rate override', type: 'number', wide: true },
-  { key: 'receiptRef', label: 'Receipt reference', type: 'text', wide: true },
-  { key: 'companions', label: 'Companions', type: 'tag-picker', wide: true },
-  { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+var ACCOMMODATION_TYPES = ['Other', 'Hotel / hostel', 'Apartment / holiday rental', 'Guesthouse / B&B', 'Resort', 'Camping / glamping', 'Friends / family', 'Cruise ship'];
+
+var ACCOMMODATION_FORM_SECTIONS = [
+  { title: 'Essentials', hint: 'Record the property, its type, and the stay dates first.', fields: [
+    { key: 'name', label: 'Property', type: 'text', required: true, wide: true },
+    { key: 'type', label: 'Accommodation type', type: 'select', options: ACCOMMODATION_TYPES },
+    { key: 'destinationId', label: 'Area', type: 'select-destination' },
+    { key: 'address', label: 'Address', type: 'text', wide: true },
+    { key: 'checkInDate', label: 'Check-in date', type: 'date', required: true },
+    { key: 'checkInTime', label: 'Check-in time', type: 'time' },
+    { key: 'checkOutDate', label: 'Check-out date', type: 'date', required: true },
+    { key: 'checkOutTime', label: 'Check-out time', type: 'time' }
+  ] },
+  { title: 'Booking and contact', hint: 'Optional confirmation details and a property or host contact.', collapsible: true, fields: [
+    { key: 'bookingRef', label: 'Booking reference', type: 'text' },
+    { key: 'contactId', label: 'Contact', type: 'select-contact' }
+  ] },
+  { title: 'Cost and receipt', hint: 'Optional — accommodation costs also appear automatically in Expenses.', collapsible: true, fields: [
+    { key: 'costAmount', label: 'Total cost amount', type: 'number' },
+    { key: 'costCurrency', label: 'Cost currency', type: 'currency' },
+    { key: 'costRate', label: 'Exchange rate override', type: 'number', wide: true },
+    { key: 'receiptRef', label: 'Receipt reference', type: 'text', wide: true }
+  ] },
+  { title: 'People and notes', collapsible: true, fields: [
+    { key: 'companions', label: 'Companions', type: 'tag-picker', wide: true },
+    { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
+  ] }
 ];
 
 var CONTACT_FIELDS = [
@@ -2164,15 +2235,16 @@ function openDestinationForm(trip, existing) {
 }
 
 function openActivityForm(trip, existing, seed) {
+  var initial = existing ? Object.assign({ category: 'Other' }, existing) : Object.assign({ category: 'Other' }, seed || {});
   openForm({
     title: existing ? 'Edit activity' : 'Add activity',
-    fields: fieldsWithTagPickerLock(ACTIVITY_FIELDS, !!existing && !canFullyEditTrip(trip)),
-    initial: existing || seed || {}, trip: trip, submitLabel: 'Save',
+    sections: sectionsWithTagPickerLock(ACTIVITY_FORM_SECTIONS, !!existing && !canFullyEditTrip(trip)),
+    initial: initial, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
         var rec = {
-          activityId: existing ? existing.activityId : newId(), title: v.title, destinationId: v.destinationId || '',
+          activityId: existing ? existing.activityId : newId(), title: v.title, category: v.category || 'Other', destinationId: v.destinationId || '',
           date: v.date, startTime: v.startTime || '', endTime: v.endTime || '',
           location: v.location || '', address: v.address || '', bookingRef: v.bookingRef || '',
           contactId: v.contactId || '', costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(),
@@ -2832,16 +2904,17 @@ function openAccommodationForm(trip, existing, seed) {
   var initial = existing ? Object.assign({}, existing, {
     checkInDate: dateOnly(existing.checkIn), checkInTime: timeOnly(existing.checkIn),
     checkOutDate: dateOnly(existing.checkOut), checkOutTime: timeOnly(existing.checkOut)
-  }) : (seed || {});
+  }) : Object.assign({ type: 'Other' }, seed || {});
+  if (existing && !initial.type) initial.type = 'Other';
   openForm({
     title: existing ? 'Edit accommodation' : 'Add accommodation',
-    fields: fieldsWithTagPickerLock(ACCOMMODATION_FIELDS, !!existing && !canFullyEditTrip(trip)),
+    sections: sectionsWithTagPickerLock(ACCOMMODATION_FORM_SECTIONS, !!existing && !canFullyEditTrip(trip)),
     initial: initial, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
         var rec = {
-          accommodationId: existing ? existing.accommodationId : newId(), name: v.name, destinationId: v.destinationId || '', address: v.address || '',
+          accommodationId: existing ? existing.accommodationId : newId(), name: v.name, type: v.type || 'Other', destinationId: v.destinationId || '', address: v.address || '',
           checkIn: combineDateTime(v.checkInDate, v.checkInTime), checkOut: combineDateTime(v.checkOutDate, v.checkOutTime),
           bookingRef: v.bookingRef || '', contactId: v.contactId || '',
           costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(), costRate: v.costRate || '',
@@ -3748,6 +3821,7 @@ function renderActivitiesTab(trip) {
     var dest = a.destinationId ? byId(trip.destinations, a.destinationId, 'destinationId') : null;
     var contact = a.contactId ? byId(trip.contacts, a.contactId, 'contactId') : null;
     var tags = [];
+    tags.push('<span class="tag">' + esc(a.category || 'Other') + '</span>');
     if (a.location) tags.push('<span class="tag">' + esc(a.location) + '</span>');
     if (dest) tags.push('<span class="tag">' + icon('pin') + esc(dest.name) + '</span>');
     if (a.bookingRef) tags.push('<span class="tag">' + icon('ticket') + esc(a.bookingRef) + copyBtn(a.bookingRef, 'booking ref') + '</span>');
@@ -3801,6 +3875,7 @@ function renderAccommodationTab(trip) {
   var rows = sorted.map(function (ac) {
     var contact = ac.contactId ? byId(trip.contacts, ac.contactId, 'contactId') : null;
     var tags = [];
+    tags.push('<span class="tag">' + esc(ac.type || 'Other') + '</span>');
     if (ac.bookingRef) tags.push('<span class="tag">' + icon('ticket') + esc(ac.bookingRef) + copyBtn(ac.bookingRef, 'booking ref') + '</span>');
     if (contact) tags.push('<span class="tag">' + icon('user') + esc(contact.name) + '</span>');
     if (ac.costAmount) tags.push(costTag(trip, ac.costAmount, ac.costCurrency, ac.costRate));
@@ -4686,7 +4761,7 @@ document.addEventListener('change', function (e) {
   if (!form || keys.indexOf(e.target.name) === -1) return;
   var values = currentFormValues(form);
   var container = document.getElementById('modal-fields');
-  if (container) container.innerHTML = fieldsHtml(resolveFields(cfg, values), values, cfg.trip || {});
+  if (container) container.innerHTML = formFieldsHtml(cfg, values);
 });
 
 document.addEventListener('submit', function (e) {
