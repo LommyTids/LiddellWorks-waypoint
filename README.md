@@ -5,6 +5,23 @@ app (`public/WayPoint/index.html`) plus a small Cloudflare Worker
 (`src/worker.js`) that saves your trip data to Cloudflare KV so it's still
 there the next time you visit.
 
+## Trip navigation and timeline
+
+Each trip is organised around four jobs: **View** (Timeline and Map),
+**Plan** (Destinations, Transport, Accommodation and Activities),
+**People** (Companions and Contacts), and **Manage** (Expenses and
+Settings). The groups remain fully visible and wrap on narrow screens;
+none are hidden behind an overflow menu.
+
+The Timeline is the primary itinerary editing view. Every existing
+activity, transport leg and accommodation event can be edited there
+directly, subject to the same per-trip permissions as its Plan-tab row.
+On each day a full-scope editor can add an **Activity**, **Stay**, or
+**Travel** entry: the date is prefilled from that day, a Stay defaults to
+one night, and a single unambiguous active destination is selected as the
+area automatically. The normal forms remain the source of truth, so the
+Timeline does not introduce a duplicate data model.
+
 ## How it's put together
 
 - **`public/WayPoint/index.html`** — the entire app: markup, styles, and

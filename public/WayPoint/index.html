@@ -345,10 +345,15 @@ textarea { resize: vertical; min-height: 60px; }
 .trip-meta b { font-family: var(--font-mono); color: var(--ink); }
 .warn-link { color: var(--danger); cursor: pointer; background: none; border: none; font-size: 13px; padding: 0; text-decoration: underline; }
 
+/* Navigation is deliberately grouped by the job someone is doing: View
+   (Timeline/Map), Plan, People and Manage. The groups wrap rather than
+   disappear on small screens, so the structure makes the many trip views
+   easier to scan without reintroducing the old hidden-tab problem. */
+.nav-group-label { margin-top: 18px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--ink-faint); }
 /* The two "big picture" views (Timeline, Map) — larger and more prominent
    than the regular data-entry tabs below, since they're the main thing
    most people open a trip to look at. */
-.hero-row { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+.hero-row { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
 .hero-btn {
   display: inline-flex; align-items: center; gap: 10px;
   padding: 14px 22px; border-radius: var(--radius); border: 1px solid var(--line);
@@ -361,16 +366,13 @@ textarea { resize: vertical; min-height: 60px; }
 .hero-btn.active { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 .hero-btn.active .icon { color: var(--accent); }
 
-/* Used to be `overflow-x: auto` -- fine on a mouse (you can see/use the
-   scrollbar), but on a touch device with no visible scrollbar it just
-   made the tabs past the right edge silently disappear with no hint they
-   existed. At iPad-mini width and narrower, that was Companions,
-   Expenses and Settings -- so the Companions tab wasn't secretly broken,
-   it just couldn't be scrolled to. `flex-wrap: wrap` fixes this properly:
-   the bar grows to a second (or third, on a phone) row instead of ever
-   hiding a tab, so every tab is always visible and clickable regardless
-   of screen width. */
-.tabbar { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--line); margin: 20px 0 22px; overflow-x: visible; }
+/* Each group owns its own short tab row. This keeps related controls
+   together on wide screens and still lets every group wrap in full on a
+   phone, rather than hiding tabs in a horizontal scroll strip. */
+.tabbar { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 20px 0 22px; overflow-x: visible; }
+.tab-group { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tab-group-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--ink-faint); }
+.tab-group-tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--line); }
 .tab-btn {
   padding: 9px 14px; background: none; border: none; border-bottom: 2px solid transparent;
   color: var(--ink-soft); font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
@@ -430,6 +432,10 @@ textarea { resize: vertical; min-height: 60px; }
 .day-heading h3 { font-size: 15.5px; }
 .day-areas { display: flex; gap: 6px; flex-wrap: wrap; }
 .area-chip { font-size: 11px; background: var(--teal-soft); color: var(--teal); border-radius: 999px; padding: 2px 9px; display: inline-flex; align-items: center; gap: 4px; }
+.day-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-left: auto; }
+.timeline-add-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-soft); font-size: 11.5px; cursor: pointer; }
+.timeline-add-btn:hover { color: var(--ink); border-color: var(--ink-faint); }
+.timeline-add-btn .icon { width: 12px; height: 12px; }
 .day-events { display: flex; flex-direction: column; gap: 8px; }
 .event-row { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
 .event-time { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-soft); width: 44px; flex-shrink: 0; padding-top: 1px; }
@@ -2157,11 +2163,11 @@ function openDestinationForm(trip, existing) {
   });
 }
 
-function openActivityForm(trip, existing) {
+function openActivityForm(trip, existing, seed) {
   openForm({
     title: existing ? 'Edit activity' : 'Add activity',
     fields: fieldsWithTagPickerLock(ACTIVITY_FIELDS, !!existing && !canFullyEditTrip(trip)),
-    initial: existing || {}, trip: trip, submitLabel: 'Save',
+    initial: existing || seed || {}, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
@@ -2203,7 +2209,7 @@ function resolveLegCoords(text, lookupCoords, existing, textKey, latKey, lngKey)
   return null;
 }
 
-function openTransportForm(trip, existing) {
+function openTransportForm(trip, existing, seed) {
   // A brand-new leg needs paymentType set explicitly to 'Free' here,
   // not left undefined — a <select> with nothing marked `selected`
   // just shows its first listed option ("Cash") regardless of what
@@ -2214,7 +2220,7 @@ function openTransportForm(trip, existing) {
   // fields actually shown in agreement from the very first render.
   var initial = existing ? Object.assign({}, existing, splitDateTime(existing.departDateTime), {
     arriveDate: dateOnly(existing.arriveDateTime), arriveTime: timeOnly(existing.arriveDateTime)
-  }) : { mode: 'Flight', paymentType: 'Free' };
+  }) : Object.assign({ mode: 'Flight', paymentType: 'Free' }, seed || {});
   if (existing) { initial.departDate = dateOnly(existing.departDateTime); initial.departTime = timeOnly(existing.departDateTime); }
   if (existing) {
     // Older saved legs predate "Paid with" — infer a starting value
@@ -2822,11 +2828,11 @@ document.addEventListener('keydown', function (e) {
 // can never leak into a new one.
 var lastFlightLookupCoords = { from: null, to: null };
 
-function openAccommodationForm(trip, existing) {
+function openAccommodationForm(trip, existing, seed) {
   var initial = existing ? Object.assign({}, existing, {
     checkInDate: dateOnly(existing.checkIn), checkInTime: timeOnly(existing.checkIn),
     checkOutDate: dateOnly(existing.checkOut), checkOutTime: timeOnly(existing.checkOut)
-  }) : {};
+  }) : (seed || {});
   openForm({
     title: existing ? 'Edit accommodation' : 'Add accommodation',
     fields: fieldsWithTagPickerLock(ACCOMMODATION_FIELDS, !!existing && !canFullyEditTrip(trip)),
@@ -3547,47 +3553,46 @@ function renderDashboard() {
 /* ---------- 13. Render: Trip view shell (header + tabs) -------------- */
 
 // The two "big picture" views of a trip — see the day-by-day agenda, or
-// see it on a map — are surfaced as large HERO_TABS buttons above the
-// regular tab bar rather than being just another tab among the data-entry
-// ones below, since they're what most people actually want to look at
-// most of the time. Everything else (adding/editing the underlying data)
-// lives in TABS, in the order requested: Destinations, Transport,
-// Accommodation, Activities, then Contacts and Companions, with Expenses and Settings
-// kept at the end as before. Both arrays share the exact same "switch-tab"
-// data-action/click handler (see the click listener further down) — a
-// hero button and a regular tab button are just two different looks for
-// the same underlying currentTab switch.
+// see it on a map — are surfaced as large hero buttons. The data-entry
+// views are grouped by purpose, so someone planning a trip sees the
+// itinerary-building tools together and doesn't have to parse one long,
+// undifferentiated tab row. Every button still uses the same simple
+// "switch-tab" click handler below.
 var HERO_TABS = [
   { key: 'timeline', label: 'Timeline', icon: 'calendar' },
   { key: 'map', label: 'Map', icon: 'map' }
 ];
 
-var TABS = [
-  { key: 'destinations', label: 'Destinations', icon: 'pin' },
-  { key: 'transport', label: 'Transport', icon: 'plane' },
-  { key: 'accommodation', label: 'Accommodation', icon: 'bed' },
-  { key: 'activities', label: 'Activities', icon: 'ticket' },
-  { key: 'contacts', label: 'Contacts', icon: 'users' },
-  { key: 'companions', label: 'Companions', icon: 'companion' },
-  // Expenses is left out for a scoped "user"/"viewer" grant below (see
-  // tabsForTrip()) — the server strips expenses out of their trip data
-  // entirely (see buildResponseState() in src/worker.js), since there's
-  // no per-companion split for those and they often show what OTHER
-  // people spent, so showing an always-empty Expenses tab to them would
-  // just be misleading.
-  { key: 'expenses', label: 'Expenses', icon: 'wallet' },
-  { key: 'settings', label: 'Settings', icon: 'gear' }
+var TAB_GROUPS = [
+  { label: 'Plan', tabs: [
+    { key: 'destinations', label: 'Destinations', icon: 'pin' },
+    { key: 'transport', label: 'Transport', icon: 'plane' },
+    { key: 'accommodation', label: 'Accommodation', icon: 'bed' },
+    { key: 'activities', label: 'Activities', icon: 'ticket' }
+  ] },
+  { label: 'People', tabs: [
+    { key: 'companions', label: 'Companions', icon: 'companion' },
+    { key: 'contacts', label: 'Contacts', icon: 'users' }
+  ] },
+  { label: 'Manage', tabs: [
+    // Expenses is hidden for a scoped "user"/"viewer" grant because the
+    // server strips it from their trip data; an empty financial tab would
+    // be misleading rather than useful.
+    { key: 'expenses', label: 'Expenses', icon: 'wallet' },
+    { key: 'settings', label: 'Settings', icon: 'gear' }
+  ] }
 ];
 
-// The tab list to actually show for THIS trip — everything in TABS for
-// a full-scope role, minus Expenses for a scoped "user"/"viewer" grant.
-// Settings stays visible either way: it still holds useful read-only
-// info (currency rates) for a scoped account, even though the actual
-// rate-editing form and "Share this trip" panel on it are themselves
-// gated to full-scope roles (see renderSettingsTab()).
-function tabsForTrip(trip) {
-  if (canFullyEditTrip(trip)) return TABS;
-  return TABS.filter(function (t) { return t.key !== 'expenses'; });
+// The groups to actually show for THIS trip — full scope gets everything;
+// scoped roles lose only Expenses. Settings stays visible because it still
+// contains useful read-only trip information for them.
+function tabGroupsForTrip(trip) {
+  return TAB_GROUPS.map(function (group) {
+    return {
+      label: group.label,
+      tabs: group.tabs.filter(function (tab) { return canFullyEditTrip(trip) || tab.key !== 'expenses'; })
+    };
+  }).filter(function (group) { return group.tabs.length > 0; });
 }
 
 function renderTripView() {
@@ -3604,9 +3609,12 @@ function renderTripView() {
     return '<button class="hero-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '">' +
       icon(t.icon) + t.label + '</button>';
   }).join('');
-  var tabsHtml = tabsForTrip(trip).map(function (t) {
-    return '<button class="tab-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '">' +
-      icon(t.icon) + t.label + '</button>';
+  var tabsHtml = tabGroupsForTrip(trip).map(function (group) {
+    var buttons = group.tabs.map(function (t) {
+      return '<button class="tab-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '">' +
+        icon(t.icon) + t.label + '</button>';
+    }).join('');
+    return '<div class="tab-group"><div class="tab-group-label">' + esc(group.label) + '</div><div class="tab-group-tabs">' + buttons + '</div></div>';
   }).join('');
   var panel;
   switch (currentTab) {
@@ -3642,7 +3650,7 @@ function renderTripView() {
         headerActions +
       '</div>' +
     '</div>' +
-    '<div class="hero-row">' + heroHtml + '</div>' +
+      '<div class="nav-group-label">View</div><div class="hero-row">' + heroHtml + '</div>' +
     '<div class="tabbar">' + tabsHtml + '</div>' +
     '<div>' + panel + '</div>'
   );
@@ -4343,9 +4351,31 @@ function eventRowHtml(trip, ev) {
   // tags everywhere else in the app.
   var eventCompanionIds = ev.data && ev.data.companions;
   var avatarsHtml = (eventCompanionIds && eventCompanionIds.length) ? '<div class="item-tags">' + companionTags(trip, eventCompanionIds) + '</div>' : '';
+  // A timeline event is the same underlying itinerary record as its
+  // corresponding Plan-tab row. Reusing rowActions keeps permissions
+  // identical: scoped users may edit only an item tagged to them, while
+  // deleting stays a full-scope action everywhere.
+  var section = ev.kind === 'activity' ? 'activity' : ((ev.kind === 'checkin' || ev.kind === 'checkout') ? 'accommodation' : 'transport');
+  var actionsHtml = rowActions(trip, section, ev.data);
   return '<div class="event-row"><span class="event-time">' + esc(ev.time) + '</span>' +
     '<span class="event-icon ' + kindClass + '">' + icon(iconName) + '</span>' +
-    '<div class="event-main"><div class="event-title">' + esc(title) + '</div>' + (sub ? '<div class="event-sub">' + esc(sub) + '</div>' : '') + avatarsHtml + '</div></div>';
+    '<div class="event-main"><div class="event-title">' + esc(title) + '</div>' + (sub ? '<div class="event-sub">' + esc(sub) + '</div>' : '') + avatarsHtml + '</div>' + actionsHtml + '</div>';
+}
+
+function timelineDaySeed(trip, day) {
+  var areas = areasForDay(trip, day);
+  // A single active area is the unambiguous useful default. On transfer
+  // days with multiple areas, leave the choice blank rather than guessing.
+  return areas.length === 1 ? { destinationId: areas[0].destinationId } : {};
+}
+
+function timelineDayActionsHtml(trip, day) {
+  if (!canFullyEditTrip(trip)) return '';
+  return '<div class="day-actions" aria-label="Add to ' + esc(formatDateHeading(day)) + '">' +
+    '<button class="timeline-add-btn" data-action="timeline-add-activity" data-day="' + esc(day) + '">' + icon('plus') + ' Activity</button>' +
+    '<button class="timeline-add-btn" data-action="timeline-add-accommodation" data-day="' + esc(day) + '">' + icon('plus') + ' Stay</button>' +
+    '<button class="timeline-add-btn" data-action="timeline-add-transport" data-day="' + esc(day) + '">' + icon('plus') + ' Travel</button>' +
+  '</div>';
 }
 
 function renderTimelineTab(trip) {
@@ -4374,7 +4404,7 @@ function renderTimelineTab(trip) {
           var off = a.timezone ? tzOffsetLabel(a.timezone) : '';
           return '<span class="area-chip">' + icon('pin') + esc(a.name) + (off ? ' · ' + esc(off) : '') + '</span>';
         }).join('') + '</div>' : '') +
-      '</div>' + eventsHtml + overnightHtml + '</div></div>';
+        timelineDayActionsHtml(trip, day) + '</div>' + eventsHtml + overnightHtml + '</div></div>';
   }).join('');
   return cards;
 }
@@ -4602,6 +4632,18 @@ document.addEventListener('click', function (e) {
   if (action === 'export-csv') { exportCsv(trip); return; }
 
   if (!trip) return;
+  if (action === 'timeline-add-activity') {
+    openActivityForm(trip, null, Object.assign({ date: el.dataset.day }, timelineDaySeed(trip, el.dataset.day)));
+    return;
+  }
+  if (action === 'timeline-add-accommodation') {
+    openAccommodationForm(trip, null, Object.assign({ checkInDate: el.dataset.day, checkOutDate: addDays(el.dataset.day, 1) }, timelineDaySeed(trip, el.dataset.day)));
+    return;
+  }
+  if (action === 'timeline-add-transport') {
+    openTransportForm(trip, null, Object.assign({ departDate: el.dataset.day, arriveDate: el.dataset.day }, timelineDaySeed(trip, el.dataset.day)));
+    return;
+  }
   if (action === 'new-destination') { openDestinationForm(trip); return; }
   if (action === 'edit-destination') { openDestinationForm(trip, byId(trip.destinations, el.dataset.id, 'destinationId')); return; }
   if (action === 'delete-destination') { deleteEntity(trip, 'destinations', el.dataset.id, 'destination'); return; }
