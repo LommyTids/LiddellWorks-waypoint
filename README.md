@@ -160,7 +160,10 @@ when editing a record that already has data there.
   and handing back the airline, airports, and scheduled local
   departure/arrival date+time — used by the "Look up" button next to
   Flight number on the transport form, needs the `AERODATABOX_API_KEY`
-  secret set up (step 5 below); and hands off every other request (the
+  secret set up (optional step 6 below); answers the authenticated
+  `/api/location-search` and `/api/location-boundary*` endpoints for the
+  shared location picker, keeping the `LOCATIONIQ_API_KEY` secret out of
+  the browser; and hands off every other request (the
   page itself, its CSS/JS) to Cloudflare's static file serving, with no
   auth check at all — see this file's own comment for why serving that
   shell openly is fine and in fact necessary.
@@ -485,13 +488,12 @@ you're now editing the `trip:<tripId>` key for that one trip, not a
 
 ## One-time setup in the Cloudflare dashboard
 
-**If you already completed all five steps below for an earlier version
+**If you already completed the earlier setup steps for a previous version
 of Waypoint, there's nothing new to do here** — this update reuses the
-same `waypoint-data` KV namespace and the same three secrets
-(`WAYPOINT_PASSWORD`, `WAYPOINT_SESSION_SECRET`, `AERODATABOX_API_KEY`).
-Just push the updated code (step 1's auto-deploy picks it up) and the
-storage migration above happens on its own. These steps are kept here
-for a fresh install.
+same `waypoint-data` KV namespace and existing auth secrets. Add the
+`LOCATIONIQ_API_KEY` secret in step 5 to enable address and place search;
+the flight-lookup secret remains optional in step 6. These steps are kept
+here for a fresh install.
 
 None of this repo's code can do these steps for you — they're dashboard
 actions Cloudflare requires a person to click through:
@@ -546,7 +548,17 @@ actions Cloudflare requires a person to click through:
    don't need to do anything else to give someone access to a specific
    trip unless you're the one creating it.
 
-5. **Set the flight-lookup API key (optional — only needed for the "Look
+5. **Set the location-search API key.**
+   Create a free [LocationIQ](https://locationiq.com/) account, then in
+   Workers & Pages → **waypoint-app** → **Settings** → **Variables and
+   Secrets** → **Add**, create `LOCATIONIQ_API_KEY` as a **Secret** with
+   the key from LocationIQ. This enables the explicit **Find location**
+   workflow for destinations, activities, accommodation and transport
+   hubs. If it is not set, existing saved pins still work and each form
+   offers typed-location and manual-pin fallbacks; searches show a clear
+   setup message. Never put this key in `wrangler.toml` or the repository.
+
+6. **Set the flight-lookup API key (optional — only needed for the "Look
    up" button on the transport form).**
    Sign up free at [RapidAPI's AeroDataBox page](https://rapidapi.com/aedbx-aedbx/api/aerodatabox)
    and subscribe to its free plan to get an API key, then: Workers & Pages
@@ -587,8 +599,10 @@ A handful of Playwright suites live outside this repo's deployed contents
   server standing in for the real Worker/KV, and checks that loading,
   saving, a full page reload, and CSV export all work the same way they
   will against the real deployment.
-- A dedicated test for the Map tab, mocking the Nominatim/tile-server
-  calls it makes.
+- A dedicated test for the Map tab: saved pins, transport endpoints and
+  cached destination boundaries render without any browser geocoding call;
+  the map day-stepper keeps overnight transport on both relevant days and
+  accommodation visible through checkout day.
 - A dedicated test for the "Look up" flight-number button, mocking
   `/WayPoint/api/flight-lookup` itself — it checks the frontend's side
   (button only shows in Flight mode, requires a depart date, fields
@@ -596,12 +610,11 @@ A handful of Playwright suites live outside this repo's deployed contents
   date, a clear message on a not-found/error response). The Worker's own
   call out to AeroDataBox is exercised against the real service once this
   is deployed with `AERODATABOX_API_KEY` set.
-- A dedicated test for Flight legs resolving on the Map tab via real
-  coordinates instead of free-text geocoding — the fix for routes like
-  SFO–ICN not showing up. It mocks Nominatim to fail every request and
-  checks the leg still draws (proving the coordinate came from
-  `COMMON_AIRPORTS` or AeroDataBox's own location data, never from
-  Nominatim), and separately checks that flight details from a "Look
+- A dedicated test for Flight legs resolving on the Map tab via stored
+  coordinates — the fix for routes like SFO–ICN not showing up. It checks
+  the leg still draws when no text-geocoding service is available (proving
+  the coordinate came from `COMMON_AIRPORTS`, the shared picker or
+  AeroDataBox's own location data), and separately checks that flight details from a "Look
   up" click (aircraft, terminal, gate) land in the leg's Notes field
   instead of just flashing in the status line and vanishing.
 - A dedicated test for the From/To field's custom suggestion dropdown

@@ -67,15 +67,15 @@ const saved = await jsonCall(env, "/WayPoint/api/data", "POST", { trips: [{
   tripId: "id_trip", name: "Trip", startDate: "", endDate: "", homeCurrency: "GBP", notes: "",
   currencyRates: {},
   destinations: [
-    { destinationId: "id_visible_dest", name: "Visible", country: "GB", arriveDate: "", departDate: "", timezone: "", companions: ["id_alice"], notes: "" },
+    { destinationId: "id_visible_dest", name: "Visible", country: "GB", arriveDate: "", departDate: "", timezone: "", companions: ["id_alice"], notes: "", lat: 51.5, lng: -0.12, locationRef: "liq:R123", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [-0.3, 51.4, 0, 51.6], boundaryRef: "liq:R123", boundaryQuality: "exact_simplified" },
     { destinationId: "id_hidden_dest", name: "Secret address", country: "US", arriveDate: "", departDate: "", timezone: "", companions: ["id_other"], notes: "" },
   ],
   activities: [
-    { activityId: "id_visible_activity", title: "Visible activity", destinationId: "id_visible_dest", date: "2026-08-29", contactId: "id_visible_contact", companions: ["id_alice"] },
+    { activityId: "id_visible_activity", title: "Visible activity", destinationId: "id_visible_dest", date: "2026-08-29", contactId: "id_visible_contact", companions: ["id_alice"], lat: 51.51, lng: -0.13, locationRef: "liq:N456", locationMethod: "selected", locationGranularity: "venue", locationKindLabel: "Museum", locationStale: false },
     { activityId: "id_hidden_activity", title: "Hidden activity", destinationId: "id_hidden_dest", date: "2026-08-29", address: "Hidden street", contactId: "id_hidden_contact", companions: ["id_other"] },
   ],
-  transport: [{ transportId: "id_transport", mode: "Flight", fromLocation: "LHR", toLocation: "JFK", departDateTime: "2026-09-01T10:30", arriveDateTime: "2026-09-01T13:30", companions: ["id_alice"] }],
-  accommodation: [{ accommodationId: "id_hotel", name: "Hotel", checkIn: "2026-09-01T15:00", checkOut: "2026-09-03T11:00", companions: ["id_alice"] }],
+  transport: [{ transportId: "id_transport", mode: "Flight", fromLocation: "LHR", toLocation: "JFK", departDateTime: "2026-09-01T10:30", arriveDateTime: "2026-09-01T13:30", companions: ["id_alice"], fromLat: 51.47, fromLng: -0.45, toLat: 40.64, toLng: -73.78, fromLocationRef: "local:airport:LHR", toLocationRef: "local:airport:JFK", fromLocationMethod: "selected", toLocationMethod: "selected", fromLocationGranularity: "airport", toLocationGranularity: "airport", fromLocationKindLabel: "Airport", toLocationKindLabel: "Airport", fromLocationStale: false, toLocationStale: false }],
+  accommodation: [{ accommodationId: "id_hotel", name: "Hotel", checkIn: "2026-09-01T15:00", checkOut: "2026-09-03T11:00", companions: ["id_alice"], lat: 40.7, lng: -74, locationMethod: "manual", locationGranularity: "unknown", locationKindLabel: "Place", locationStale: false }],
   expenses: [], arbitraryTopLevel: "drop me",
   contacts: [
     { contactId: "id_visible_contact", name: "Visible contact" },
@@ -89,6 +89,44 @@ const rawStoredTrip = JSON.parse(env.WAYPOINT_KV.values.get("trip:id_trip"));
 assert.equal(Object.hasOwn(rawStoredTrip, "arbitraryTopLevel"), false);
 assert.equal(rawStoredTrip.transport[0].departDateTime, "2026-09-01T10:30");
 assert.equal(rawStoredTrip.accommodation[0].checkIn, "2026-09-01T15:00");
+assert.equal(rawStoredTrip.destinations[0].boundaryRef, "liq:R123");
+assert.equal(rawStoredTrip.activities[0].locationKindLabel, "Museum");
+assert.equal(rawStoredTrip.transport[0].toLocationRef, "local:airport:JFK");
+assert.equal(rawStoredTrip.accommodation[0].locationMethod, "manual");
+
+const locationUnauthenticated = await call(env, "/WayPoint/api/location-search?q=London&context=destination&kind=area");
+assert.equal(locationUnauthenticated.status, 401);
+const locationNotConfigured = await call(env, "/WayPoint/api/location-search?q=London&context=destination&kind=area", { headers: { Cookie: ownerCookie } });
+assert.equal(locationNotConfigured.status, 501);
+const emptyBoundaries = await jsonCall(env, "/WayPoint/api/location-boundaries", "POST", { refs: [] }, ownerCookie);
+assert.equal(emptyBoundaries.status, 200);
+assert.deepEqual((await emptyBoundaries.json()).boundaries, {});
+
+// Location provider calls are authenticated and bounded per account, so a
+// retry loop cannot silently burn through the free provider allowance.
+const locationEnv = env;
+locationEnv.LOCATIONIQ_API_KEY = "test-location-key";
+const realFetch = globalThis.fetch;
+let providerCalls = 0;
+globalThis.fetch = async function (url) {
+  if (String(url).startsWith("https://api.locationiq.com/")) {
+    providerCalls++;
+    return new Response(JSON.stringify([{ osm_type: "node", osm_id: "42", name: "Example", display_name: "Example place", lat: "51.5", lon: "-0.12", class: "amenity", type: "restaurant" }]), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+  return realFetch(url);
+};
+try {
+  for (let i = 0; i < 36; i++) {
+    const response = await call(locationEnv, "/WayPoint/api/location-search?q=Example&context=activity&kind=point", { headers: { Cookie: ownerCookie } });
+    assert.equal(response.status, 200);
+  }
+  const rateLimited = await call(locationEnv, "/WayPoint/api/location-search?q=Example&context=activity&kind=point", { headers: { Cookie: ownerCookie } });
+  assert.equal(rateLimited.status, 429);
+  assert.equal(providerCalls, 36);
+} finally {
+  globalThis.fetch = realFetch;
+  delete locationEnv.LOCATIONIQ_API_KEY;
+}
 const staleSave = await jsonCall(env, "/WayPoint/api/data", "POST", {
   trips: [{ ...rawStoredTrip, tripId: "id_trip", revision: 0 }],
 }, ownerCookie);

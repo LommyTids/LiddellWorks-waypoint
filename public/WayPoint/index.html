@@ -295,6 +295,25 @@ textarea { resize: vertical; min-height: 60px; }
 .flight-lookup-status.is-ok { color: var(--ink-soft); }
 .airport-resolve-hint.is-ok { color: var(--success); }
 .airport-resolve-hint.is-unresolved { color: var(--ink-faint); }
+.location-picker { position: relative; }
+.location-picker-row { display: flex; gap: 8px; }
+.location-picker-row input { flex: 1; }
+.location-picker-row .btn { flex-shrink: 0; white-space: nowrap; }
+.location-results { margin-top: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
+.location-result { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 9px 10px; color: var(--ink); cursor: pointer; }
+.location-result:last-child { border-bottom: 0; }
+.location-result:hover, .location-result:focus { background: var(--surface-2); outline: none; }
+.location-result-title { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 650; }
+.location-result-kind { font-size: 11px; color: var(--ink-soft); font-weight: 500; white-space: nowrap; }
+.location-result-address { margin-top: 2px; color: var(--ink-soft); font-size: 11.5px; }
+.location-selected { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; margin-top: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); font-size: 12px; }
+.location-selected.is-stale { border-color: var(--danger-soft); }
+.location-selected-status { color: var(--success); font-weight: 650; }
+.location-selected.is-stale .location-selected-status { color: var(--danger); }
+.location-picker-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 7px; }
+.location-picker-actions .btn { padding: 5px 8px; font-size: 12px; }
+.location-pin-map { display: none; height: 220px; margin-top: 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.location-pin-map.is-open { display: block; }
 /* Generic suggestion dropdown — shared by EVERY field with app-managed
    suggestions (currency, country, city, timezone, airport; see
    suggestInputHtml() and the "Generic suggestion dropdown" section in
@@ -496,6 +515,9 @@ tr:last-child td { border-bottom: none; }
 
 /* ---- 4h. Map tab ----------------------------------------------------- */
 .map-toggles { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.map-day-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.map-day-controls .map-day-label { font-size: 13px; color: var(--ink-soft); margin-right: 2px; }
+.map-day-controls input[type="date"] { min-height: 36px; }
 .map-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); cursor: pointer; user-select: none; }
 .map-toggle input { margin: 0; cursor: pointer; }
 .map-toggle-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
@@ -1481,6 +1503,50 @@ function suggestInputHtml(field, val, req, suggestType, extraAttrs, placeholderF
     '</div>';
 }
 
+// One shared location control used by destinations, activities, stays and
+// both transport endpoints. The parent form chooses its query field and a
+// prefix for the normalized hidden values; the interaction itself stays the
+// same everywhere, including local airport and manual-pin paths.
+function locationPickerHtml(field, val, req, trip, allValues) {
+  var prefix = field.locationPrefix;
+  var values = allValues || {};
+  var lat = values[prefix + 'Lat'];
+  var lng = values[prefix + 'Lng'];
+  var method = values[prefix + 'LocationMethod'] || '';
+  var stale = values[prefix + 'LocationStale'] === true || values[prefix + 'LocationStale'] === 'true';
+  var mapped = lat !== '' && lat !== undefined && lat !== null && lng !== '' && lng !== undefined && lng !== null;
+  var summary = mapped
+    ? '<div class="location-selected' + (stale ? ' is-stale' : '') + '" data-location-summary>' +
+        '<span class="location-selected-status">' + (stale ? 'Location may not match' : (method === 'manual' ? 'Manual pin' : 'Mapped')) + '</span>' +
+        '<span>' + esc(field.summaryLabel || '') + '</span></div>'
+    : '<div class="location-selected" data-location-summary hidden><span class="location-selected-status"></span><span></span></div>';
+  var hidden = [
+    [prefix + 'Lat', lat], [prefix + 'Lng', lng], [prefix + 'LocationRef', values[prefix + 'LocationRef'] || ''],
+    [prefix + 'LocationMethod', method], [prefix + 'LocationGranularity', values[prefix + 'LocationGranularity'] || ''],
+    [prefix + 'LocationStale', stale ? 'true' : 'false'], [prefix + 'LocationKindLabel', values[prefix + 'LocationKindLabel'] || '']
+  ];
+  if (field.boundaryPrefix) {
+    hidden.push([field.boundaryPrefix + 'Ref', values[field.boundaryPrefix + 'Ref'] || '']);
+    hidden.push([field.boundaryPrefix + 'Quality', values[field.boundaryPrefix + 'Quality'] || '']);
+    var boundaryBbox = values[field.boundaryPrefix + 'Bbox'];
+    hidden.push([field.boundaryPrefix + 'Bbox', boundaryBbox ? (typeof boundaryBbox === 'string' ? boundaryBbox : JSON.stringify(boundaryBbox)) : '']);
+  }
+  if (field.addressKey) hidden.push([field.addressKey, values[field.addressKey] || '']);
+  var hiddenHtml = hidden.map(function (pair) { return '<input type="hidden" name="' + esc(pair[0]) + '" value="' + esc(pair[1]) + '">'; }).join('');
+  return '<div class="location-picker" data-location-picker data-location-prefix="' + esc(prefix) + '" data-location-context="' + esc(field.locationContext) + '" data-location-kind="' + esc(field.locationKind || 'point') + '"' +
+    (field.addressKey ? ' data-location-address-key="' + esc(field.addressKey) + '"' : '') +
+    (field.locationValue ? ' data-location-value="' + esc(field.locationValue) + '"' : '') +
+    (field.countryKey ? ' data-location-country-key="' + esc(field.countryKey) + '"' : '') +
+    (field.boundaryPrefix ? ' data-boundary-prefix="' + esc(field.boundaryPrefix) + '"' : '') + '>' +
+    '<div class="location-picker-row"><input type="text" autocomplete="off" name="' + field.key + '" value="' + esc(val) + '" ' + req + ' placeholder="' + esc(field.placeholder || '') + '" data-location-query>' +
+    '<button type="button" class="btn" data-action="search-location">Find location</button></div>' +
+    hiddenHtml + '<div class="location-results" data-location-results hidden role="listbox"></div>' + summary +
+    '<div class="location-picker-actions"><button type="button" class="btn btn-ghost" data-action="use-typed-location">Use typed location</button>' +
+    '<button type="button" class="btn btn-ghost" data-action="set-location-pin">Set pin manually</button>' +
+    (mapped ? '<button type="button" class="btn btn-ghost" data-action="preview-location">View on map</button>' : '') + '</div>' +
+    '<div class="location-pin-map" data-location-pin-map></div><div class="field-hint" data-location-hint></div></div>';
+}
+
 function fieldHtml(field, value, trip, allValues) {
   // allValues (optional): every value currently in the form (initial
   // values, or the live values on a reactive re-render — see
@@ -1537,6 +1603,9 @@ function fieldHtml(field, value, trip, allValues) {
 
   var inputHtml;
   switch (field.type) {
+    case 'location-picker':
+      inputHtml = locationPickerHtml(field, val, req, trip, allValues);
+      break;
     case 'text':
       inputHtml = '<input type="text" name="' + field.key + '" value="' + esc(val) + '" ' + req +
         ' placeholder="' + esc(field.placeholder || '') + '">';
@@ -1823,7 +1892,7 @@ var TRIP_FIELDS_NEW = TRIP_FIELDS.concat([
 
 var DESTINATION_FIELDS = [
   { key: 'country', label: 'Country', type: 'country', placeholder: 'e.g. Thailand' },
-  { key: 'name', label: 'Place / area', type: 'city', required: true, placeholder: 'e.g. Chiang Mai' },
+  { key: 'name', label: 'Place / area', type: 'location-picker', required: true, wide: true, placeholder: 'e.g. Chiang Mai or Dartmoor National Park', locationPrefix: 'destination', boundaryPrefix: 'boundary', locationContext: 'destination', locationKind: 'area', countryKey: 'country', summaryLabel: 'Destination area' },
   { key: 'arriveDate', label: 'Arriving', type: 'date', required: true },
   { key: 'departDate', label: 'Leaving', type: 'date', required: true },
   { key: 'timezone', label: 'Local timezone', type: 'timezone', placeholder: 'e.g. Asia/Bangkok', hint: 'Used just as a reference — handy when a trip crosses several timezones.', wide: true },
@@ -1841,8 +1910,7 @@ var ACTIVITY_FORM_SECTIONS = [
     { key: 'date', label: 'Date', type: 'date', required: true, wide: true },
     { key: 'startTime', label: 'Start time', type: 'time' },
     { key: 'endTime', label: 'End time', type: 'time' },
-    { key: 'location', label: 'Venue', type: 'text', wide: true },
-    { key: 'address', label: 'Address', type: 'text', wide: true }
+    { key: 'location', label: 'Venue or address', type: 'location-picker', wide: true, placeholder: 'e.g. a restaurant, museum or street address', locationPrefix: 'location', addressKey: 'address', locationContext: 'activity', locationKind: 'point', summaryLabel: 'Activity location' }
   ] },
   { title: 'Booking and contact', hint: 'Optional confirmation details and the person or provider to contact.', collapsible: true, fields: [
     { key: 'bookingRef', label: 'Booking / confirmation #', type: 'text' },
@@ -1937,17 +2005,11 @@ function transportPaymentFields(values) {
 function transportFieldsForMode(values) {
   var mode = values.mode || 'Flight';
   var modeFields = TRANSPORT_MODE_FIELDS[mode] || TRANSPORT_MODE_FIELDS.Other;
-  // Flights go between airports, so "From"/"To" suggest airports for
-  // that mode; every other mode (train, bus, car, ferry, ...) suggests
-  // cities instead, since "airport" isn't really the right concept for
-  // a train station or a road trip leg. Either way it's just a
-  // suggestion list — any place name typed is still accepted, which
-  // matters for the map tab's geocoding.
-  var placeType = mode === 'Flight' ? 'airport' : 'city';
+  var locationContext = mode === 'Flight' ? 'airport' : (mode === 'Train' ? 'rail' : (mode === 'Bus' ? 'bus' : (mode === 'Ferry' ? 'port' : 'transport')));
   return [{ key: 'mode', label: 'Mode', type: 'select', options: TRANSPORT_MODES }]
     .concat(modeFields, [
-      { key: 'fromLocation', label: 'From', type: placeType, required: true, placeholder: mode === 'Flight' ? 'e.g. LHR or Heathrow' : 'e.g. Chiang Mai' },
-      { key: 'toLocation', label: 'To', type: placeType, required: true, placeholder: mode === 'Flight' ? 'e.g. JFK or JFK Airport' : 'e.g. Bangkok' },
+      { key: 'fromLocation', label: 'From', type: 'location-picker', wide: true, required: true, placeholder: mode === 'Flight' ? 'e.g. LHR or Heathrow' : 'e.g. station, port or address', locationPrefix: 'from', locationContext: locationContext, locationKind: 'point', summaryLabel: 'Departure location' },
+      { key: 'toLocation', label: 'To', type: 'location-picker', wide: true, required: true, placeholder: mode === 'Flight' ? 'e.g. JFK or JFK Airport' : 'e.g. station, port or address', locationPrefix: 'to', locationContext: locationContext, locationKind: 'point', summaryLabel: 'Arrival location' },
       { key: 'departDate', label: 'Depart date', type: 'date', required: true },
       { key: 'arriveDate', label: 'Arrive date', type: 'date', required: true },
       { key: 'departTime', label: 'Depart time', type: 'time' },
@@ -1968,7 +2030,7 @@ var ACCOMMODATION_FORM_SECTIONS = [
     { key: 'name', label: 'Property', type: 'text', required: true, wide: true },
     { key: 'type', label: 'Accommodation type', type: 'select', options: ACCOMMODATION_TYPES },
     { key: 'destinationId', label: 'Area', type: 'select-destination' },
-    { key: 'address', label: 'Address', type: 'text', wide: true },
+    { key: 'address', label: 'Property location', type: 'location-picker', wide: true, placeholder: 'e.g. hotel, campsite or street address', locationPrefix: 'location', locationContext: 'accommodation', locationKind: 'point', locationValue: 'address', summaryLabel: 'Property location' },
     { key: 'checkInDate', label: 'Check-in date', type: 'date', required: true },
     { key: 'checkInTime', label: 'Check-in time', type: 'time' },
     { key: 'checkOutDate', label: 'Check-out date', type: 'date', required: true },
@@ -2054,6 +2116,52 @@ var EXPENSE_FIELDS = [
    record inside `updateState`). */
 
 function currentTrip() { return byId(state.trips, currentTripId, 'tripId'); }
+
+function pickerInitial(record, prefix) {
+  var out = {};
+  out[prefix + 'Lat'] = record.lat === undefined ? '' : record.lat;
+  out[prefix + 'Lng'] = record.lng === undefined ? '' : record.lng;
+  out[prefix + 'LocationRef'] = record.locationRef || '';
+  out[prefix + 'LocationMethod'] = record.locationMethod || '';
+  out[prefix + 'LocationGranularity'] = record.locationGranularity || '';
+  out[prefix + 'LocationStale'] = !!record.locationStale;
+  out[prefix + 'LocationKindLabel'] = record.locationKindLabel || '';
+  return out;
+}
+
+function transportPickerInitial(record, prefix) {
+  var out = {};
+  out[prefix + 'Lat'] = record[prefix + 'Lat'] === undefined ? '' : record[prefix + 'Lat'];
+  out[prefix + 'Lng'] = record[prefix + 'Lng'] === undefined ? '' : record[prefix + 'Lng'];
+  out[prefix + 'LocationRef'] = record[prefix + 'LocationRef'] || '';
+  out[prefix + 'LocationMethod'] = record[prefix + 'LocationMethod'] || '';
+  out[prefix + 'LocationGranularity'] = record[prefix + 'LocationGranularity'] || '';
+  out[prefix + 'LocationStale'] = !!record[prefix + 'LocationStale'];
+  out[prefix + 'LocationKindLabel'] = record[prefix + 'LocationKindLabel'] || '';
+  return out;
+}
+
+function readPickerLocation(values, prefix) {
+  var lat = values[prefix + 'Lat'];
+  var lng = values[prefix + 'Lng'];
+  return {
+    lat: lat === '' || lat === undefined ? '' : Number(lat),
+    lng: lng === '' || lng === undefined ? '' : Number(lng),
+    locationRef: values[prefix + 'LocationRef'] || '',
+    locationMethod: values[prefix + 'LocationMethod'] || '',
+    locationGranularity: values[prefix + 'LocationGranularity'] || '',
+    locationStale: values[prefix + 'LocationStale'] === true || values[prefix + 'LocationStale'] === 'true',
+    locationKindLabel: values[prefix + 'LocationKindLabel'] || ''
+  };
+}
+
+function readPickerBbox(value) {
+  if (!value) return [];
+  try {
+    var bbox = JSON.parse(value);
+    return Array.isArray(bbox) && bbox.length === 4 && bbox.every(function (n) { return Number.isFinite(Number(n)); }) ? bbox.map(Number) : [];
+  } catch (e) { return []; }
+}
 
 /* ---- Per-trip permissions ---------------------------------------------
    Every trip the server sends back carries a `myGrant` field (set by
@@ -2194,11 +2302,8 @@ function openTripForm(existing) {
             tripId: newId(), name: v.name, startDate: v.startDate || '', endDate: v.endDate || '',
             homeCurrency: (v.homeCurrency || 'GBP').toUpperCase(), notes: v.notes || '',
             currencyRates: {}, destinations: [], activities: [], transport: [], accommodation: [], contacts: [], companions: newCompanions, expenses: [],
-            // A cache of place-name -> {lat,lng} lookups for the Map tab (see
-            // the Map section further down), so the same place is only ever
-            // looked up once, not re-fetched on every visit. {} for a new
-            // trip; older trips just get one lazily the first time they need
-            // it (see initMap()).
+            // Kept for backwards compatibility with existing trip records.
+            // New map locations are saved directly on their entries.
             geocodeCache: {},
             // Creating a trip makes you its permanent Superuser (owner) --
             // the Worker enforces this for real when it actually saves a
@@ -2219,14 +2324,20 @@ function openTripForm(existing) {
 }
 
 function openDestinationForm(trip, existing) {
+  var initial = existing ? Object.assign({}, existing, pickerInitial(existing, 'destination'), {
+    boundaryRef: existing.boundaryRef || '', boundaryQuality: existing.boundaryQuality || '', boundaryBbox: existing.bbox || []
+  }) : {};
   openForm({
     title: existing ? 'Edit destination' : 'Add destination',
     fields: fieldsWithTagPickerLock(DESTINATION_FIELDS, !!existing && !canFullyEditTrip(trip)),
-    initial: existing || {}, trip: trip, submitLabel: 'Save',
+    initial: initial, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
-        var rec = { destinationId: existing ? existing.destinationId : newId(), name: v.name, country: v.country || '', arriveDate: v.arriveDate, departDate: v.departDate, timezone: (v.timezone || '').trim(), companions: readTagPicker(v, 'companions'), notes: v.notes || '' };
+        var location = readPickerLocation(v, 'destination');
+        var rec = { destinationId: existing ? existing.destinationId : newId(), name: v.name, country: v.country || '', arriveDate: v.arriveDate, departDate: v.departDate, timezone: (v.timezone || '').trim(), companions: readTagPicker(v, 'companions'), notes: v.notes || '',
+          lat: location.lat, lng: location.lng, locationRef: location.locationRef, locationMethod: location.locationMethod, locationGranularity: location.locationGranularity, locationStale: location.locationStale, locationKindLabel: location.locationKindLabel,
+          bbox: readPickerBbox(v.boundaryBbox), boundaryRef: v.boundaryRef || '', boundaryQuality: v.boundaryQuality || '' };
         if (existing) t.destinations[t.destinations.findIndex(function (x) { return x.destinationId === existing.destinationId; })] = rec;
         else t.destinations.push(rec);
       });
@@ -2235,7 +2346,7 @@ function openDestinationForm(trip, existing) {
 }
 
 function openActivityForm(trip, existing, seed) {
-  var initial = existing ? Object.assign({ category: 'Other' }, existing) : Object.assign({ category: 'Other' }, seed || {});
+  var initial = existing ? Object.assign({ category: 'Other' }, existing, pickerInitial(existing, 'location')) : Object.assign({ category: 'Other' }, seed || {});
   openForm({
     title: existing ? 'Edit activity' : 'Add activity',
     sections: sectionsWithTagPickerLock(ACTIVITY_FORM_SECTIONS, !!existing && !canFullyEditTrip(trip)),
@@ -2243,10 +2354,11 @@ function openActivityForm(trip, existing, seed) {
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
+        var mapped = readPickerLocation(v, 'location');
         var rec = {
           activityId: existing ? existing.activityId : newId(), title: v.title, category: v.category || 'Other', destinationId: v.destinationId || '',
           date: v.date, startTime: v.startTime || '', endTime: v.endTime || '',
-          location: v.location || '', address: v.address || '', bookingRef: v.bookingRef || '',
+          location: v.location || '', address: v.address || '', lat: mapped.lat, lng: mapped.lng, locationRef: mapped.locationRef, locationMethod: mapped.locationMethod, locationGranularity: mapped.locationGranularity, locationStale: mapped.locationStale, locationKindLabel: mapped.locationKindLabel, bookingRef: v.bookingRef || '',
           contactId: v.contactId || '', costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(),
           costRate: v.costRate || '', receiptRef: v.receiptRef || '', companions: readTagPicker(v, 'companions'), notes: v.notes || ''
         };
@@ -2267,10 +2379,8 @@ function openActivityForm(trip, existing, seed) {
 // COMMON_AIRPORTS; (3) a coordinate already saved on this same leg from
 // an earlier save, reused ONLY if the location text hasn't changed
 // since (so editing "From" to somewhere else can't accidentally keep
-// the old place's coordinate). Anything else returns null, which just
-// means the Map tab falls back to geocoding the location text via
-// Nominatim — exactly what it always did, for exactly the cases where
-// nothing better is known.
+// the old place's coordinate). Anything else returns null and is shown
+// as an unmapped transport end until the person selects or pins it.
 function resolveLegCoords(text, lookupCoords, existing, textKey, latKey, lngKey) {
   var staticMatch = airportCoordsFromText(text);
   if (staticMatch) return staticMatch;
@@ -2279,6 +2389,14 @@ function resolveLegCoords(text, lookupCoords, existing, textKey, latKey, lngKey)
     return { lat: existing[latKey], lng: existing[lngKey] };
   }
   return null;
+}
+
+function pickerCoords(values, prefix) {
+  var lat = values[prefix + 'Lat'];
+  var lng = values[prefix + 'Lng'];
+  if (lat === '' || lat === undefined || lng === '' || lng === undefined) return null;
+  var out = { lat: Number(lat), lng: Number(lng) };
+  return Number.isFinite(out.lat) && Number.isFinite(out.lng) ? out : null;
 }
 
 function openTransportForm(trip, existing, seed) {
@@ -2290,7 +2408,7 @@ function openTransportForm(trip, existing, seed) {
   // (since that function separately defaults an undefined paymentType
   // to 'Free'). Setting it here keeps the visible selection and the
   // fields actually shown in agreement from the very first render.
-  var initial = existing ? Object.assign({}, existing, splitDateTime(existing.departDateTime), {
+  var initial = existing ? Object.assign({}, existing, splitDateTime(existing.departDateTime), transportPickerInitial(existing, 'from'), transportPickerInitial(existing, 'to'), {
     arriveDate: dateOnly(existing.arriveDateTime), arriveTime: timeOnly(existing.arriveDateTime)
   }) : Object.assign({ mode: 'Flight', paymentType: 'Free' }, seed || {});
   if (existing) { initial.departDate = dateOnly(existing.departDateTime); initial.departTime = timeOnly(existing.departDateTime); }
@@ -2328,15 +2446,12 @@ function openTransportForm(trip, existing, seed) {
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
-        // Coordinates are only meaningful for Flight legs — every other
-        // mode's "From"/"To" are city-type free text (see
-        // transportFieldsForMode()), with no airport code to match
-        // against COMMON_AIRPORTS, so those just keep using Nominatim
-        // text geocoding on the Map tab exactly as before.
-        var fromCoords = null, toCoords = null;
+        // Every mode can use a saved picker coordinate. Flights also get
+        // a conservative airport-data fallback for a typed IATA code.
+        var fromCoords = pickerCoords(v, 'from'), toCoords = pickerCoords(v, 'to');
         if (v.mode === 'Flight') {
-          fromCoords = resolveLegCoords(v.fromLocation, lastFlightLookupCoords.from, existing, 'fromLocation', 'fromLat', 'fromLng');
-          toCoords = resolveLegCoords(v.toLocation, lastFlightLookupCoords.to, existing, 'toLocation', 'toLat', 'toLng');
+          fromCoords = fromCoords || resolveLegCoords(v.fromLocation, lastFlightLookupCoords.from, existing, 'fromLocation', 'fromLat', 'fromLng');
+          toCoords = toCoords || resolveLegCoords(v.toLocation, lastFlightLookupCoords.to, existing, 'toLocation', 'toLat', 'toLng');
         }
         // Only keep cost/points data for whichever section "Paid with"
         // actually shows right now — e.g. switching an already-priced
@@ -2354,6 +2469,11 @@ function openTransportForm(trip, existing, seed) {
           fromLocation: v.fromLocation, toLocation: v.toLocation,
           fromLat: fromCoords ? fromCoords.lat : '', fromLng: fromCoords ? fromCoords.lng : '',
           toLat: toCoords ? toCoords.lat : '', toLng: toCoords ? toCoords.lng : '',
+          fromLocationRef: v.fromLocationRef || '', toLocationRef: v.toLocationRef || '',
+          fromLocationMethod: v.fromLocationMethod || (fromCoords ? 'selected' : ''), toLocationMethod: v.toLocationMethod || (toCoords ? 'selected' : ''),
+          fromLocationGranularity: v.fromLocationGranularity || '', toLocationGranularity: v.toLocationGranularity || '',
+          fromLocationStale: v.fromLocationStale === true || v.fromLocationStale === 'true', toLocationStale: v.toLocationStale === true || v.toLocationStale === 'true',
+          fromLocationKindLabel: v.fromLocationKindLabel || '', toLocationKindLabel: v.toLocationKindLabel || '',
           departDateTime: combineDateTime(v.departDate, v.departTime), arriveDateTime: combineDateTime(v.arriveDate, v.arriveTime),
           bookingRef: v.bookingRef || '', contactId: v.contactId || '',
           paymentType: paymentType,
@@ -2553,18 +2673,9 @@ function performFlightLookup(button) {
 // hand from the airport suggestion dropdown (see openSuggestions()).
 //
 // The result looks like "LHR — London Heathrow, London, United
-// Kingdom" — deliberately fuller than the old "CODE — Name" alone.
-// "From"/"To" feed straight into the Map tab's Nominatim geocoding
-// (see geocodeLookup()/mapLegsForTrip()) — but that's now a fallback
-// path, only used for airports NOT in COMMON_AIRPORTS' curated
-// shortlist (which carries real coordinates — see
-// airportCoordsFromText() just below, and the comment atop
-// data/airports.js for the full story of why "From"/"To" text alone
-// wasn't reliable enough for Nominatim). This still matters for that
-// fallback case, and for just reading well in the itinerary either way,
-// so it still builds a fuller string than a bare code — a bare airport
-// code or name alone is often too little for Nominatim to place
-// reliably, especially for smaller/regional airports.
+// Kingdom" — deliberately fuller than the old "CODE — Name" alone. The
+// coordinate used on the map is stored separately, while this string gives
+// a person enough context to choose between similarly named airports.
 //
 // City is skipped from the "place" part when it's already embedded in
 // the airport name (e.g. "London Heathrow" already says "London"), so
@@ -2599,9 +2710,8 @@ function airportDisplay(airport) {
 //      load at all (e.g. briefly offline) — everything still works,
 //      just without this tier.
 // Returns null if neither has it, which is the signal for the caller
-// (openTransportForm()'s onSubmit) to fall back further — to
-// AeroDataBox's own location data if a "Look up" was done, and after
-// that to Nominatim text geocoding, exactly as before.
+// (openTransportForm()'s onSubmit) to keep the end unmapped unless it
+// was selected through the picker or flight lookup supplied a location.
 function airportCoordsForCode(code) {
   var found = COMMON_AIRPORTS.filter(function (a) { return a.code === code; })[0];
   if (found && typeof found.lat === 'number' && typeof found.lng === 'number') return { lat: found.lat, lng: found.lng };
@@ -2617,8 +2727,8 @@ function airportCoordsForCode(code) {
 // suggestion dropdown and a successful flight lookup fill "From"/"To"
 // with — and resolves it via airportCoordsForCode() above. Returns
 // null for anything that doesn't start with a plausible 3-letter code
-// (a city name typed for a non-Flight mode, say), which is fine — the
-// caller just falls back to geocoding that text instead.
+// (a city name typed for a non-Flight mode, say), which simply leaves
+// that end unmapped until a picker result or pin is supplied.
 function airportCoordsFromText(text) {
   var m = /^([A-Za-z]{3})\b/.exec((text || '').trim());
   return m ? airportCoordsForCode(m[1].toUpperCase()) : null;
@@ -2885,6 +2995,229 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
+/* ---- Shared location-picker behaviour -------------------------------- */
+
+var locationPickerResults = {};
+var locationPickerBoundaries = {};
+
+function pickerInput(wrapper, name) {
+  return wrapper.querySelector('input[name="' + name + '"]');
+}
+
+function pickerSet(wrapper, name, value) {
+  var input = pickerInput(wrapper, name);
+  if (input) input.value = value === undefined || value === null ? '' : value;
+}
+
+function pickerSummary(wrapper, label, stale) {
+  var summary = wrapper.querySelector('[data-location-summary]');
+  if (!summary) return;
+  summary.hidden = false;
+  summary.classList.toggle('is-stale', !!stale);
+  var status = summary.querySelector('.location-selected-status');
+  var detail = summary.querySelector('span:last-child');
+  if (status) status.textContent = stale ? 'Location may not match' : label;
+  if (detail) detail.textContent = stale ? 'Search again to confirm this location' : '';
+}
+
+function pickerHint(wrapper, message, isError) {
+  var hint = wrapper.querySelector('[data-location-hint]');
+  if (!hint) return;
+  hint.textContent = message || '';
+  hint.style.color = isError ? 'var(--danger)' : '';
+}
+
+function abortLocationSearch(wrapper) {
+  if (wrapper._locationSearchController) {
+    wrapper._locationSearchController.abort();
+    wrapper._locationSearchController = null;
+  }
+}
+
+function localAirportLocationResults(query) {
+  var q = (query || '').trim();
+  if (q.length < 2) return [];
+  return searchAirports(q).slice(0, 6).map(function (airport) {
+    var coords = airportCoordsForCode(airport.code);
+    return {
+      locationRef: 'local:airport:' + airport.code,
+      name: airportDisplay(airport),
+      formattedAddress: [airport.city, airport.country].filter(Boolean).join(', '),
+      kindLabel: 'Airport', lat: coords && coords.lat, lng: coords && coords.lng,
+      granularity: 'airport', bbox: null, boundaryRef: ''
+    };
+  }).filter(function (candidate) { return Number.isFinite(candidate.lat) && Number.isFinite(candidate.lng); });
+}
+
+function renderLocationResults(wrapper, results) {
+  var el = wrapper.querySelector('[data-location-results]');
+  if (!el) return;
+  var prefix = wrapper.dataset.locationPrefix;
+  locationPickerResults[prefix] = results;
+  if (!results.length) {
+    el.innerHTML = '<div class="suggest-empty">No matching places found. You can keep the text or set a pin manually.</div>';
+  } else {
+    el.innerHTML = results.map(function (result, i) {
+      return '<button type="button" class="location-result" role="option" data-action="select-location-result" data-location-index="' + i + '">' +
+        '<span class="location-result-title"><span>' + esc(result.name) + '</span><span class="location-result-kind">' + esc(result.kindLabel || 'Place') + '</span></span>' +
+        '<span class="location-result-address">' + esc(result.formattedAddress || '') + '</span></button>';
+    }).join('');
+  }
+  el.hidden = false;
+}
+
+async function searchLocationPicker(wrapper) {
+  var query = wrapper.querySelector('[data-location-query]');
+  if (!query) return;
+  var text = query.value.trim();
+  if (text.length < 2) { pickerHint(wrapper, 'Enter at least two characters to search.', true); return; }
+  var context = wrapper.dataset.locationContext || 'transport';
+  var kind = wrapper.dataset.locationKind || 'point';
+  var local = context === 'airport' ? localAirportLocationResults(text) : [];
+  if (local.length) { renderLocationResults(wrapper, local); pickerHint(wrapper, 'Airport results are from Waypoint’s local airport data.'); return; }
+  abortLocationSearch(wrapper);
+  var controller = new AbortController();
+  wrapper._locationSearchController = controller;
+  var searchButton = wrapper.querySelector('[data-action="search-location"]');
+  if (searchButton) searchButton.disabled = true;
+  var params = new URLSearchParams({ q: text, context: context, kind: kind });
+  var form = wrapper.closest('form');
+  var destinationId = form && form.querySelector('[name="destinationId"]');
+  var trip = currentTrip();
+  if (destinationId && destinationId.value && trip) {
+    var destination = byId(trip.destinations, destinationId.value, 'destinationId');
+    if (destination && Number.isFinite(destination.lat) && Number.isFinite(destination.lng)) {
+      params.set('lat', destination.lat); params.set('lng', destination.lng);
+    }
+  }
+  var countryKey = wrapper.dataset.locationCountryKey;
+  var countryInput = countryKey && form && form.querySelector('[name="' + countryKey + '"]');
+  if (countryInput && /^[A-Za-z]{2}$/.test(countryInput.value.trim())) params.set('country', countryInput.value.trim());
+  pickerHint(wrapper, 'Searching…');
+  try {
+    var response = await fetch('/WayPoint/api/location-search?' + params.toString(), { signal: controller.signal });
+    var data = await response.json();
+    if (wrapper._locationSearchController !== controller) return;
+    if (!response.ok) throw new Error(data.error || 'Location search failed.');
+    renderLocationResults(wrapper, data.results || []);
+    pickerHint(wrapper, data.attribution ? data.attribution.label : '');
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    if (wrapper._locationSearchController !== controller) return;
+    renderLocationResults(wrapper, []);
+    pickerHint(wrapper, err.message || 'Location search failed. You can still use typed text or set a pin manually.', true);
+  } finally {
+    if (wrapper._locationSearchController === controller) {
+      wrapper._locationSearchController = null;
+      if (searchButton) searchButton.disabled = false;
+    }
+  }
+}
+
+function selectLocationResult(wrapper, result) {
+  var prefix = wrapper.dataset.locationPrefix;
+  var query = wrapper.querySelector('[data-location-query]');
+  if (query) query.value = wrapper.dataset.locationValue === 'address' ? (result.formattedAddress || result.name || '') : (result.name || result.formattedAddress || '');
+  var addressKey = wrapper.dataset.locationAddressKey;
+  if (addressKey) pickerSet(wrapper, addressKey, result.formattedAddress || '');
+  pickerSet(wrapper, prefix + 'Lat', result.lat);
+  pickerSet(wrapper, prefix + 'Lng', result.lng);
+  pickerSet(wrapper, prefix + 'LocationRef', result.locationRef || '');
+  pickerSet(wrapper, prefix + 'LocationMethod', 'selected');
+  pickerSet(wrapper, prefix + 'LocationGranularity', result.granularity || 'unknown');
+  pickerSet(wrapper, prefix + 'LocationStale', 'false');
+  pickerSet(wrapper, prefix + 'LocationKindLabel', result.kindLabel || '');
+  var results = wrapper.querySelector('[data-location-results]');
+  if (results) { results.hidden = true; results.innerHTML = ''; }
+  pickerSummary(wrapper, 'Mapped', false);
+  var actions = wrapper.querySelector('.location-picker-actions');
+  if (actions && !actions.querySelector('[data-action="preview-location"]')) {
+    actions.insertAdjacentHTML('beforeend', '<button type="button" class="btn btn-ghost" data-action="preview-location">View on map</button>');
+  }
+  pickerHint(wrapper, 'Location selected.');
+  if (wrapper.dataset.boundaryPrefix && result.boundaryRef) loadLocationBoundary(wrapper, result.boundaryRef);
+}
+
+async function loadLocationBoundary(wrapper, ref) {
+  var prefix = wrapper.dataset.boundaryPrefix;
+  pickerHint(wrapper, 'Loading destination area…');
+  try {
+    var response = await fetch('/WayPoint/api/location-boundary?ref=' + encodeURIComponent(ref));
+    var data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'No destination boundary available.');
+    locationPickerBoundaries[wrapper.dataset.locationPrefix] = data;
+    pickerSet(wrapper, prefix + 'Ref', ref);
+    pickerSet(wrapper, prefix + 'Quality', data.geometryQuality || 'none');
+    pickerSet(wrapper, prefix + 'Bbox', JSON.stringify(data.bbox || []));
+    pickerHint(wrapper, data.geometry ? 'Destination area ready — view it on the map to check it.' : 'Destination saved as a point.');
+  } catch (err) {
+    pickerSet(wrapper, prefix + 'Ref', ''); pickerSet(wrapper, prefix + 'Quality', 'none'); pickerSet(wrapper, prefix + 'Bbox', '');
+    pickerHint(wrapper, err.message || 'No area boundary is available; this destination will use a point.', false);
+  }
+}
+
+function openLocationPickerMap(wrapper, allowPlacement) {
+  var holder = wrapper.querySelector('[data-location-pin-map]');
+  if (!holder) return;
+  holder.classList.add('is-open');
+  if (holder._waypointMap) { holder._waypointMap.invalidateSize(); return; }
+  var prefix = wrapper.dataset.locationPrefix;
+  var lat = Number((pickerInput(wrapper, prefix + 'Lat') || {}).value);
+  var lng = Number((pickerInput(wrapper, prefix + 'Lng') || {}).value);
+  var map = L.map(holder, { scrollWheelZoom: true }).setView([Number.isFinite(lat) ? lat : 20, Number.isFinite(lng) ? lng : 0], Number.isFinite(lat) ? 13 : 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors' }).addTo(map);
+  holder._waypointMap = map;
+  var marker = null;
+  var setMarker = function (point, manual) {
+    if (marker) marker.setLatLng(point); else {
+      marker = L.marker(point, { draggable: allowPlacement }).addTo(map);
+      if (allowPlacement) marker.on('dragend', function () { setMarker(marker.getLatLng(), true); });
+    }
+    if (allowPlacement) {
+      pickerSet(wrapper, prefix + 'Lat', point.lat); pickerSet(wrapper, prefix + 'Lng', point.lng);
+      pickerSet(wrapper, prefix + 'LocationRef', ''); pickerSet(wrapper, prefix + 'LocationMethod', 'manual');
+      pickerSet(wrapper, prefix + 'LocationGranularity', 'unknown'); pickerSet(wrapper, prefix + 'LocationKindLabel', ''); pickerSet(wrapper, prefix + 'LocationStale', 'false');
+      if (wrapper.dataset.boundaryPrefix) {
+        var boundaryPrefix = wrapper.dataset.boundaryPrefix;
+        pickerSet(wrapper, boundaryPrefix + 'Ref', ''); pickerSet(wrapper, boundaryPrefix + 'Quality', 'none'); pickerSet(wrapper, boundaryPrefix + 'Bbox', '');
+      }
+      pickerSummary(wrapper, 'Manual pin', false); pickerHint(wrapper, 'Pin set. Drag it or click the map to adjust.');
+    }
+  };
+  if (Number.isFinite(lat) && Number.isFinite(lng)) setMarker(L.latLng(lat, lng), false);
+  var boundary = locationPickerBoundaries[prefix];
+  if (boundary && boundary.geometry) {
+    var layer = L.geoJSON(boundary.geometry, { style: { color: '#1f6f63', weight: 2, fillColor: '#1f6f63', fillOpacity: 0.18 } }).addTo(map);
+    map.fitBounds(layer.getBounds(), { padding: [16, 16] });
+  }
+  if (allowPlacement) {
+    map.on('click', function (event) { setMarker(event.latlng, true); });
+  }
+  setTimeout(function () { map.invalidateSize(); }, 0);
+}
+
+document.addEventListener('input', function (e) {
+  if (!e.target.matches('[data-location-query]')) return;
+  var wrapper = e.target.closest('[data-location-picker]');
+  if (!wrapper) return;
+  abortLocationSearch(wrapper);
+  var oldResults = wrapper.querySelector('[data-location-results]');
+  if (oldResults) { oldResults.hidden = true; oldResults.innerHTML = ''; }
+  var prefix = wrapper.dataset.locationPrefix;
+  var latInput = pickerInput(wrapper, prefix + 'Lat');
+  if (latInput && latInput.value !== '') {
+    pickerSet(wrapper, prefix + 'LocationStale', 'true');
+    pickerSummary(wrapper, 'Location may not match', true);
+  }
+});
+
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter' || !e.target.matches('[data-location-query]')) return;
+  e.preventDefault();
+  var wrapper = e.target.closest('[data-location-picker]');
+  if (wrapper) searchLocationPicker(wrapper);
+});
+
 // Holds whatever real coordinates the most recent successful flight
 // lookup (in the currently-open transport form) returned for its
 // origin/destination — set in performFlightLookup() below, from
@@ -2904,7 +3237,7 @@ function openAccommodationForm(trip, existing, seed) {
   var initial = existing ? Object.assign({}, existing, {
     checkInDate: dateOnly(existing.checkIn), checkInTime: timeOnly(existing.checkIn),
     checkOutDate: dateOnly(existing.checkOut), checkOutTime: timeOnly(existing.checkOut)
-  }) : Object.assign({ type: 'Other' }, seed || {});
+  }, pickerInitial(existing, 'location')) : Object.assign({ type: 'Other' }, seed || {});
   if (existing && !initial.type) initial.type = 'Other';
   openForm({
     title: existing ? 'Edit accommodation' : 'Add accommodation',
@@ -2913,8 +3246,10 @@ function openAccommodationForm(trip, existing, seed) {
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
+        var mapped = readPickerLocation(v, 'location');
         var rec = {
           accommodationId: existing ? existing.accommodationId : newId(), name: v.name, type: v.type || 'Other', destinationId: v.destinationId || '', address: v.address || '',
+          lat: mapped.lat, lng: mapped.lng, locationRef: mapped.locationRef, locationMethod: mapped.locationMethod, locationGranularity: mapped.locationGranularity, locationStale: mapped.locationStale, locationKindLabel: mapped.locationKindLabel,
           checkIn: combineDateTime(v.checkInDate, v.checkInTime), checkOut: combineDateTime(v.checkOutDate, v.checkOutTime),
           bookingRef: v.bookingRef || '', contactId: v.contactId || '',
           costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(), costRate: v.costRate || '',
@@ -4087,12 +4422,10 @@ function renderCompanionsTab(trip) {
 }
 
 /* ---------- 19b. Map tab ---------------------------------------------------
-   Plots everything with a name/address/country onto one interactive map,
-   using Leaflet (a JS mapping library, vendored under vendor/leaflet/ — see
-   the <link>/<script> tags near the top of this file) for the map itself,
-   OpenStreetMap for the map tiles, and OpenStreetMap's free "Nominatim"
-   service to turn a place name/address into a latitude/longitude, since
-   none of our own data has coordinates in it.
+   Plots saved locations on one interactive map, using Leaflet (vendored
+   under vendor/leaflet/) and OpenStreetMap tiles. Coordinates are selected
+   in the shared location picker and stored with each entry; the map does
+   not silently geocode free text in the browser.
 
    The tricky part is that this app normally redraws #app from scratch (see
    render() near the bottom of this file) every time anything changes —
@@ -4132,58 +4465,37 @@ var mapState = {
   instance: null,
   layers: null,
   generation: 0,
+  day: '',
+  wholeTrip: false,
   visibility: { destinations: true, activities: true, transport: true, accommodation: true }
 };
 
-// Nominatim (OpenStreetMap's free geocoder) asks that callers make no more
-// than about one request per second. This tracks when the last lookup
-// happened so geocodeLookup() can wait out the rest of that second first.
-var lastGeocodeCallAt = 0;
-var GEOCODE_MIN_INTERVAL_MS = 1100;
-
-// Turns a free-text place name/address into { lat, lng }, or null if
-// Nominatim couldn't find a match (or the request failed) — either way,
-// the caller (see initMap()) caches whatever comes back so this is never
-// called twice for the same text.
-async function geocodeLookup(query) {
-  var waitFor = Math.max(0, GEOCODE_MIN_INTERVAL_MS - (Date.now() - lastGeocodeCallAt));
-  if (waitFor > 0) await new Promise(function (resolve) { setTimeout(resolve, waitFor); });
-  lastGeocodeCallAt = Date.now();
-  try {
-    var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(query);
-    var res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) return null;
-    var results = await res.json();
-    if (!results || !results.length) return null;
-    return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
-  } catch (e) {
-    return null;
-  }
+function mapDayVisible(start, end, day) {
+  return mapState.wholeTrip || !day || ((!start || start <= day) && (!end || end >= day));
 }
 
-// Gathers every destination/activity/accommodation entry that has enough
-// text to plot: destinations use "name, country"; activities prefer their
-// own address/venue but fall back to their linked destination's location
-// (many activities are only ever tagged to an area, not given their own
-// address); accommodation prefers its address, falling back to its name.
-// Anything with no usable text at all is simply left off the map.
+function savedCoords(item, latKey, lngKey) {
+  return (typeof item[latKey] === 'number' && typeof item[lngKey] === 'number') ? { lat: item[latKey], lng: item[lngKey] } : null;
+}
+
+// The Map tab is deliberately a view of saved locations only. Text-only
+// records remain visible in their own tabs, but are not guessed at by an
+// external service when a person opens the map.
 function mapPointsForTrip(trip) {
   var points = [];
   (trip.destinations || []).forEach(function (d) {
-    var query = [d.name, d.country].filter(Boolean).join(', ');
-    if (query) points.push({ category: 'destinations', query: query, label: d.name, sub: d.country });
+    if (!mapDayVisible(d.arriveDate, d.departDate, mapState.day)) return;
+    points.push({ category: 'destinations', coords: savedCoords(d, 'lat', 'lng'), label: d.name, sub: d.country, boundaryRef: d.boundaryRef || '', boundaryQuality: d.boundaryQuality || '', stale: d.locationStale });
   });
   (trip.activities || []).forEach(function (a) {
-    var query = a.address || a.location || '';
-    if (!query && a.destinationId) {
-      var dest = byId(trip.destinations, a.destinationId, 'destinationId');
-      if (dest) query = [dest.name, dest.country].filter(Boolean).join(', ');
-    }
-    if (query) points.push({ category: 'activities', query: query, label: a.title, sub: a.location || a.address });
+    if (!mapDayVisible(a.date, a.date, mapState.day)) return;
+    points.push({ category: 'activities', coords: savedCoords(a, 'lat', 'lng'), label: a.title, sub: a.location || a.address, stale: a.locationStale });
   });
   (trip.accommodation || []).forEach(function (ac) {
-    var query = ac.address || ac.name || '';
-    if (query) points.push({ category: 'accommodation', query: query, label: ac.name, sub: ac.address });
+    // Checkout day is included: a place is still useful map context until
+    // the traveller actually leaves it.
+    if (!mapDayVisible(dateOnly(ac.checkIn), dateOnly(ac.checkOut), mapState.day)) return;
+    points.push({ category: 'accommodation', coords: savedCoords(ac, 'lat', 'lng'), label: ac.name, sub: ac.address, stale: ac.locationStale });
   });
   return points;
 }
@@ -4194,18 +4506,33 @@ function mapPointsForTrip(trip) {
 // one end known can't usefully be drawn as a line.
 //
 // fromCoords/toCoords carry through whatever real coordinate was
-// resolved and saved at the time this leg was created/edited (see
-// resolveLegCoords() in openTransportForm) — null when none was found,
-// which is the signal for initMap() below to fall back to geocoding
-// fromQuery/toQuery via Nominatim exactly as it always did.
+// resolved and saved at the time this leg was created/edited — null when
+// an endpoint still needs a selected location or manual pin.
 function mapLegsForTrip(trip) {
-  return (trip.transport || []).filter(function (t) { return t.fromLocation && t.toLocation; }).map(function (t) {
+  return (trip.transport || []).filter(function (t) {
+    return t.fromLocation && t.toLocation && mapDayVisible(dateOnly(t.departDateTime), dateOnly(t.arriveDateTime), mapState.day);
+  }).map(function (t) {
     return {
-      fromQuery: t.fromLocation, toQuery: t.toLocation, label: transportLabel(t), mode: t.mode,
-      fromCoords: (typeof t.fromLat === 'number' && typeof t.fromLng === 'number') ? { lat: t.fromLat, lng: t.fromLng } : null,
-      toCoords: (typeof t.toLat === 'number' && typeof t.toLng === 'number') ? { lat: t.toLat, lng: t.toLng } : null
+      label: transportLabel(t), mode: t.mode,
+      fromCoords: savedCoords(t, 'fromLat', 'fromLng'), toCoords: savedCoords(t, 'toLat', 'toLng'),
+      fromStale: t.fromLocationStale, toStale: t.toLocationStale
     };
   });
+}
+
+function mapDayControlsHtml(trip) {
+  var days = tripDayList(trip);
+  if (!days.length) return '';
+  if (days.indexOf(mapState.day) === -1) mapState.day = days[0];
+  var index = days.indexOf(mapState.day);
+  return '<div class="map-day-controls">' +
+    '<span class="map-day-label">Map day</span>' +
+    '<button type="button" class="btn btn-small" data-action="map-day-prev" aria-label="Previous map day" ' + (index <= 0 ? 'disabled' : '') + '>‹</button>' +
+    '<input type="date" data-map-day-input aria-label="Map day" min="' + esc(days[0]) + '" max="' + esc(days[days.length - 1]) + '" value="' + esc(mapState.day) + '">' +
+    '<button type="button" class="btn btn-small" data-action="map-day-next" aria-label="Next map day" ' + (index >= days.length - 1 ? 'disabled' : '') + '>›</button>' +
+    '<button type="button" class="btn btn-small" data-action="map-show-whole-trip">' + (mapState.wholeTrip ? 'Show selected day' : 'Show whole trip') + '</button>' +
+    (mapState.wholeTrip ? '<span class="field-hint">Showing whole trip</span>' : '') +
+  '</div>';
 }
 
 function renderMapTab(trip) {
@@ -4217,25 +4544,25 @@ function renderMapTab(trip) {
       '<span class="map-toggle-dot" style="background:' + m.color + '"></span>' + esc(m.label) + '</label>';
   }).join('');
 
-  if (!points.length && !legs.length) {
+  if (!points.length && !legs.length && !(trip.destinations || []).length && !(trip.activities || []).length && !(trip.transport || []).length && !(trip.accommodation || []).length) {
     return '<div class="tab-panel-head"><h2>Map</h2></div><div class="empty-state">' + icon('map') +
       '<h3>Nothing to show yet</h3>' +
-      '<p>Add a destination, activity, transport leg or place of accommodation with a name, address or country, and it\'ll appear here automatically.</p></div>';
+      '<p>Add a destination, activity, transport leg or place of accommodation, then use Find location or Set pin to place it on the map.</p></div>';
   }
 
   return (
     '<div class="tab-panel-head"><h2>Map</h2></div>' +
+    mapDayControlsHtml(trip) +
     '<div class="map-toggles">' + toggles + '</div>' +
     '<div id="map-canvas" class="map-canvas"></div>' +
     '<div id="map-status" class="map-status">Loading map…</div>' +
-    '<p class="field-hint" style="margin-top:8px">Locations are found automatically from the names/addresses/countries you\'ve entered, using OpenStreetMap — this is a best-effort match, not a guaranteed-accurate one.</p>'
+    '<p class="field-hint" style="margin-top:8px">This map uses only locations you have selected or pinned. Find location in an entry to add it here; destination areas are shaded when boundary data is available.</p>'
   );
 }
 
-// Builds (or rebuilds) the actual Leaflet map inside #map-canvas and fills
-// it in with markers/lines, geocoding anything not already in the trip's
-// geocodeCache. Called from render() (see near the bottom of this file)
-// every time the Map tab's HTML has just been drawn.
+// Builds (or rebuilds) the actual Leaflet map inside #map-canvas from
+// saved points, saved transport ends and cached destination boundaries.
+// Called from render() whenever the Map tab's HTML has just been drawn.
 async function initMap(trip) {
   var canvas = document.getElementById('map-canvas');
   if (!canvas) return; // the Map tab isn't the one currently on screen
@@ -4263,23 +4590,9 @@ async function initMap(trip) {
   mapState.instance = map;
   mapState.layers = layers;
 
-  var cache = trip.geocodeCache || {};
-  var newEntries = {}; // newly-looked-up coordinates (or confirmed misses) to save once we're done
   var bounds = [];
 
-  // Looks a query up in the trip's saved cache first, then in whatever
-  // we've already resolved earlier in THIS pass, and only calls out to
-  // Nominatim if it's genuinely never been looked up before.
-  async function resolve(query) {
-    var key = query.trim();
-    if (Object.prototype.hasOwnProperty.call(cache, key)) return cache[key];
-    if (Object.prototype.hasOwnProperty.call(newEntries, key)) return newEntries[key];
-    var result = await geocodeLookup(key);
-    newEntries[key] = result; // cache a miss (null) too, so we don't retry it forever
-    return result;
-  }
-
-  function addPoint(category, coords, label, sub) {
+  function addPoint(category, coords, label, sub, stale) {
     if (!coords) return;
     var meta = MAP_LAYER_META.filter(function (m) { return m.key === category; })[0];
     // A white ring around a near-opaque fill reads far more clearly
@@ -4287,10 +4600,21 @@ async function initMap(trip) {
     // same-colour ring blending into its own fill did — the pin pops
     // instead of looking like a smudge, especially for the brighter
     // category colours.
-    L.circleMarker([coords.lat, coords.lng], { radius: 8, color: '#ffffff', weight: 2, fillColor: meta.color, fillOpacity: 0.95 })
-      .bindPopup('<strong>' + esc(label) + '</strong>' + (sub ? '<br>' + esc(sub) : ''))
+    L.circleMarker([coords.lat, coords.lng], { radius: 8, color: '#ffffff', weight: 2, fillColor: meta.color, fillOpacity: stale ? 0.48 : 0.95, dashArray: stale ? '3 3' : null })
+      .bindPopup('<strong>' + esc(label) + '</strong>' + (sub ? '<br>' + esc(sub) : '') + (stale ? '<br><em>Location needs review</em>' : ''))
       .addTo(layers[category]);
     bounds.push([coords.lat, coords.lng]);
+  }
+
+  function addDestinationArea(point, boundary) {
+    if (!boundary || !boundary.geometry) return false;
+    var meta = MAP_LAYER_META.filter(function (m) { return m.key === 'destinations'; })[0];
+    var area = L.geoJSON(boundary.geometry, {
+      style: { color: meta.color, weight: 2, opacity: point.stale ? 0.45 : 0.8, fillColor: meta.color, fillOpacity: point.stale ? 0.08 : 0.18, dashArray: point.stale ? '4 4' : null }
+    }).bindPopup('<strong>' + esc(point.label) + '</strong>' + (point.sub ? '<br>' + esc(point.sub) : '') + (point.stale ? '<br><em>Location needs review</em>' : ''));
+    area.addTo(layers.destinations);
+    if (area.getBounds && area.getBounds().isValid()) bounds.push(area.getBounds());
+    return true;
   }
 
   // A small rotated triangle, dropped at the midpoint of a transport leg's
@@ -4318,41 +4642,41 @@ async function initMap(trip) {
 
   var points = mapPointsForTrip(trip);
   var legs = mapLegsForTrip(trip);
-  var totalLookups = points.length + legs.length * 2;
-  var done = 0, missing = 0;
+  var missing = 0, placed = 0;
   var statusEl = document.getElementById('map-status');
+
+  // Boundaries are retrieved in one small batch from Waypoint's KV-backed
+  // endpoint. It never calls the search provider while a map is opened.
+  var boundaryRefs = points.filter(function (p) { return p.category === 'destinations' && p.boundaryRef; }).map(function (p) { return p.boundaryRef; });
+  var boundaries = {};
+  if (boundaryRefs.length) {
+    try {
+      var boundaryResponse = await fetch('/WayPoint/api/location-boundaries', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refs: boundaryRefs.slice(0, 20) })
+      });
+      if (boundaryResponse.ok) boundaries = (await boundaryResponse.json()).boundaries || {};
+    } catch (err) { boundaries = {}; }
+    if (myGeneration !== mapState.generation) return;
+  }
 
   function updateStatus() {
     if (!statusEl) return;
-    if (done < totalLookups) statusEl.textContent = 'Locating places on the map… (' + done + ' of ' + totalLookups + ')';
-    else if (missing > 0) statusEl.textContent = (totalLookups - missing) + ' of ' + totalLookups + ' locations placed on the map. ' + missing + ' couldn\'t be found automatically — try refining the name/address.';
-    else statusEl.textContent = 'All locations placed on the map.';
+    if (missing > 0) statusEl.textContent = placed + ' saved locations shown. ' + missing + ' ' + (missing === 1 ? 'entry needs' : 'entries need') + ' a selected location or pin.';
+    else statusEl.textContent = placed ? 'All saved locations shown.' : 'No saved locations for this view yet. Use Find location or Set pin in an entry.';
   }
-  updateStatus();
 
   for (var i = 0; i < points.length; i++) {
     var p = points[i];
-    var coords = await resolve(p.query);
-    if (myGeneration !== mapState.generation) return; // superseded — stop here
-    done++;
-    if (coords) addPoint(p.category, coords, p.label, p.sub); else missing++;
-    updateStatus();
-    if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+    var areaDrawn = p.category === 'destinations' && addDestinationArea(p, boundaries[p.boundaryRef]);
+    if (p.coords) { addPoint(p.category, p.coords, p.label, p.sub, p.stale); placed++; }
+    else if (!areaDrawn) missing++;
+    else placed++;
   }
 
   for (var j = 0; j < legs.length; j++) {
     var leg = legs[j];
-    // A leg that already carries a real coordinate (see mapLegsForTrip)
-    // skips Nominatim entirely for that end — no network round-trip,
-    // no rate-limit wait, and no risk of the free-text lookup just not
-    // resolving (which is what made routes like SFO–ICN not show up
-    // here before). Only legs without one still go through resolve().
-    var fromCoords = leg.fromCoords || await resolve(leg.fromQuery);
-    if (myGeneration !== mapState.generation) return;
-    done++; updateStatus();
-    var toCoords = leg.toCoords || await resolve(leg.toQuery);
-    if (myGeneration !== mapState.generation) return;
-    done++; updateStatus();
+    var fromCoords = leg.fromCoords;
+    var toCoords = leg.toCoords;
     if (fromCoords && toCoords) {
       var lineMeta = MAP_LAYER_META.filter(function (m) { return m.key === 'transport'; })[0];
       L.polyline([[fromCoords.lat, fromCoords.lng], [toCoords.lat, toCoords.lng]], {
@@ -4360,26 +4684,13 @@ async function initMap(trip) {
       }).bindPopup('<strong>' + esc(leg.label) + '</strong>').addTo(layers.transport);
       addDirectionArrow(fromCoords, toCoords, lineMeta.color);
       bounds.push([fromCoords.lat, fromCoords.lng], [toCoords.lat, toCoords.lng]);
+      placed++;
     } else {
       missing++;
     }
-    if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
   }
-
-  if (Object.keys(newEntries).length) {
-    updateState(function (next) {
-      var t = byId(next.trips, trip.tripId, 'tripId');
-      if (!t) return;
-      t.geocodeCache = t.geocodeCache || {};
-      Object.keys(newEntries).forEach(function (k) { t.geocodeCache[k] = newEntries[k]; });
-    });
-    // updateState() -> persist() -> render() will call initMap() again
-    // straight away (we're still on the Map tab) — and since every place
-    // looked up just now is in the cache, that second pass resolves
-    // everything instantly with no further network calls. That's the
-    // simplest way to both save what we just learned AND end up with one
-    // clean, fully-drawn map, so we don't bother finishing this pass.
-  }
+  updateStatus();
+  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
 }
 
 /* ---------- 20. Render: Timeline tab ---------------------------------------
@@ -4677,6 +4988,23 @@ document.addEventListener('click', function (e) {
     }
     return;
   }
+  if (action === 'map-day-prev' || action === 'map-day-next') {
+    if (!trip) return;
+    var mapDays = tripDayList(trip);
+    var mapDayIndex = mapDays.indexOf(mapState.day);
+    var direction = action === 'map-day-prev' ? -1 : 1;
+    if (mapDayIndex >= 0 && mapDays[mapDayIndex + direction]) {
+      mapState.day = mapDays[mapDayIndex + direction];
+      mapState.wholeTrip = false;
+      render();
+    }
+    return;
+  }
+  if (action === 'map-show-whole-trip') {
+    mapState.wholeTrip = !mapState.wholeTrip;
+    render();
+    return;
+  }
   if (action === 'lookup-flight') { performFlightLookup(el); return; }
   if (action === 'logout') { doLogout(); return; }
   if (action === 'open-avatar-picker') { openAvatarPicker(); return; }
@@ -4705,6 +5033,45 @@ document.addEventListener('click', function (e) {
   if (action === 'edit-trip') { openTripForm(byId(state.trips, el.dataset.id, 'tripId')); return; }
   if (action === 'delete-trip') { deleteTrip(el.dataset.id); return; }
   if (action === 'export-csv') { exportCsv(trip); return; }
+
+  if (action === 'search-location') {
+    var searchPicker = el.closest('[data-location-picker]');
+    if (searchPicker) searchLocationPicker(searchPicker);
+    return;
+  }
+  if (action === 'select-location-result') {
+    var resultPicker = el.closest('[data-location-picker]');
+    var resultIndex = Number(el.dataset.locationIndex);
+    var candidate = resultPicker && locationPickerResults[resultPicker.dataset.locationPrefix] && locationPickerResults[resultPicker.dataset.locationPrefix][resultIndex];
+    if (resultPicker && candidate) selectLocationResult(resultPicker, candidate);
+    return;
+  }
+  if (action === 'use-typed-location') {
+    var typedPicker = el.closest('[data-location-picker]');
+    if (typedPicker) {
+      var typedPrefix = typedPicker.dataset.locationPrefix;
+      ['Lat', 'Lng', 'LocationRef', 'LocationMethod', 'LocationGranularity', 'LocationKindLabel'].forEach(function (suffix) { pickerSet(typedPicker, typedPrefix + suffix, ''); });
+      pickerSet(typedPicker, typedPrefix + 'LocationStale', 'false');
+      if (typedPicker.dataset.boundaryPrefix) {
+        var boundaryPrefix = typedPicker.dataset.boundaryPrefix;
+        pickerSet(typedPicker, boundaryPrefix + 'Ref', ''); pickerSet(typedPicker, boundaryPrefix + 'Quality', 'none'); pickerSet(typedPicker, boundaryPrefix + 'Bbox', '');
+      }
+      var typedSummary = typedPicker.querySelector('[data-location-summary]');
+      if (typedSummary) typedSummary.hidden = true;
+      pickerHint(typedPicker, 'Saved as text only — it will remain unmapped until you search or set a pin.');
+    }
+    return;
+  }
+  if (action === 'set-location-pin') {
+    var pinPicker = el.closest('[data-location-picker]');
+    if (pinPicker) openLocationPickerMap(pinPicker, true);
+    return;
+  }
+  if (action === 'preview-location') {
+    var previewPicker = el.closest('[data-location-picker]');
+    if (previewPicker) openLocationPickerMap(previewPicker, false);
+    return;
+  }
 
   if (!trip) return;
   if (action === 'timeline-add-activity') {
@@ -4754,6 +5121,12 @@ document.addEventListener('click', function (e) {
 // (swaps in the Cash/Points/Combo fields), and the exchange-rate
 // checkbox (shows/hides its override input) — see openTransportForm().
 document.addEventListener('change', function (e) {
+  if (e.target.matches('[data-map-day-input]')) {
+    mapState.day = e.target.value;
+    mapState.wholeTrip = false;
+    render();
+    return;
+  }
   var cfg = window.__formConfig;
   if (!cfg || !cfg.reactiveKey) return;
   var keys = Array.isArray(cfg.reactiveKey) ? cfg.reactiveKey : [cfg.reactiveKey];

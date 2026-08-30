@@ -596,6 +596,23 @@ export default {
         return handleFlightLookup(url, env);
       }
 
+      // ---- Location search and durable destination boundaries ---------
+      // These routes intentionally sit behind the existing session check:
+      // LocationIQ's key stays in the Worker and address queries are not a
+      // public, unauthenticated service.
+      if (path === "/WayPoint/api/location-search") {
+        if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
+        return handleLocationSearch(url, env, user);
+      }
+      if (path === "/WayPoint/api/location-boundary") {
+        if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
+        return handleLocationBoundary(url, env, user);
+      }
+      if (path === "/WayPoint/api/location-boundaries") {
+        if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+        return handleLocationBoundaries(request, env);
+      }
+
       // ---- Account management (site-owner / uber-user only) -----------
       if (path === "/WayPoint/api/users") {
         if (!user.isUberUser) return jsonError(403, "Only the site owner's account can manage logins.");
@@ -718,6 +735,13 @@ const SAFE_DATE_PATTERN = /^$|^\d{4}-\d{2}-\d{2}$/;
 const SAFE_TIME_PATTERN = /^$|^\d{2}:\d{2}$/;
 const SAFE_DATETIME_PATTERN = /^$|^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
 const SAFE_CURRENCY_PATTERN = /^$|^[A-Z]{3}$/;
+const SAFE_LOCATION_REF_PATTERN = /^(?:liq:[NWR]\d{1,16}|local:airport:[A-Z]{3})$/;
+const SAFE_BOUNDARY_REF_PATTERN = /^liq:[WR]\d{1,16}$/;
+const LOCATION_METHOD_VALUES = new Set(["selected", "manual", "legacy_cache"]);
+const LOCATION_GRANULARITY_VALUES = new Set(["unknown", "address", "venue", "station", "airport", "locality", "area"]);
+const BOUNDARY_QUALITY_VALUES = new Set(["exact_simplified", "approximate_bbox", "none"]);
+const MAX_BOUNDARY_COORDINATES = 10000;
+const MAX_BOUNDARY_BYTES = 250 * 1024;
 const MAX_ITEMS_PER_LIST = 1000;
 // The browser exposes these as fixed dropdowns. Keep the stored taxonomy
 // equally bounded even for a hand-crafted save request; "Other" is the
@@ -726,10 +750,10 @@ const ACTIVITY_CATEGORY_VALUES = new Set(["Other", "Dining & drinks", "Tour / ex
 const ACCOMMODATION_TYPE_VALUES = new Set(["Other", "Hotel / hostel", "Apartment / holiday rental", "Guesthouse / B&B", "Resort", "Camping / glamping", "Friends / family", "Cruise ship"]);
 
 const ITEM_FIELDS = {
-  destinations: ["destinationId", "name", "country", "arriveDate", "departDate", "timezone", "companions", "notes"],
-  activities: ["activityId", "title", "category", "destinationId", "date", "startTime", "endTime", "location", "address", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes"],
-  transport: ["transportId", "mode", "carrier", "flightNumber", "licensePlate", "fromLocation", "toLocation", "departDateTime", "arriveDateTime", "paymentType", "costCurrency", "costAmount", "costRate", "pointsProgram", "pointsAmount", "bookingRef", "contactId", "receiptRef", "companions", "notes", "fromLat", "fromLng", "toLat", "toLng"],
-  accommodation: ["accommodationId", "name", "type", "destinationId", "address", "checkIn", "checkOut", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes"],
+  destinations: ["destinationId", "name", "country", "arriveDate", "departDate", "timezone", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel", "bbox", "boundaryRef", "boundaryQuality"],
+  activities: ["activityId", "title", "category", "destinationId", "date", "startTime", "endTime", "location", "address", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel"],
+  transport: ["transportId", "mode", "carrier", "flightNumber", "licensePlate", "fromLocation", "toLocation", "departDateTime", "arriveDateTime", "paymentType", "costCurrency", "costAmount", "costRate", "pointsProgram", "pointsAmount", "bookingRef", "contactId", "receiptRef", "companions", "notes", "fromLat", "fromLng", "toLat", "toLng", "fromLocationRef", "toLocationRef", "fromLocationMethod", "toLocationMethod", "fromLocationGranularity", "toLocationGranularity", "fromLocationStale", "toLocationStale", "fromLocationKindLabel", "toLocationKindLabel"],
+  accommodation: ["accommodationId", "name", "type", "destinationId", "address", "checkIn", "checkOut", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel"],
   contacts: ["contactId", "name", "role", "phone", "email", "address", "notes"],
   expenses: ["expenseId", "description", "category", "date", "amount", "currency", "rateOverride", "receiptRef", "contactId", "notes"],
   companions: ["companionId", "name", "notes", "avatar", "accountId"],
@@ -758,6 +782,38 @@ function safeNumeric(value) {
   return typeof value === "number" ? number : String(number);
 }
 
+function safeCoordinate(value, axis) {
+  if (value === "" || value === null || value === undefined) return "";
+  const number = Number(value);
+  const limit = axis === "lat" ? 90 : 180;
+  if (!Number.isFinite(number) || number < -limit || number > limit) throw new Error("Invalid location coordinate in trip data.");
+  return number;
+}
+
+function safeLocationRef(value, boundaryOnly) {
+  const ref = safeText(value, 120);
+  if (!ref) return "";
+  if (!(boundaryOnly ? SAFE_BOUNDARY_REF_PATTERN : SAFE_LOCATION_REF_PATTERN).test(ref)) throw new Error("Invalid location reference in trip data.");
+  return ref;
+}
+
+function safeLocationValue(value, values, label) {
+  const text = safeText(value, 32);
+  if (!text) return "";
+  if (!values.has(text)) throw new Error("Invalid " + label + " in trip data.");
+  return text;
+}
+
+function safeBbox(value) {
+  if (value === "" || value === null || value === undefined) return [];
+  if (!Array.isArray(value) || value.length !== 4) throw new Error("Invalid location bounds in trip data.");
+  const bbox = value.map(Number);
+  if (!bbox.every(Number.isFinite) || bbox[0] < -180 || bbox[0] > 180 || bbox[2] < -180 || bbox[2] > 180 || bbox[1] < -90 || bbox[1] > 90 || bbox[3] < -90 || bbox[3] > 90 || bbox[0] > bbox[2] || bbox[1] > bbox[3]) {
+    throw new Error("Invalid location bounds in trip data.");
+  }
+  return bbox;
+}
+
 function sanitizeItem(listKey, item) {
   if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Invalid item in trip data.");
   const output = {};
@@ -766,6 +822,17 @@ function sanitizeItem(listKey, item) {
     const value = item[key];
     if (key === ITEM_ID_FIELDS[listKey]) output[key] = safeId(value, false);
     else if (/Id$/.test(key)) output[key] = safeId(value, true);
+    else if (key === "lat") output[key] = safeCoordinate(value, "lat");
+    else if (key === "lng") output[key] = safeCoordinate(value, "lng");
+    else if (key === "fromLat" || key === "toLat") output[key] = safeCoordinate(value, "lat");
+    else if (key === "fromLng" || key === "toLng") output[key] = safeCoordinate(value, "lng");
+    else if (key === "locationRef" || key === "fromLocationRef" || key === "toLocationRef") output[key] = safeLocationRef(value, false);
+    else if (key === "boundaryRef") output[key] = safeLocationRef(value, true);
+    else if (key === "locationMethod" || key === "fromLocationMethod" || key === "toLocationMethod") output[key] = safeLocationValue(value, LOCATION_METHOD_VALUES, "location method");
+    else if (key === "locationGranularity" || key === "fromLocationGranularity" || key === "toLocationGranularity") output[key] = safeLocationValue(value, LOCATION_GRANULARITY_VALUES, "location granularity");
+    else if (key === "boundaryQuality") output[key] = safeLocationValue(value, BOUNDARY_QUALITY_VALUES, "boundary quality");
+    else if (key === "locationStale" || key === "fromLocationStale" || key === "toLocationStale") output[key] = value === true;
+    else if (key === "bbox") output[key] = safeBbox(value);
     else if (listKey === "activities" && key === "category") {
       const category = safeText(value, 80);
       output.category = ACTIVITY_CATEGORY_VALUES.has(category) ? category : "Other";
@@ -1865,6 +1932,295 @@ async function handleFlightLookup(url, env) {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/* -------------------------------------------------------------------------
+ * Location search and boundary storage
+ *
+ * The browser only sees Waypoint's own result shape. LocationIQ's access
+ * token, response quirks and OSM identifiers remain behind this adapter.
+ * A saved destination references a shared boundary record; opening a map
+ * never calls the provider, only reads that record from KV.
+ * ---------------------------------------------------------------------- */
+
+const LOCATIONIQ_AUTOCOMPLETE_URL = "https://api.locationiq.com/v1/autocomplete";
+const LOCATIONIQ_LOOKUP_URL = "https://us1.locationiq.com/v1/lookup";
+const LOCATIONIQ_ATTRIBUTION = { label: "Search by LocationIQ.com", url: "https://locationiq.com/" };
+const LOCATION_CONTEXT_VALUES = new Set(["activity", "accommodation", "airport", "rail", "bus", "port", "transport", "destination"]);
+const LOCATION_SEARCH_WINDOW_MS = 15 * 60 * 1000;
+const LOCATION_SEARCH_MAX_PER_WINDOW = 36;
+
+function locationResponse(status, body) {
+  return new Response(JSON.stringify(body), { status: status, headers: { "Content-Type": "application/json" } });
+}
+
+function locationError(status, code, message) {
+  return locationResponse(status, { error: message, code: code });
+}
+
+function locationBbox(value) {
+  if (!Array.isArray(value) || value.length !== 4) return null;
+  // Nominatim-shaped LocationIQ results use [minLat, maxLat, minLng,
+  // maxLng] strings. Normalize once, here, into GeoJSON-style bounds.
+  const south = Number(value[0]);
+  const north = Number(value[1]);
+  const west = Number(value[2]);
+  const east = Number(value[3]);
+  if (![south, north, west, east].every(Number.isFinite) || south < -90 || north > 90 || west < -180 || east > 180 || south > north || west > east) return null;
+  return [west, south, east, north];
+}
+
+function locationLabel(value) {
+  return safeText(String(value || "").replace(/[_-]+/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); }), 80);
+}
+
+function locationGranularity(raw, area) {
+  if (area) return "area";
+  if (raw.class === "aeroway") return "airport";
+  if (raw.class === "railway" || raw.type === "station" || raw.type === "halt") return "station";
+  if (raw.class === "amenity" || raw.class === "tourism" || raw.class === "leisure") return "venue";
+  if (raw.class === "place" || raw.type === "city" || raw.type === "town" || raw.type === "village") return "locality";
+  return raw.address && (raw.address.road || raw.address.house_number) ? "address" : "unknown";
+}
+
+function locationScore(raw, context, area) {
+  const tags = ((raw.class || "") + ":" + (raw.type || "")).toLowerCase();
+  if (area) return /(place:|boundary:|park|reserve|protected)/.test(tags) ? 20 : 0;
+  const wanted = {
+    activity: /tourism:|amenity:(restaurant|cafe|bar|theatre|cinema)|leisure:/,
+    accommodation: /tourism:(hotel|hostel|guest_house|camp_site|caravan_site|resort)|building:apartments/,
+    airport: /aeroway:/,
+    rail: /railway:(station|halt)|public_transport:/,
+    bus: /amenity:bus_station|highway:bus_stop|public_transport:/,
+    port: /amenity:ferry_terminal|harbour:|waterway:/,
+    transport: /railway:|aeroway:|ferry|bus_station|public_transport:|harbour:/,
+  };
+  return wanted[context] && wanted[context].test(tags) ? 20 : 0;
+}
+
+function normalizeLocationResult(raw, kind, context) {
+  const lat = Number(raw && raw.lat);
+  const lng = Number(raw && raw.lon);
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) return null;
+  const osmType = String(raw.osm_type || "").toLowerCase();
+  const osmId = String(raw.osm_id || "");
+  const prefix = osmType === "node" ? "N" : (osmType === "way" ? "W" : (osmType === "relation" ? "R" : ""));
+  const ref = prefix && /^\d{1,16}$/.test(osmId) ? "liq:" + prefix + osmId : "";
+  const area = kind === "area";
+  const primary = raw.name || (raw.namedetails && raw.namedetails.name) || String(raw.display_name || "").split(",")[0] || "Unnamed place";
+  const result = {
+    locationRef: ref,
+    name: safeText(primary, 200),
+    formattedAddress: safeText(raw.display_name || primary, 500),
+    kindLabel: locationLabel(raw.type || raw.class || (area ? "area" : "place")),
+    lat: lat,
+    lng: lng,
+    granularity: locationGranularity(raw, area),
+    bbox: locationBbox(raw.boundingbox),
+    boundaryRef: area && /^liq:[WR]\d{1,16}$/.test(ref) ? ref : "",
+    _score: locationScore(raw, context, area) + Number(raw.importance || 0),
+  };
+  return result;
+}
+
+async function fetchLocationIQ(url, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(function () { controller.abort(); }, timeoutMs || 5000);
+  try {
+    return await fetch(url, { signal: controller.signal, headers: { Accept: "application/json" } });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function takeLocationSearchSlot(env, user) {
+  const key = "location-rate:v1:" + user.id;
+  const now = Date.now();
+  let record = null;
+  try { record = JSON.parse(await env.WAYPOINT_KV.get(key)); } catch (err) { record = null; }
+  if (!record || !Number.isFinite(record.startedAt) || now - record.startedAt >= LOCATION_SEARCH_WINDOW_MS) record = { startedAt: now, count: 0 };
+  if (!Number.isFinite(record.count) || record.count < 0) record.count = 0;
+  if (record.count >= LOCATION_SEARCH_MAX_PER_WINDOW) return false;
+  record.count++;
+  await env.WAYPOINT_KV.put(key, JSON.stringify(record));
+  return true;
+}
+
+async function handleLocationSearch(url, env, user) {
+  const query = (url.searchParams.get("q") || "").trim();
+  const kind = (url.searchParams.get("kind") || "point").trim();
+  const context = (url.searchParams.get("context") || "transport").trim();
+  const country = (url.searchParams.get("country") || "").trim().toLowerCase();
+  const lat = url.searchParams.get("lat");
+  const lng = url.searchParams.get("lng");
+  if (query.length < 2 || query.length > 200) return locationError(400, "INVALID_QUERY", "Enter at least two characters to search.");
+  if (kind !== "point" && kind !== "area") return locationError(400, "INVALID_QUERY", "Invalid location search kind.");
+  if (!LOCATION_CONTEXT_VALUES.has(context)) return locationError(400, "INVALID_QUERY", "Invalid location search context.");
+  if (country && !/^[a-z]{2}$/.test(country)) return locationError(400, "INVALID_QUERY", "Invalid country filter.");
+  if (!env.LOCATIONIQ_API_KEY) return locationError(501, "LOCATION_NOT_CONFIGURED", "Location search is not configured yet.");
+  if (!(await takeLocationSearchSlot(env, user))) return locationError(429, "LOCATION_QUOTA_REACHED", "Too many location searches in a short time. Wait a few minutes or set a pin manually.");
+
+  const upstream = new URL(LOCATIONIQ_AUTOCOMPLETE_URL);
+  upstream.searchParams.set("key", env.LOCATIONIQ_API_KEY);
+  upstream.searchParams.set("q", query);
+  upstream.searchParams.set("limit", "10");
+  upstream.searchParams.set("dedupe", "1");
+  upstream.searchParams.set("normalizecity", "1");
+  if (country) upstream.searchParams.set("countrycodes", country);
+  const biasLat = Number(lat);
+  const biasLng = Number(lng);
+  if (lat !== null && lng !== null && lat !== "" && lng !== "" && Number.isFinite(biasLat) && biasLat >= -90 && biasLat <= 90 && Number.isFinite(biasLng) && biasLng >= -180 && biasLng <= 180) {
+    const d = 0.5;
+    upstream.searchParams.set("viewbox", [biasLng - d, biasLat + d, biasLng + d, biasLat - d].join(","));
+  }
+
+  let response;
+  try {
+    response = await fetchLocationIQ(upstream.toString(), 5000);
+  } catch (err) {
+    return locationError(504, "LOCATION_PROVIDER_TIMEOUT", "Location search timed out. Try again or set a pin manually.");
+  }
+  if (response.status === 404) return locationResponse(200, { results: [], attribution: LOCATIONIQ_ATTRIBUTION });
+  if (response.status === 429) return locationError(429, "LOCATION_QUOTA_REACHED", "Location search has reached its free allowance. You can still use a typed location or set a pin manually.");
+  if (response.status === 401 || response.status === 403) return locationError(502, "LOCATION_PROVIDER_UNAVAILABLE", "Location search is not available. Check the Worker secret and provider restrictions.");
+  if (!response.ok) return locationError(502, "LOCATION_PROVIDER_UNAVAILABLE", "Location search is temporarily unavailable.");
+  let rawResults;
+  try {
+    rawResults = await response.json();
+  } catch (err) {
+    return locationError(502, "LOCATION_PROVIDER_UNAVAILABLE", "Location search returned an unexpected response.");
+  }
+  const results = (Array.isArray(rawResults) ? rawResults : []).map(function (raw) {
+    return normalizeLocationResult(raw, kind, context);
+  }).filter(Boolean).sort(function (a, b) { return b._score - a._score; }).slice(0, 6).map(function (result) {
+    delete result._score;
+    return result;
+  });
+  return locationResponse(200, { results: results, attribution: LOCATIONIQ_ATTRIBUTION });
+}
+
+function geometryBbox(geometry) {
+  let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
+  const visit = function (value) {
+    if (typeof value[0] === "number") {
+      west = Math.min(west, value[0]); east = Math.max(east, value[0]);
+      south = Math.min(south, value[1]); north = Math.max(north, value[1]);
+      return;
+    }
+    value.forEach(visit);
+  };
+  visit(geometry.coordinates);
+  return [west, south, east, north];
+}
+
+function sanitizeBoundaryGeometry(geometry) {
+  if (!geometry || (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon") || !Array.isArray(geometry.coordinates)) return null;
+  let positions = 0;
+  let crossesAntimeridian = false;
+  const sanitizeRing = function (ring) {
+    if (!Array.isArray(ring) || ring.length < 4) return null;
+    const out = [];
+    let priorLng = null;
+    for (const position of ring) {
+      if (!Array.isArray(position) || position.length < 2) return null;
+      const lng = Number(position[0]);
+      const lat = Number(position[1]);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat) || lng < -180 || lng > 180 || lat < -90 || lat > 90) return null;
+      if (priorLng !== null && Math.abs(lng - priorLng) > 180) crossesAntimeridian = true;
+      priorLng = lng;
+      positions++;
+      if (positions > MAX_BOUNDARY_COORDINATES) return null;
+      out.push([lng, lat]);
+    }
+    return out;
+  };
+  let coordinates;
+  if (geometry.type === "Polygon") {
+    coordinates = geometry.coordinates.map(sanitizeRing);
+    if (coordinates.some(function (ring) { return !ring; })) return null;
+  } else {
+    coordinates = geometry.coordinates.map(function (polygon) {
+      if (!Array.isArray(polygon)) return null;
+      const out = polygon.map(sanitizeRing);
+      return out.some(function (ring) { return !ring; }) ? null : out;
+    });
+    if (coordinates.some(function (polygon) { return !polygon; })) return null;
+  }
+  // Leaflet cannot safely render a wrapped ring without splitting it. Until
+  // we add a true antimeridian splitter, a point fallback is honest and
+  // avoids drawing a band across the whole world.
+  if (crossesAntimeridian) return null;
+  const output = { type: geometry.type, coordinates: coordinates };
+  if (JSON.stringify(output).length > MAX_BOUNDARY_BYTES) return null;
+  return output;
+}
+
+function boundaryKey(ref) { return "boundary:v1:" + ref; }
+
+function parseBoundaryRecord(raw) {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw);
+    const geometry = sanitizeBoundaryGeometry(value.geometry);
+    if (!geometry) return null;
+    const bbox = safeBbox(value.bbox);
+    if (!bbox.length) return null;
+    return { geometry: geometry, geometryQuality: "exact_simplified", bbox: bbox, source: "openstreetmap" };
+  } catch (err) {
+    return null;
+  }
+}
+
+async function getStoredBoundary(env, ref) {
+  return parseBoundaryRecord(await env.WAYPOINT_KV.get(boundaryKey(ref)));
+}
+
+async function handleLocationBoundary(url, env, user) {
+  const ref = (url.searchParams.get("ref") || "").trim();
+  if (!SAFE_BOUNDARY_REF_PATTERN.test(ref)) return locationError(400, "INVALID_QUERY", "Invalid destination boundary reference.");
+  const stored = await getStoredBoundary(env, ref);
+  if (stored) return locationResponse(200, Object.assign({ ref: ref, attribution: LOCATIONIQ_ATTRIBUTION }, stored));
+  if (!env.LOCATIONIQ_API_KEY) return locationError(501, "LOCATION_NOT_CONFIGURED", "Location search is not configured yet.");
+  if (!(await takeLocationSearchSlot(env, user))) return locationError(429, "LOCATION_QUOTA_REACHED", "Too many location searches in a short time. Wait a few minutes or save this destination as a point.");
+
+  const upstream = new URL(LOCATIONIQ_LOOKUP_URL);
+  upstream.searchParams.set("key", env.LOCATIONIQ_API_KEY);
+  upstream.searchParams.set("osm_ids", ref.slice(4));
+  upstream.searchParams.set("polygon_geojson", "1");
+  upstream.searchParams.set("polygon_threshold", "0.003");
+  upstream.searchParams.set("format", "json");
+  let response;
+  try {
+    response = await fetchLocationIQ(upstream.toString(), 5000);
+  } catch (err) {
+    return locationError(504, "LOCATION_PROVIDER_TIMEOUT", "Destination boundary lookup timed out.");
+  }
+  if (response.status === 404) return locationError(404, "NO_BOUNDARY", "No boundary is available for this destination.");
+  if (response.status === 429) return locationError(429, "LOCATION_QUOTA_REACHED", "Location search has reached its free allowance.");
+  if (!response.ok) return locationError(502, "LOCATION_PROVIDER_UNAVAILABLE", "Destination boundary lookup is unavailable.");
+  let values;
+  try { values = await response.json(); } catch (err) { return locationError(502, "LOCATION_PROVIDER_UNAVAILABLE", "Destination boundary lookup returned an unexpected response."); }
+  const raw = Array.isArray(values) ? values[0] : null;
+  const geometry = sanitizeBoundaryGeometry(raw && raw.geojson);
+  if (!geometry) return locationError(404, "NO_BOUNDARY", "This destination has no usable boundary for the map.");
+  const bbox = locationBbox(raw && raw.boundingbox) || geometryBbox(geometry);
+  const record = { schemaVersion: 1, geometry: geometry, bbox: bbox, fetchedAt: new Date().toISOString() };
+  await env.WAYPOINT_KV.put(boundaryKey(ref), JSON.stringify(record));
+  return locationResponse(200, { ref: ref, geometry: geometry, geometryQuality: "exact_simplified", bbox: bbox, source: "openstreetmap", attribution: LOCATIONIQ_ATTRIBUTION });
+}
+
+async function handleLocationBoundaries(request, env) {
+  let body;
+  try { body = await request.json(); } catch (err) { return locationError(400, "INVALID_QUERY", "Boundary request body was invalid."); }
+  const refs = Array.isArray(body && body.refs) ? body.refs : [];
+  if (refs.length > 20) return locationError(400, "INVALID_QUERY", "Request no more than 20 destination boundaries at once.");
+  const boundaries = {};
+  for (const ref of Array.from(new Set(refs))) {
+    if (typeof ref !== "string" || !SAFE_BOUNDARY_REF_PATTERN.test(ref)) continue;
+    const stored = await getStoredBoundary(env, ref);
+    if (stored) boundaries[ref] = stored;
+  }
+  return locationResponse(200, { boundaries: boundaries, attribution: LOCATIONIQ_ATTRIBUTION });
 }
 
 // `country` is read defensively — AeroDataBox's exact field name for
