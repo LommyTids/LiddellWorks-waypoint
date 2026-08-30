@@ -719,12 +719,17 @@ const SAFE_TIME_PATTERN = /^$|^\d{2}:\d{2}$/;
 const SAFE_DATETIME_PATTERN = /^$|^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
 const SAFE_CURRENCY_PATTERN = /^$|^[A-Z]{3}$/;
 const MAX_ITEMS_PER_LIST = 1000;
+// The browser exposes these as fixed dropdowns. Keep the stored taxonomy
+// equally bounded even for a hand-crafted save request; "Other" is the
+// safe fallback for old or unrecognised values.
+const ACTIVITY_CATEGORY_VALUES = new Set(["Other", "Dining & drinks", "Tour / experience", "Show / performance", "Culture & sights", "Outdoor / active", "Shopping", "Wellness", "Nightlife"]);
+const ACCOMMODATION_TYPE_VALUES = new Set(["Other", "Hotel / hostel", "Apartment / holiday rental", "Guesthouse / B&B", "Resort", "Camping / glamping", "Friends / family", "Cruise ship"]);
 
 const ITEM_FIELDS = {
   destinations: ["destinationId", "name", "country", "arriveDate", "departDate", "timezone", "companions", "notes"],
-  activities: ["activityId", "title", "destinationId", "date", "startTime", "endTime", "location", "address", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes"],
+  activities: ["activityId", "title", "category", "destinationId", "date", "startTime", "endTime", "location", "address", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes"],
   transport: ["transportId", "mode", "carrier", "flightNumber", "licensePlate", "fromLocation", "toLocation", "departDateTime", "arriveDateTime", "paymentType", "costCurrency", "costAmount", "costRate", "pointsProgram", "pointsAmount", "bookingRef", "contactId", "receiptRef", "companions", "notes", "fromLat", "fromLng", "toLat", "toLng"],
-  accommodation: ["accommodationId", "name", "destinationId", "address", "checkIn", "checkOut", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes"],
+  accommodation: ["accommodationId", "name", "type", "destinationId", "address", "checkIn", "checkOut", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes"],
   contacts: ["contactId", "name", "role", "phone", "email", "address", "notes"],
   expenses: ["expenseId", "description", "category", "date", "amount", "currency", "rateOverride", "receiptRef", "contactId", "notes"],
   companions: ["companionId", "name", "notes", "avatar", "accountId"],
@@ -761,6 +766,13 @@ function sanitizeItem(listKey, item) {
     const value = item[key];
     if (key === ITEM_ID_FIELDS[listKey]) output[key] = safeId(value, false);
     else if (/Id$/.test(key)) output[key] = safeId(value, true);
+    else if (listKey === "activities" && key === "category") {
+      const category = safeText(value, 80);
+      output.category = ACTIVITY_CATEGORY_VALUES.has(category) ? category : "Other";
+    } else if (listKey === "accommodation" && key === "type") {
+      const type = safeText(value, 80);
+      output.type = ACCOMMODATION_TYPE_VALUES.has(type) ? type : "Other";
+    }
     else if (key === "companions") output[key] = Array.isArray(value) ? value.slice(0, 100).map(function (id) { return safeId(id, false); }) : [];
     else if (key === "departDateTime" || key === "arriveDateTime" || key === "checkIn" || key === "checkOut") {
       const dateTime = safeText(value, 16);
