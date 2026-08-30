@@ -14,6 +14,7 @@ This release includes:
 
 - activity-category and accommodation-type dropdowns;
 - one shared location picker for destinations, activities, accommodation and transport endpoints;
+- independent activity venue and address locations, so an address can map even when a venue POI is unavailable;
 - explicit LocationIQ-backed place and address search through authenticated Worker endpoints;
 - local airport lookup and manual Leaflet pin placement;
 - persisted coordinates and location metadata on itinerary records;
@@ -92,7 +93,7 @@ Use a disposable test trip and the session test account. Do not modify a real it
 
 1. Add a destination such as `Dartmoor National Park` and select the intended area result.
 2. Preview the boundary, save, reopen the entry and confirm its mapped state remains.
-3. Add an activity and accommodation using **Find location**; verify venue/address results and formatted accommodation address.
+3. Add an activity with a venue and a separately selected address; verify both map when distinct, including an address for a venue absent from POI results. Add accommodation and verify its formatted address.
 4. Add train, bus or ferry endpoints and verify the same picker interaction is used.
 5. Add a flight using local airport results and confirm both endpoints map.
 6. Set one location with **Set pin manually**, save it, reload and confirm the pin remains.

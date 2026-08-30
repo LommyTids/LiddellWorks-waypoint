@@ -67,11 +67,11 @@ const saved = await jsonCall(env, "/WayPoint/api/data", "POST", { trips: [{
   tripId: "id_trip", name: "Trip", startDate: "", endDate: "", homeCurrency: "GBP", notes: "",
   currencyRates: {},
   destinations: [
-    { destinationId: "id_visible_dest", name: "Visible", country: "GB", arriveDate: "", departDate: "", timezone: "", companions: ["id_alice"], notes: "", lat: 51.5, lng: -0.12, locationRef: "liq:R123", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [-0.3, 51.4, 0, 51.6], boundaryRef: "liq:R123", boundaryQuality: "exact_simplified" },
+    { destinationId: "id_visible_dest", name: "Visible", country: "KR", arriveDate: "", departDate: "", timezone: "", companions: ["id_alice"], notes: "", lat: 37.57, lng: 126.98, locationRef: "liq:R123", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [37.4, 126.7, 37.7, 127.2], boundaryRef: "liq:R123", boundaryQuality: "exact_simplified" },
     { destinationId: "id_hidden_dest", name: "Secret address", country: "US", arriveDate: "", departDate: "", timezone: "", companions: ["id_other"], notes: "" },
   ],
   activities: [
-    { activityId: "id_visible_activity", title: "Visible activity", destinationId: "id_visible_dest", date: "2026-08-29", contactId: "id_visible_contact", companions: ["id_alice"], lat: 51.51, lng: -0.13, locationRef: "liq:N456", locationMethod: "selected", locationGranularity: "venue", locationKindLabel: "Museum", locationStale: false },
+    { activityId: "id_visible_activity", title: "Visible activity", destinationId: "id_visible_dest", date: "2026-08-29", contactId: "id_visible_contact", companions: ["id_alice"], lat: 51.51, lng: -0.13, locationRef: "liq:N456", locationMethod: "selected", locationGranularity: "venue", locationKindLabel: "Museum", locationStale: false, address: "1 Example Street", addressLat: 51.52, addressLng: -0.14, addressLocationRef: "liq:N457", addressLocationMethod: "selected", addressLocationGranularity: "address", addressLocationKindLabel: "Address", addressLocationStale: false },
     { activityId: "id_hidden_activity", title: "Hidden activity", destinationId: "id_hidden_dest", date: "2026-08-29", address: "Hidden street", contactId: "id_hidden_contact", companions: ["id_other"] },
   ],
   transport: [{ transportId: "id_transport", mode: "Flight", fromLocation: "LHR", toLocation: "JFK", departDateTime: "2026-09-01T10:30", arriveDateTime: "2026-09-01T13:30", companions: ["id_alice"], fromLat: 51.47, fromLng: -0.45, toLat: 40.64, toLng: -73.78, fromLocationRef: "local:airport:LHR", toLocationRef: "local:airport:JFK", fromLocationMethod: "selected", toLocationMethod: "selected", fromLocationGranularity: "airport", toLocationGranularity: "airport", fromLocationKindLabel: "Airport", toLocationKindLabel: "Airport", fromLocationStale: false, toLocationStale: false }],
@@ -90,7 +90,9 @@ assert.equal(Object.hasOwn(rawStoredTrip, "arbitraryTopLevel"), false);
 assert.equal(rawStoredTrip.transport[0].departDateTime, "2026-09-01T10:30");
 assert.equal(rawStoredTrip.accommodation[0].checkIn, "2026-09-01T15:00");
 assert.equal(rawStoredTrip.destinations[0].boundaryRef, "liq:R123");
+assert.deepEqual(rawStoredTrip.destinations[0].bbox, [126.7, 37.4, 127.2, 37.7]);
 assert.equal(rawStoredTrip.activities[0].locationKindLabel, "Museum");
+assert.equal(rawStoredTrip.activities[0].addressLocationRef, "liq:N457");
 assert.equal(rawStoredTrip.transport[0].toLocationRef, "local:airport:JFK");
 assert.equal(rawStoredTrip.accommodation[0].locationMethod, "manual");
 

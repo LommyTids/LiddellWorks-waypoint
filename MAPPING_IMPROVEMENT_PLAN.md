@@ -183,7 +183,7 @@ The shared picker is composed into each form rather than copied and modified:
 | Subsection | Existing domain fields | Location-picker context | Additional behaviour |
 | --- | --- | --- | --- |
 | Destination | Name, country, dates | `destination` | May fetch and preview a boundary after selection |
-| Activity | Name, category, date/time | `activity` | Bias toward venues, attractions, dining and the selected destination |
+| Activity | Name, category, date/time, venue and address | `activity` | Venue and address retain independent saved locations, so a mappable address can supplement a missing POI |
 | Accommodation | Name, type, dates | `accommodation` | Bias toward hotel/hostel, campsite, rental and other stays |
 | Flight endpoint | Airport name/code | `airport` | Search local IATA dataset first; provider results appear in the same UI |
 | Train endpoint | Station name | `rail` | Bias toward railway and metro stations |
