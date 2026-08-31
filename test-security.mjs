@@ -71,6 +71,7 @@ const saved = await jsonCall(env, "/WayPoint/api/data", "POST", { trips: [{
     { destinationId: "id_nominatim_dest", name: "Seoul", country: "KR", arriveDate: "", departDate: "", timezone: "", companions: [], notes: "", lat: 37.57, lng: 126.98, locationRef: "liq:R124", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [37.4, 37.7, 126.7, 127.2], boundaryRef: "liq:R124", boundaryQuality: "exact_simplified" },
     { destinationId: "id_cairo_dest", name: "Cairo", country: "EG", arriveDate: "", departDate: "", timezone: "", companions: [], notes: "", lat: 30.04, lng: 31.24, locationRef: "liq:R125", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [29.8, 30.2, 31.1, 31.5], boundaryRef: "liq:R125", boundaryQuality: "exact_simplified" },
     { destinationId: "id_canonical_dest", name: "New York", country: "US", arriveDate: "", departDate: "", timezone: "", companions: [], notes: "", lat: 40.72, lng: -74.01, locationRef: "liq:R126", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [-74.3, 40.4, -73.6, 40.9], boundaryRef: "liq:R126", boundaryQuality: "exact_simplified" },
+    { destinationId: "id_unknown_bbox_dest", name: "Fallback point", country: "MN", arriveDate: "", departDate: "", timezone: "", companions: [], notes: "", lat: 47.92, lng: 106.92, locationRef: "liq:R127", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [47.5, 48.3, 106.2, 999], boundaryRef: "", boundaryQuality: "none" },
     { destinationId: "id_hidden_dest", name: "Secret address", country: "US", arriveDate: "", departDate: "", timezone: "", companions: ["id_other"], notes: "" },
   ],
   activities: [
@@ -97,6 +98,7 @@ assert.deepEqual(rawStoredTrip.destinations[0].bbox, [126.7, 37.4, 127.2, 37.7])
 assert.deepEqual(rawStoredTrip.destinations[1].bbox, [126.7, 37.4, 127.2, 37.7]);
 assert.deepEqual(rawStoredTrip.destinations[2].bbox, [31.1, 29.8, 31.5, 30.2]);
 assert.deepEqual(rawStoredTrip.destinations[3].bbox, [-74.3, 40.4, -73.6, 40.9]);
+assert.deepEqual(rawStoredTrip.destinations[4].bbox, []);
 assert.equal(rawStoredTrip.activities[0].lat, undefined);
 assert.equal(rawStoredTrip.activities[0].addressLocationRef, "liq:N457");
 assert.equal(rawStoredTrip.transport[0].toLocationRef, "local:airport:JFK");
