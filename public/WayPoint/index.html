@@ -299,7 +299,7 @@ textarea { resize: vertical; min-height: 60px; }
 .location-picker-row { display: flex; gap: 8px; }
 .location-picker-row input { flex: 1; }
 .location-picker-row .btn { flex-shrink: 0; white-space: nowrap; }
-.location-results { margin-top: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
+.location-results { max-height: 288px; margin-top: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--surface); }
 .location-result { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 9px 10px; color: var(--ink); cursor: pointer; }
 .location-result:last-child { border-bottom: 0; }
 .location-result:hover, .location-result:focus { background: var(--surface-2); outline: none; }
@@ -515,9 +515,18 @@ tr:last-child td { border-bottom: none; }
 
 /* ---- 4h. Map tab ----------------------------------------------------- */
 .map-toggles { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
-.map-day-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-.map-day-controls .map-day-label { font-size: 13px; color: var(--ink-soft); margin-right: 2px; }
-.map-day-controls input[type="date"] { min-height: 36px; }
+.map-day-controls { margin-bottom: 14px; }
+.map-day-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; font-size: 12px; color: var(--ink-soft); }
+.map-day-summary strong { color: var(--ink); font-size: 13px; }
+.map-day-timeline { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 7px; }
+.map-day-scroll { min-width: 0; display: flex; align-items: center; overflow-x: auto; overflow-y: hidden; scroll-behavior: smooth; scrollbar-width: thin; padding: 4px 0 8px; background: linear-gradient(to bottom, transparent 48%, var(--line) 48%, var(--line) 52%, transparent 52%); }
+.map-day-tick { position: relative; z-index: 1; flex: 0 0 34px; height: 33px; padding: 0 0 14px; border: 0; background: transparent; color: var(--ink-soft); font: inherit; font-size: 11px; cursor: pointer; }
+.map-day-tick::after { content: ''; position: absolute; left: 50%; bottom: 3px; width: 8px; height: 8px; transform: translateX(-50%); border: 2px solid var(--surface); border-radius: 50%; background: var(--ink-faint); }
+.map-day-tick:hover, .map-day-tick:focus-visible { color: var(--ink); outline: none; }
+.map-day-tick:hover::after, .map-day-tick:focus-visible::after { background: var(--ink); }
+.map-day-tick.is-selected { color: var(--ink); font-weight: 700; }
+.map-day-tick.is-selected::after { width: 12px; height: 12px; bottom: 1px; background: var(--accent); }
+.map-day-actions { display: flex; justify-content: flex-end; margin-top: 7px; }
 .map-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); cursor: pointer; user-select: none; }
 .map-toggle input { margin: 0; cursor: pointer; }
 .map-toggle-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
@@ -1910,7 +1919,8 @@ var ACTIVITY_FORM_SECTIONS = [
     { key: 'date', label: 'Date', type: 'date', required: true, wide: true },
     { key: 'startTime', label: 'Start time', type: 'time' },
     { key: 'endTime', label: 'End time', type: 'time' },
-    { key: 'location', label: 'Venue or address', type: 'location-picker', wide: true, placeholder: 'e.g. a restaurant, museum or street address', locationPrefix: 'location', addressKey: 'address', locationContext: 'activity', locationKind: 'point', summaryLabel: 'Activity location' }
+    { key: 'location', label: 'Venue (optional)', type: 'text', wide: true, placeholder: 'e.g. Hawksmoor Steakhouse' },
+    { key: 'address', label: 'Address', type: 'location-picker', wide: true, placeholder: 'e.g. street address, neighbourhood or nearby landmark', locationPrefix: 'address', locationContext: 'activity', locationKind: 'point', locationValue: 'address', summaryLabel: 'Map location' }
   ] },
   { title: 'Booking and contact', hint: 'Optional confirmation details and the person or provider to contact.', collapsible: true, fields: [
     { key: 'bookingRef', label: 'Booking / confirmation #', type: 'text' },
@@ -2126,6 +2136,18 @@ function pickerInitial(record, prefix) {
   out[prefix + 'LocationGranularity'] = record.locationGranularity || '';
   out[prefix + 'LocationStale'] = !!record.locationStale;
   out[prefix + 'LocationKindLabel'] = record.locationKindLabel || '';
+  return out;
+}
+
+function activityAddressPickerInitial(record) {
+  var out = {};
+  out.addressLat = record.addressLat === undefined ? '' : record.addressLat;
+  out.addressLng = record.addressLng === undefined ? '' : record.addressLng;
+  out.addressLocationRef = record.addressLocationRef || '';
+  out.addressLocationMethod = record.addressLocationMethod || '';
+  out.addressLocationGranularity = record.addressLocationGranularity || '';
+  out.addressLocationStale = !!record.addressLocationStale;
+  out.addressLocationKindLabel = record.addressLocationKindLabel || '';
   return out;
 }
 
@@ -2346,7 +2368,7 @@ function openDestinationForm(trip, existing) {
 }
 
 function openActivityForm(trip, existing, seed) {
-  var initial = existing ? Object.assign({ category: 'Other' }, existing, pickerInitial(existing, 'location')) : Object.assign({ category: 'Other' }, seed || {});
+  var initial = existing ? Object.assign({ category: 'Other' }, existing, activityAddressPickerInitial(existing)) : Object.assign({ category: 'Other' }, seed || {});
   openForm({
     title: existing ? 'Edit activity' : 'Add activity',
     sections: sectionsWithTagPickerLock(ACTIVITY_FORM_SECTIONS, !!existing && !canFullyEditTrip(trip)),
@@ -2354,11 +2376,13 @@ function openActivityForm(trip, existing, seed) {
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
-        var mapped = readPickerLocation(v, 'location');
+        var address = readPickerLocation(v, 'address');
         var rec = {
           activityId: existing ? existing.activityId : newId(), title: v.title, category: v.category || 'Other', destinationId: v.destinationId || '',
           date: v.date, startTime: v.startTime || '', endTime: v.endTime || '',
-          location: v.location || '', address: v.address || '', lat: mapped.lat, lng: mapped.lng, locationRef: mapped.locationRef, locationMethod: mapped.locationMethod, locationGranularity: mapped.locationGranularity, locationStale: mapped.locationStale, locationKindLabel: mapped.locationKindLabel, bookingRef: v.bookingRef || '',
+          location: v.location || '', address: v.address || '',
+          addressLat: address.lat, addressLng: address.lng, addressLocationRef: address.locationRef, addressLocationMethod: address.locationMethod, addressLocationGranularity: address.locationGranularity, addressLocationStale: address.locationStale, addressLocationKindLabel: address.locationKindLabel,
+          bookingRef: v.bookingRef || '',
           contactId: v.contactId || '', costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(),
           costRate: v.costRate || '', receiptRef: v.receiptRef || '', companions: readTagPicker(v, 'companions'), notes: v.notes || ''
         };
@@ -4489,7 +4513,10 @@ function mapPointsForTrip(trip) {
   });
   (trip.activities || []).forEach(function (a) {
     if (!mapDayVisible(a.date, a.date, mapState.day)) return;
-    points.push({ category: 'activities', coords: savedCoords(a, 'lat', 'lng'), label: a.title, sub: a.location || a.address, stale: a.locationStale });
+    var addressCoords = savedCoords(a, 'addressLat', 'addressLng');
+    // The venue is a note, not a geocoded place. Activity pins are always
+    // driven by their separately selected or manually pinned street address.
+    if (addressCoords) points.push({ category: 'activities', coords: addressCoords, label: a.title, sub: (a.location ? 'Venue: ' + a.location + ' · ' : '') + 'Address: ' + (a.address || 'Saved address'), stale: a.addressLocationStale });
   });
   (trip.accommodation || []).forEach(function (ac) {
     // Checkout day is included: a place is still useful map context until
@@ -4525,13 +4552,18 @@ function mapDayControlsHtml(trip) {
   if (!days.length) return '';
   if (days.indexOf(mapState.day) === -1) mapState.day = days[0];
   var index = days.indexOf(mapState.day);
+  var ticks = days.map(function (day) {
+    var selected = !mapState.wholeTrip && day === mapState.day;
+    return '<button type="button" class="map-day-tick' + (selected ? ' is-selected' : '') + '" data-action="map-day-select" data-day="' + esc(day) + '" aria-label="Show ' + esc(formatDateHeading(day)) + '"' + (selected ? ' aria-current="date"' : '') + '>' + Number(day.slice(8, 10)) + '</button>';
+  }).join('');
   return '<div class="map-day-controls">' +
-    '<span class="map-day-label">Map day</span>' +
-    '<button type="button" class="btn btn-small" data-action="map-day-prev" aria-label="Previous map day" ' + (index <= 0 ? 'disabled' : '') + '>‹</button>' +
-    '<input type="date" data-map-day-input aria-label="Map day" min="' + esc(days[0]) + '" max="' + esc(days[days.length - 1]) + '" value="' + esc(mapState.day) + '">' +
-    '<button type="button" class="btn btn-small" data-action="map-day-next" aria-label="Next map day" ' + (index >= days.length - 1 ? 'disabled' : '') + '>›</button>' +
-    '<button type="button" class="btn btn-small" data-action="map-show-whole-trip">' + (mapState.wholeTrip ? 'Show selected day' : 'Show whole trip') + '</button>' +
-    (mapState.wholeTrip ? '<span class="field-hint">Showing whole trip</span>' : '') +
+    '<div class="map-day-summary"><span>' + esc(formatDateShort(days[0])) + '</span><strong>' + (mapState.wholeTrip ? 'Whole trip' : esc(formatDateHeading(mapState.day))) + '</strong><span>' + esc(formatDateShort(days[days.length - 1])) + '</span></div>' +
+    '<div class="map-day-timeline">' +
+      '<button type="button" class="btn btn-icon" data-action="map-day-prev" aria-label="Previous map day" ' + (index <= 0 || mapState.wholeTrip ? 'disabled' : '') + '>‹</button>' +
+      '<div class="map-day-scroll" data-map-day-scroll role="list" aria-label="Trip days">' + ticks + '</div>' +
+      '<button type="button" class="btn btn-icon" data-action="map-day-next" aria-label="Next map day" ' + (index >= days.length - 1 || mapState.wholeTrip ? 'disabled' : '') + '>›</button>' +
+    '</div>' +
+    '<div class="map-day-actions"><button type="button" class="btn btn-ghost" data-action="map-show-whole-trip">' + (mapState.wholeTrip ? 'Return to selected day' : 'Show whole trip') + '</button></div>' +
   '</div>';
 }
 
@@ -4560,12 +4592,20 @@ function renderMapTab(trip) {
   );
 }
 
+function centreSelectedMapDay() {
+  var track = document.querySelector('[data-map-day-scroll]');
+  var selected = track && track.querySelector('.map-day-tick.is-selected');
+  if (!track || !selected) return;
+  track.scrollLeft = Math.max(0, selected.offsetLeft - (track.clientWidth - selected.offsetWidth) / 2);
+}
+
 // Builds (or rebuilds) the actual Leaflet map inside #map-canvas from
 // saved points, saved transport ends and cached destination boundaries.
 // Called from render() whenever the Map tab's HTML has just been drawn.
 async function initMap(trip) {
   var canvas = document.getElementById('map-canvas');
   if (!canvas) return; // the Map tab isn't the one currently on screen
+  centreSelectedMapDay();
 
   // A guard against a slow, still-running geocoding pass from an EARLIER
   // call to this function finishing after a NEWER call has already taken
@@ -5000,6 +5040,13 @@ document.addEventListener('click', function (e) {
     }
     return;
   }
+  if (action === 'map-day-select') {
+    if (!trip || !el.dataset.day) return;
+    mapState.day = el.dataset.day;
+    mapState.wholeTrip = false;
+    render();
+    return;
+  }
   if (action === 'map-show-whole-trip') {
     mapState.wholeTrip = !mapState.wholeTrip;
     render();
@@ -5121,12 +5168,6 @@ document.addEventListener('click', function (e) {
 // (swaps in the Cash/Points/Combo fields), and the exchange-rate
 // checkbox (shows/hides its override input) — see openTransportForm().
 document.addEventListener('change', function (e) {
-  if (e.target.matches('[data-map-day-input]')) {
-    mapState.day = e.target.value;
-    mapState.wholeTrip = false;
-    render();
-    return;
-  }
   var cfg = window.__formConfig;
   if (!cfg || !cfg.reactiveKey) return;
   var keys = Array.isArray(cfg.reactiveKey) ? cfg.reactiveKey : [cfg.reactiveKey];
