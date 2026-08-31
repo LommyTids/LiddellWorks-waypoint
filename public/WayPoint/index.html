@@ -513,25 +513,57 @@ tr:last-child td { border-bottom: none; }
   .trip-title-row h1 { font-size: 23px; }
 }
 
-/* ---- 4h. Map tab ----------------------------------------------------- */
-.map-toggles { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
-.map-day-controls { margin-bottom: 14px; }
-.map-day-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; font-size: 12px; color: var(--ink-soft); }
-.map-day-summary strong { color: var(--ink); font-size: 13px; }
-.map-day-timeline { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 7px; }
-.map-day-scroll { min-width: 0; display: flex; align-items: center; overflow-x: auto; overflow-y: hidden; scroll-behavior: smooth; scrollbar-width: thin; padding: 4px 0 8px; background: linear-gradient(to bottom, transparent 48%, var(--line) 48%, var(--line) 52%, transparent 52%); }
-.map-day-tick { position: relative; z-index: 1; flex: 0 0 34px; height: 33px; padding: 0 0 14px; border: 0; background: transparent; color: var(--ink-soft); font: inherit; font-size: 11px; cursor: pointer; }
-.map-day-tick::after { content: ''; position: absolute; left: 50%; bottom: 3px; width: 8px; height: 8px; transform: translateX(-50%); border: 2px solid var(--surface); border-radius: 50%; background: var(--ink-faint); }
-.map-day-tick:hover, .map-day-tick:focus-visible { color: var(--ink); outline: none; }
-.map-day-tick:hover::after, .map-day-tick:focus-visible::after { background: var(--ink); }
-.map-day-tick.is-selected { color: var(--ink); font-weight: 700; }
-.map-day-tick.is-selected::after { width: 12px; height: 12px; bottom: 1px; background: var(--accent); }
-.map-day-actions { display: flex; justify-content: flex-end; margin-top: 7px; }
-.map-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); cursor: pointer; user-select: none; }
-.map-toggle input { margin: 0; cursor: pointer; }
-.map-toggle-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-.map-canvas { height: 480px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface-2); }
-.map-status { font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
+/* ---- 4h. Map tab -----------------------------------------------------
+   The Map is intentionally allowed to use more horizontal space than the
+   itinerary/editor tabs: routes are spatial information, so squeezing them
+   into the normal reading-column width makes the view less useful. */
+.map-workspace { width: min(1240px, calc(100vw - 32px)); margin-left: 50%; transform: translateX(-50%); }
+.map-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.map-range-controls { flex: 1 1 520px; min-width: min(100%, 320px); }
+.map-range-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--ink-soft); font-size: 12px; }
+.map-range-summary strong { color: var(--ink); font-size: 14px; }
+.map-range-days { font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; }
+.map-range-slider { --range-start: 0%; --range-end: 100%; position: relative; height: 44px; margin: 0 8px; }
+.map-range-rail, .map-range-fill { position: absolute; top: 21px; height: 6px; border-radius: 999px; }
+.map-range-rail { left: 0; right: 0; background: var(--line); }
+.map-range-fill { left: var(--range-start); right: calc(100% - var(--range-end)); background: var(--accent); }
+.map-range-input { position: absolute; z-index: 2; top: 12px; left: -8px; width: calc(100% + 16px); height: 22px; margin: 0; appearance: none; -webkit-appearance: none; pointer-events: none; background: transparent; }
+.map-range-input::-webkit-slider-runnable-track { height: 6px; background: transparent; }
+.map-range-input::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -8px; appearance: none; -webkit-appearance: none; pointer-events: auto; cursor: grab; border: 3px solid var(--surface); border-radius: 50%; background: var(--accent); box-shadow: 0 1px 3px rgba(26,34,51,.28); }
+.map-range-input:active::-webkit-slider-thumb { cursor: grabbing; }
+.map-range-input::-moz-range-track { height: 6px; background: transparent; }
+.map-range-input::-moz-range-thumb { width: 16px; height: 16px; pointer-events: auto; cursor: grab; border: 3px solid var(--surface); border-radius: 50%; background: var(--accent); box-shadow: 0 1px 3px rgba(26,34,51,.28); }
+.map-range-input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
+.map-range-input:focus-visible::-moz-range-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
+.map-range-handle-label { position: absolute; top: 0; z-index: 3; transform: translateX(-50%); padding: 1px 5px; border-radius: 4px; background: var(--surface); color: var(--ink-soft); font-family: var(--font-mono); font-size: 10px; line-height: 1.2; pointer-events: none; white-space: nowrap; }
+.map-range-handle-label.is-start { left: var(--range-start); }
+.map-range-handle-label.is-end { left: var(--range-end); }
+.map-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.map-filter-bar { display: flex; gap: 6px; flex-wrap: wrap; }
+.map-filter-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-soft); font: inherit; font-size: 12.5px; cursor: pointer; }
+.map-filter-chip:hover { border-color: var(--ink-faint); color: var(--ink); }
+.map-filter-chip.is-active { border-color: var(--map-color); background: var(--map-soft); color: var(--ink); }
+.map-filter-chip .icon { width: 14px; height: 14px; color: var(--map-color); }
+.map-filter-count { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint); }
+.map-shell { position: relative; }
+.map-canvas { height: clamp(500px, 65dvh, 720px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
+.map-status { position: absolute; z-index: 600; left: 12px; bottom: 12px; max-width: min(420px, calc(100% - 24px)); padding: 6px 9px; border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--surface) 90%, transparent); box-shadow: var(--shadow); color: var(--ink-soft); font-size: 11.5px; pointer-events: none; backdrop-filter: blur(8px); }
+.map-status.has-warning { border-color: var(--accent); color: var(--ink); }
+.map-marker-icon { background: transparent; border: 0; }
+.map-marker { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 3px solid var(--surface); border-radius: 10px 10px 10px 2px; background: var(--map-color); color: #fff; box-shadow: 0 2px 5px rgba(26,34,51,.32); transform: rotate(-45deg); }
+.map-marker .icon { width: 16px; height: 16px; transform: rotate(45deg); }
+.map-marker.is-stale { opacity: .58; outline: 1px dashed var(--ink); outline-offset: 2px; }
+.map-marker-count { position: absolute; right: -7px; top: -7px; min-width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; padding: 0 3px; border: 2px solid var(--surface); border-radius: 999px; background: var(--ink); color: var(--surface); font-family: var(--font-mono); font-size: 9px; font-weight: 700; transform: rotate(45deg); }
+.map-marker-popup { display: flex; flex-direction: column; gap: 7px; }
+.map-marker-popup-item + .map-marker-popup-item { padding-top: 7px; border-top: 1px solid var(--line); }
+.map-marker-popup-title { display: flex; align-items: center; gap: 5px; font-weight: 650; }
+.map-marker-popup-title .icon { width: 14px; height: 14px; color: var(--map-color); }
+.map-marker-popup-sub { color: var(--ink-soft); font-size: 12px; }
+.map-route-popup { display: flex; flex-direction: column; gap: 3px; }
+.map-route-popup .map-route-meta { color: var(--ink-soft); font-size: 12px; }
+.map-shell:fullscreen { width: 100%; height: 100%; padding: 16px; background: var(--bg); }
+.map-shell:fullscreen .map-canvas { height: 100%; border-radius: 0; }
+.map-shell:fullscreen .map-status { left: 28px; bottom: 28px; }
 /* The little direction-of-travel triangle dropped at the midpoint of
    each transport leg (see addDirectionArrow() in the Map tab section).
    A plain CSS border-triangle rather than an image, so it's crisp at
@@ -552,6 +584,18 @@ tr:last-child td { border-bottom: none; }
    instead of Leaflet's plain-white default. */
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
 .leaflet-popup-content { font-family: var(--font-body); font-size: 13px; }
+
+@media (max-width: 640px) {
+  .map-workspace { width: 100%; margin-left: 0; transform: none; }
+  .map-toolbar { align-items: stretch; }
+  .map-range-controls { flex-basis: 100%; }
+  .map-actions { justify-content: space-between; }
+  .map-filter-bar { flex: 1; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .map-filter-bar::-webkit-scrollbar { display: none; }
+  .map-filter-chip { flex: 0 0 auto; }
+  .map-canvas { height: min(62dvh, 560px); min-height: 400px; border-radius: var(--radius-sm); }
+  .map-status { max-width: calc(100% - 20px); left: 10px; bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
 </style>
 </head>
 <body>
@@ -4489,13 +4533,41 @@ var mapState = {
   instance: null,
   layers: null,
   generation: 0,
-  day: '',
-  wholeTrip: false,
-  visibility: { destinations: true, activities: true, transport: true, accommodation: true }
+  tripId: '',
+  rangeStart: '',
+  rangeEnd: '',
+  visibility: { destinations: true, activities: true, transport: true, accommodation: true },
+  boundaries: {},
+  boundaryRequests: {},
+  routeArrows: [],
+  visibleBounds: null,
+  refreshFrame: null
 };
 
-function mapDayVisible(start, end, day) {
-  return mapState.wholeTrip || !day || ((!start || start <= day) && (!end || end >= day));
+function ensureMapRange(trip) {
+  var days = tripDayList(trip);
+  if (!days.length) {
+    mapState.tripId = trip.tripId;
+    mapState.rangeStart = '';
+    mapState.rangeEnd = '';
+    return days;
+  }
+  // A range belongs to one rendered trip only. A newly opened trip, or a
+  // trip whose dates changed, sensibly starts as the whole trip rather than
+  // inheriting a stale date from whatever was viewed before it.
+  if (mapState.tripId !== trip.tripId || days.indexOf(mapState.rangeStart) === -1 || days.indexOf(mapState.rangeEnd) === -1) {
+    mapState.tripId = trip.tripId;
+    mapState.rangeStart = days[0];
+    mapState.rangeEnd = days[days.length - 1];
+  }
+  return days;
+}
+
+function mapRangeVisible(start, end) {
+  if (!mapState.rangeStart || !mapState.rangeEnd) return true;
+  // Inclusive overlap: a multi-day stay, destination or overnight route is
+  // retained whenever any part of it falls inside the selected range.
+  return (!start || start <= mapState.rangeEnd) && (!end || end >= mapState.rangeStart);
 }
 
 function savedCoords(item, latKey, lngKey) {
@@ -4508,11 +4580,11 @@ function savedCoords(item, latKey, lngKey) {
 function mapPointsForTrip(trip) {
   var points = [];
   (trip.destinations || []).forEach(function (d) {
-    if (!mapDayVisible(d.arriveDate, d.departDate, mapState.day)) return;
+    if (!mapRangeVisible(d.arriveDate, d.departDate)) return;
     points.push({ category: 'destinations', coords: savedCoords(d, 'lat', 'lng'), label: d.name, sub: d.country, boundaryRef: d.boundaryRef || '', boundaryQuality: d.boundaryQuality || '', stale: d.locationStale });
   });
   (trip.activities || []).forEach(function (a) {
-    if (!mapDayVisible(a.date, a.date, mapState.day)) return;
+    if (!mapRangeVisible(a.date, a.date)) return;
     var addressCoords = savedCoords(a, 'addressLat', 'addressLng');
     // The venue is a note, not a geocoded place. Activity pins are always
     // driven by their separately selected or manually pinned street address.
@@ -4521,7 +4593,7 @@ function mapPointsForTrip(trip) {
   (trip.accommodation || []).forEach(function (ac) {
     // Checkout day is included: a place is still useful map context until
     // the traveller actually leaves it.
-    if (!mapDayVisible(dateOnly(ac.checkIn), dateOnly(ac.checkOut), mapState.day)) return;
+    if (!mapRangeVisible(dateOnly(ac.checkIn), dateOnly(ac.checkOut))) return;
     points.push({ category: 'accommodation', coords: savedCoords(ac, 'lat', 'lng'), label: ac.name, sub: ac.address, stale: ac.locationStale });
   });
   return points;
@@ -4537,44 +4609,80 @@ function mapPointsForTrip(trip) {
 // an endpoint still needs a selected location or manual pin.
 function mapLegsForTrip(trip) {
   return (trip.transport || []).filter(function (t) {
-    return t.fromLocation && t.toLocation && mapDayVisible(dateOnly(t.departDateTime), dateOnly(t.arriveDateTime), mapState.day);
+    return t.fromLocation && t.toLocation && mapRangeVisible(dateOnly(t.departDateTime), dateOnly(t.arriveDateTime));
   }).map(function (t) {
     return {
       label: transportLabel(t), mode: t.mode,
       fromCoords: savedCoords(t, 'fromLat', 'fromLng'), toCoords: savedCoords(t, 'toLat', 'toLng'),
-      fromStale: t.fromLocationStale, toStale: t.toLocationStale
+      fromStale: t.fromLocationStale, toStale: t.toLocationStale,
+      from: t.fromLocation, to: t.toLocation,
+      departDateTime: t.departDateTime, arriveDateTime: t.arriveDateTime
     };
   });
 }
 
-function mapDayControlsHtml(trip) {
-  var days = tripDayList(trip);
+function mapRangeDateLabel(day) {
+  if (!day) return '';
+  var parts = day.split('-').map(Number);
+  return parts[2] + ' ' + MONTHS[parts[1] - 1];
+}
+
+function mapRangeDayCount(trip) {
+  var days = ensureMapRange(trip);
+  var start = days.indexOf(mapState.rangeStart), end = days.indexOf(mapState.rangeEnd);
+  return start >= 0 && end >= start ? end - start + 1 : days.length;
+}
+
+function mapVisibleCounts(trip) {
+  var counts = { destinations: 0, activities: 0, transport: 0, accommodation: 0 };
+  mapPointsForTrip(trip).forEach(function (point) { counts[point.category]++; });
+  counts.transport = mapLegsForTrip(trip).length;
+  return counts;
+}
+
+function mapLayerIconName(layer) {
+  if (layer === 'destinations') return 'pin';
+  if (layer === 'activities') return 'ticket';
+  if (layer === 'accommodation') return 'bed';
+  return 'plane';
+}
+
+function mapRangeControlsHtml(trip) {
+  var days = ensureMapRange(trip);
   if (!days.length) return '';
-  if (days.indexOf(mapState.day) === -1) mapState.day = days[0];
-  var index = days.indexOf(mapState.day);
-  var ticks = days.map(function (day) {
-    var selected = !mapState.wholeTrip && day === mapState.day;
-    return '<button type="button" class="map-day-tick' + (selected ? ' is-selected' : '') + '" data-action="map-day-select" data-day="' + esc(day) + '" aria-label="Show ' + esc(formatDateHeading(day)) + '"' + (selected ? ' aria-current="date"' : '') + '>' + Number(day.slice(8, 10)) + '</button>';
-  }).join('');
-  return '<div class="map-day-controls">' +
-    '<div class="map-day-summary"><span>' + esc(formatDateShort(days[0])) + '</span><strong>' + (mapState.wholeTrip ? 'Whole trip' : esc(formatDateHeading(mapState.day))) + '</strong><span>' + esc(formatDateShort(days[days.length - 1])) + '</span></div>' +
-    '<div class="map-day-timeline">' +
-      '<button type="button" class="btn btn-icon" data-action="map-day-prev" aria-label="Previous map day" ' + (index <= 0 || mapState.wholeTrip ? 'disabled' : '') + '>‹</button>' +
-      '<div class="map-day-scroll" data-map-day-scroll role="list" aria-label="Trip days">' + ticks + '</div>' +
-      '<button type="button" class="btn btn-icon" data-action="map-day-next" aria-label="Next map day" ' + (index >= days.length - 1 || mapState.wholeTrip ? 'disabled' : '') + '>›</button>' +
+  var max = days.length - 1;
+  var startIndex = days.indexOf(mapState.rangeStart);
+  var endIndex = days.indexOf(mapState.rangeEnd);
+  var startPercent = max ? (startIndex / max * 100) : 0;
+  var endPercent = max ? (endIndex / max * 100) : 100;
+  return '<div class="map-range-controls">' +
+    '<div class="map-range-summary">' +
+      '<strong data-map-range-summary>' + esc(mapRangeDateLabel(mapState.rangeStart)) + ' — ' + esc(mapRangeDateLabel(mapState.rangeEnd)) + '</strong>' +
+      '<span class="map-range-days" data-map-range-days>' + mapRangeDayCount(trip) + ' day' + (mapRangeDayCount(trip) === 1 ? '' : 's') + '</span>' +
     '</div>' +
-    '<div class="map-day-actions"><button type="button" class="btn btn-ghost" data-action="map-show-whole-trip">' + (mapState.wholeTrip ? 'Return to selected day' : 'Show whole trip') + '</button></div>' +
+    '<div class="map-range-slider" data-map-range-slider style="--range-start:' + startPercent + '%;--range-end:' + endPercent + '%" aria-label="Map date range">' +
+      '<div class="map-range-rail"></div><div class="map-range-fill"></div>' +
+      '<input class="map-range-input" data-map-range-handle="start" type="range" min="0" max="' + max + '" step="1" value="' + startIndex + '" aria-label="Map range start: ' + esc(formatDateHeading(mapState.rangeStart)) + '">' +
+      '<input class="map-range-input" data-map-range-handle="end" type="range" min="0" max="' + max + '" step="1" value="' + endIndex + '" aria-label="Map range end: ' + esc(formatDateHeading(mapState.rangeEnd)) + '">' +
+      '<span class="map-range-handle-label is-start" data-map-range-start-label>' + esc(mapRangeDateLabel(mapState.rangeStart)) + '</span>' +
+      '<span class="map-range-handle-label is-end" data-map-range-end-label>' + esc(mapRangeDateLabel(mapState.rangeEnd)) + '</span>' +
+    '</div>' +
   '</div>';
 }
 
+function mapFiltersHtml(trip) {
+  var counts = mapVisibleCounts(trip);
+  return '<div class="map-filter-bar" role="group" aria-label="Map layers">' + MAP_LAYER_META.map(function (meta) {
+    var active = !!mapState.visibility[meta.key];
+    return '<button type="button" class="map-filter-chip' + (active ? ' is-active' : '') + '" data-action="toggle-map-layer" data-layer="' + meta.key + '" aria-pressed="' + active + '" style="--map-color:' + meta.color + ';--map-soft:' + (meta.key === 'destinations' ? 'var(--teal-soft)' : 'var(--surface-2)') + '">' +
+      icon(mapLayerIconName(meta.key)) + '<span>' + esc(meta.label) + '</span><span class="map-filter-count">' + counts[meta.key] + '</span></button>';
+  }).join('') + '</div>';
+}
+
 function renderMapTab(trip) {
+  ensureMapRange(trip);
   var points = mapPointsForTrip(trip);
   var legs = mapLegsForTrip(trip);
-  var toggles = MAP_LAYER_META.map(function (m) {
-    var checked = mapState.visibility[m.key] ? 'checked' : '';
-    return '<label class="map-toggle"><input type="checkbox" data-action="toggle-map-layer" data-layer="' + m.key + '" ' + checked + '>' +
-      '<span class="map-toggle-dot" style="background:' + m.color + '"></span>' + esc(m.label) + '</label>';
-  }).join('');
 
   if (!points.length && !legs.length && !(trip.destinations || []).length && !(trip.activities || []).length && !(trip.transport || []).length && !(trip.accommodation || []).length) {
     return '<div class="tab-panel-head"><h2>Map</h2></div><div class="empty-state">' + icon('map') +
@@ -4583,154 +4691,362 @@ function renderMapTab(trip) {
   }
 
   return (
-    '<div class="tab-panel-head"><h2>Map</h2></div>' +
-    mapDayControlsHtml(trip) +
-    '<div class="map-toggles">' + toggles + '</div>' +
-    '<div id="map-canvas" class="map-canvas"></div>' +
-    '<div id="map-status" class="map-status">Loading map…</div>' +
-    '<p class="field-hint" style="margin-top:8px">This map uses only locations you have selected or pinned. Find location in an entry to add it here; destination areas are shaded when boundary data is available.</p>'
+    '<div class="map-workspace">' +
+      '<div class="map-toolbar">' +
+        mapRangeControlsHtml(trip) +
+        '<div class="map-actions">' + mapFiltersHtml(trip) +
+          '<button type="button" class="btn btn-ghost" data-action="map-fit-selection">Fit selection</button>' +
+          '<button type="button" class="btn btn-icon" data-action="map-toggle-fullscreen" aria-label="Expand map" title="Expand map">' + icon('arrowRight') + '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="map-shell" class="map-shell">' +
+        '<div id="map-canvas" class="map-canvas"></div>' +
+        '<div id="map-status" class="map-status">Loading map…</div>' +
+      '</div>' +
+    '</div>'
   );
 }
 
-function centreSelectedMapDay() {
-  var track = document.querySelector('[data-map-day-scroll]');
-  var selected = track && track.querySelector('.map-day-tick.is-selected');
-  if (!track || !selected) return;
-  track.scrollLeft = Math.max(0, selected.offsetLeft - (track.clientWidth - selected.offsetWidth) / 2);
+function mapLayerMeta(key) {
+  return MAP_LAYER_META.filter(function (meta) { return meta.key === key; })[0];
 }
 
-// Builds (or rebuilds) the actual Leaflet map inside #map-canvas from
-// saved points, saved transport ends and cached destination boundaries.
-// Called from render() whenever the Map tab's HTML has just been drawn.
+function normalizeLongitude(lng) {
+  while (lng > 180) lng -= 360;
+  while (lng < -180) lng += 360;
+  return lng;
+}
+
+function toRadians(value) { return value * Math.PI / 180; }
+function toDegrees(value) { return value * 180 / Math.PI; }
+
+// A transport leg is a schematic connection, not a road or rail route.
+// For long-haul trips, though, drawing the shortest path over the globe is
+// both more honest and much easier to read than a flat diagonal across a
+// Mercator map. The route is sampled along a great circle, then split at
+// the date line so Leaflet never draws a false line across the whole world.
+function greatCircleRoute(from, to) {
+  var lat1 = toRadians(from.lat), lng1 = toRadians(from.lng);
+  var lat2 = toRadians(to.lat), lng2 = toRadians(to.lng);
+  var cosAngle = Math.sin(lat1) * Math.sin(lat2) + Math.cos(lat1) * Math.cos(lat2) * Math.cos(lng2 - lng1);
+  var angle = Math.acos(Math.max(-1, Math.min(1, cosAngle)));
+  var segmentCount = Math.max(12, Math.min(96, Math.ceil(toDegrees(angle) / 2)));
+  var points = [];
+
+  for (var i = 0; i <= segmentCount; i++) {
+    var fraction = i / segmentCount;
+    var weightA, weightB;
+    if (angle < 0.000001 || Math.abs(Math.sin(angle)) < 0.000001) {
+      weightA = 1 - fraction; weightB = fraction;
+    } else {
+      var sinAngle = Math.sin(angle);
+      weightA = Math.sin((1 - fraction) * angle) / sinAngle;
+      weightB = Math.sin(fraction * angle) / sinAngle;
+    }
+    var x = weightA * Math.cos(lat1) * Math.cos(lng1) + weightB * Math.cos(lat2) * Math.cos(lng2);
+    var y = weightA * Math.cos(lat1) * Math.sin(lng1) + weightB * Math.cos(lat2) * Math.sin(lng2);
+    var z = weightA * Math.sin(lat1) + weightB * Math.sin(lat2);
+    points.push({ lat: toDegrees(Math.atan2(z, Math.sqrt(x * x + y * y))), lng: normalizeLongitude(toDegrees(Math.atan2(y, x))) });
+  }
+
+  var routeSegments = [];
+  var section = [[points[0].lat, points[0].lng]];
+  var prior = { lat: points[0].lat, lng: points[0].lng };
+  for (var p = 1; p < points.length; p++) {
+    var current = { lat: points[p].lat, lng: points[p].lng };
+    while (current.lng - prior.lng > 180) current.lng -= 360;
+    while (current.lng - prior.lng < -180) current.lng += 360;
+    var delta = current.lng - prior.lng;
+    var crossing = null;
+    if (delta > 0) {
+      var eastBoundary = 180 + 360 * Math.floor((prior.lng + 180) / 360);
+      if (eastBoundary < current.lng) crossing = eastBoundary;
+    } else if (delta < 0) {
+      var westBoundary = -180 + 360 * Math.floor((prior.lng + 180) / 360);
+      if (westBoundary > current.lng) crossing = westBoundary;
+    }
+    if (crossing !== null) {
+      var crossingFraction = (crossing - prior.lng) / delta;
+      var crossingLat = prior.lat + (current.lat - prior.lat) * crossingFraction;
+      section.push([crossingLat, crossing > 0 ? 180 : -180]);
+      routeSegments.push(section);
+      section = [[crossingLat, crossing > 0 ? -180 : 180]];
+    }
+    section.push([current.lat, normalizeLongitude(current.lng)]);
+    prior = current;
+  }
+  routeSegments.push(section);
+
+  var arrowIndex = Math.max(1, Math.min(points.length - 1, Math.round((points.length - 1) * 0.58)));
+  return { points: points, segments: routeSegments, arrowBefore: points[arrowIndex - 1], arrowAfter: points[arrowIndex] };
+}
+
+function routeStyleForMode(mode) {
+  var normalized = String(mode || '').toLowerCase();
+  return {
+    color: mapLayerMeta('transport').color,
+    weight: normalized === 'flight' ? 4.5 : 4,
+    opacity: normalized === 'car' || normalized === 'bus' ? 0.76 : 0.9,
+    dashArray: normalized === 'flight' ? '10 8' : (normalized === 'ferry' ? '3 8' : null)
+  };
+}
+
+function routePopupHtml(leg) {
+  var timing = '';
+  if (leg.departDateTime || leg.arriveDateTime) {
+    var depart = leg.departDateTime ? formatDateShort(dateOnly(leg.departDateTime)) + (timeOnly(leg.departDateTime) ? ' · ' + timeOnly(leg.departDateTime) : '') : '—';
+    var arrive = leg.arriveDateTime ? formatDateShort(dateOnly(leg.arriveDateTime)) + (timeOnly(leg.arriveDateTime) ? ' · ' + timeOnly(leg.arriveDateTime) : '') : '—';
+    timing = '<div class="map-route-meta">' + esc(depart) + ' → ' + esc(arrive) + '</div>';
+  }
+  return '<div class="map-route-popup"><strong>' + esc(leg.label) + '</strong><div class="map-route-meta">' + esc(leg.from) + ' → ' + esc(leg.to) + '</div>' + timing + '<div class="map-route-meta">Route shown as a direct travel arc.</div></div>';
+}
+
+function mapMarkerIcon(category, stale, count) {
+  var meta = mapLayerMeta(category);
+  return L.divIcon({
+    className: 'map-marker-icon',
+    html: '<div class="map-marker' + (stale ? ' is-stale' : '') + '" style="--map-color:' + meta.color + '">' + icon(mapLayerIconName(category)) + (count > 1 ? '<span class="map-marker-count">' + count + '</span>' : '') + '</div>',
+    iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -28]
+  });
+}
+
+function pointPopupHtml(points) {
+  return '<div class="map-marker-popup">' + points.map(function (point) {
+    var meta = mapLayerMeta(point.category);
+    return '<div class="map-marker-popup-item"><div class="map-marker-popup-title" style="--map-color:' + meta.color + '">' + icon(mapLayerIconName(point.category)) + esc(point.label) + '</div>' +
+      (point.sub ? '<div class="map-marker-popup-sub">' + esc(point.sub) + '</div>' : '') +
+      (point.stale ? '<div class="map-marker-popup-sub">Location needs review</div>' : '') + '</div>';
+  }).join('') + '</div>';
+}
+
+function addRouteArrow(map, layer, before, after, color) {
+  var icon = L.divIcon({
+    className: 'transport-arrow-icon',
+    html: '<div class="transport-arrow" style="border-left-color:' + color + '"></div>',
+    iconSize: [16, 16], iconAnchor: [8, 8]
+  });
+  var marker = L.marker([after.lat, after.lng], { icon: icon, interactive: false, keyboard: false }).addTo(layer);
+  mapState.routeArrows.push({ marker: marker, before: before, after: after });
+}
+
+function updateMapRouteArrows() {
+  var map = mapState.instance;
+  if (!map) return;
+  mapState.routeArrows.forEach(function (routeArrow) {
+    var fromPoint = map.latLngToLayerPoint([routeArrow.before.lat, routeArrow.before.lng]);
+    var toPoint = map.latLngToLayerPoint([routeArrow.after.lat, routeArrow.after.lng]);
+    var angle = Math.atan2(toPoint.y - fromPoint.y, toPoint.x - fromPoint.x) * 180 / Math.PI;
+    var markerEl = routeArrow.marker.getElement();
+    var arrowEl = markerEl && markerEl.querySelector('.transport-arrow');
+    if (arrowEl) arrowEl.style.transform = 'rotate(' + angle + 'deg)';
+  });
+}
+
+function updateMapStatus(placed, missing) {
+  var statusEl = document.getElementById('map-status');
+  if (!statusEl) return;
+  if (missing > 0) {
+    statusEl.textContent = placed + ' mapped item' + (placed === 1 ? '' : 's') + ' in range · ' + missing + ' ' + (missing === 1 ? 'entry needs' : 'entries need') + ' a location.';
+    statusEl.classList.add('has-warning');
+  } else if (placed) {
+    statusEl.textContent = placed + ' mapped item' + (placed === 1 ? '' : 's') + ' in range.';
+    statusEl.classList.remove('has-warning');
+  } else {
+    statusEl.textContent = 'No mapped items in this date range yet.';
+    statusEl.classList.remove('has-warning');
+  }
+}
+
+// Leaflet's ordinary bounds treat -179° and +179° as almost a full world
+// apart. For fitting we instead find the smallest wrapped longitude window,
+// keeping Pacific trips compact while preserving normal city and continental
+// views. Leaflet can render longitudes outside ±180° when worldCopyJump is on.
+function wrappedMapBounds(coords) {
+  if (!coords.length) return null;
+  var minLat = Infinity, maxLat = -Infinity;
+  var longitudes = coords.map(function (coord) {
+    minLat = Math.min(minLat, coord.lat); maxLat = Math.max(maxLat, coord.lat);
+    return (normalizeLongitude(coord.lng) + 360) % 360;
+  }).sort(function (a, b) { return a - b; });
+  var largestGap = -1, gapIndex = 0;
+  for (var i = 0; i < longitudes.length; i++) {
+    var next = i === longitudes.length - 1 ? longitudes[0] + 360 : longitudes[i + 1];
+    var gap = next - longitudes[i];
+    if (gap > largestGap) { largestGap = gap; gapIndex = i; }
+  }
+  var west = longitudes[(gapIndex + 1) % longitudes.length];
+  var east = west + (360 - largestGap);
+  return L.latLngBounds([[minLat, west], [maxLat, east]]);
+}
+
+function refreshMapLayers(trip, fitToSelection) {
+  if (!mapState.instance || !mapState.layers) return;
+  var map = mapState.instance;
+  var layers = mapState.layers;
+  Object.keys(layers).forEach(function (key) { layers[key].clearLayers(); });
+  mapState.routeArrows = [];
+
+  var points = mapPointsForTrip(trip);
+  var legs = mapLegsForTrip(trip);
+  var pointGroups = {};
+  var bounds = L.latLngBounds([]);
+  var viewCoords = [];
+  var placed = 0, missing = 0;
+
+  function trackPoint(lat, lng) {
+    bounds.extend([lat, lng]);
+    viewCoords.push({ lat: lat, lng: lng });
+  }
+
+  function addDestinationArea(point) {
+    var boundary = mapState.boundaries[point.boundaryRef];
+    if (!boundary || !boundary.geometry) return false;
+    var meta = mapLayerMeta('destinations');
+    var area = L.geoJSON(boundary.geometry, {
+      style: { color: meta.color, weight: 2, opacity: point.stale ? 0.45 : 0.8, fillColor: meta.color, fillOpacity: point.stale ? 0.08 : 0.18, dashArray: point.stale ? '4 4' : null }
+    }).bindPopup(pointPopupHtml([point]));
+    area.addTo(layers.destinations);
+    if (area.getBounds && area.getBounds().isValid()) {
+      var areaBounds = area.getBounds();
+      bounds.extend(areaBounds);
+      viewCoords.push({ lat: areaBounds.getSouth(), lng: areaBounds.getWest() }, { lat: areaBounds.getNorth(), lng: areaBounds.getEast() });
+    }
+    return true;
+  }
+
+  points.forEach(function (point) {
+    var areaDrawn = point.category === 'destinations' && addDestinationArea(point);
+    if (!point.coords) {
+      if (areaDrawn) placed++;
+      else missing++;
+      return;
+    }
+    var coordinateKey = point.category + '|' + point.coords.lat.toFixed(5) + '|' + point.coords.lng.toFixed(5);
+    if (!pointGroups[coordinateKey]) pointGroups[coordinateKey] = [];
+    pointGroups[coordinateKey].push(point);
+  });
+
+  Object.keys(pointGroups).forEach(function (key) {
+    var groupedPoints = pointGroups[key];
+    var first = groupedPoints[0];
+    var needsReview = groupedPoints.some(function (point) { return !!point.stale; });
+    L.marker([first.coords.lat, first.coords.lng], { icon: mapMarkerIcon(first.category, needsReview, groupedPoints.length) })
+      .bindPopup(pointPopupHtml(groupedPoints)).addTo(layers[first.category]);
+    trackPoint(first.coords.lat, first.coords.lng);
+    placed += groupedPoints.length;
+  });
+
+  legs.forEach(function (leg) {
+    if (!leg.fromCoords || !leg.toCoords) { missing++; return; }
+    var route = greatCircleRoute(leg.fromCoords, leg.toCoords);
+    var style = routeStyleForMode(leg.mode);
+    route.segments.forEach(function (segment) {
+      L.polyline(segment, style).bindPopup(routePopupHtml(leg)).addTo(layers.transport);
+    });
+    addRouteArrow(map, layers.transport, route.arrowBefore, route.arrowAfter, style.color);
+    route.points.forEach(function (point) { trackPoint(point.lat, point.lng); });
+    placed++;
+  });
+
+  mapState.visibleBounds = wrappedMapBounds(viewCoords) || (bounds.isValid() ? bounds : null);
+  updateMapStatus(placed, missing);
+  requestAnimationFrame(updateMapRouteArrows);
+  if (fitToSelection && mapState.visibleBounds) map.fitBounds(mapState.visibleBounds, { padding: [34, 34], maxZoom: 12 });
+}
+
+function loadMapBoundaries(trip, generation) {
+  var refs = mapPointsForTrip(trip)
+    .filter(function (point) { return point.category === 'destinations' && point.boundaryRef && !mapState.boundaries[point.boundaryRef] && !mapState.boundaryRequests[point.boundaryRef]; })
+    .map(function (point) { return point.boundaryRef; })
+    .filter(function (ref, index, all) { return all.indexOf(ref) === index; })
+    .slice(0, 20);
+  if (!refs.length) return Promise.resolve();
+  refs.forEach(function (ref) { mapState.boundaryRequests[ref] = true; });
+  return fetch('/WayPoint/api/location-boundaries', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refs: refs })
+  }).then(function (response) {
+    return response.ok ? response.json() : null;
+  }).then(function (data) {
+    if (!data || mapState.generation !== generation) return;
+    Object.assign(mapState.boundaries, data.boundaries || {});
+    refreshMapLayers(trip, false);
+  }).catch(function () {
+    // A boundary is a visual enhancement. A transient failure must never stop
+    // pins or routes rendering, and retries remain possible on a later range.
+  }).finally(function () {
+    refs.forEach(function (ref) { delete mapState.boundaryRequests[ref]; });
+  });
+}
+
+function fitMapToSelection() {
+  if (mapState.instance && mapState.visibleBounds) mapState.instance.fitBounds(mapState.visibleBounds, { padding: [34, 34], maxZoom: 12 });
+}
+
+function updateMapRangeUi(trip) {
+  var days = ensureMapRange(trip);
+  if (!days.length) return;
+  var startIndex = days.indexOf(mapState.rangeStart), endIndex = days.indexOf(mapState.rangeEnd), max = days.length - 1;
+  var startPercent = max ? startIndex / max * 100 : 0;
+  var endPercent = max ? endIndex / max * 100 : 100;
+  var slider = document.querySelector('[data-map-range-slider]');
+  if (slider) {
+    slider.style.setProperty('--range-start', startPercent + '%');
+    slider.style.setProperty('--range-end', endPercent + '%');
+    var startInput = slider.querySelector('[data-map-range-handle="start"]');
+    var endInput = slider.querySelector('[data-map-range-handle="end"]');
+    if (startInput) { startInput.value = startIndex; startInput.setAttribute('aria-label', 'Map range start: ' + formatDateHeading(mapState.rangeStart)); }
+    if (endInput) { endInput.value = endIndex; endInput.setAttribute('aria-label', 'Map range end: ' + formatDateHeading(mapState.rangeEnd)); }
+  }
+  var summary = document.querySelector('[data-map-range-summary]');
+  var dayCount = mapRangeDayCount(trip);
+  var count = document.querySelector('[data-map-range-days]');
+  var startLabel = document.querySelector('[data-map-range-start-label]');
+  var endLabel = document.querySelector('[data-map-range-end-label]');
+  if (summary) summary.textContent = mapRangeDateLabel(mapState.rangeStart) + ' — ' + mapRangeDateLabel(mapState.rangeEnd);
+  if (count) count.textContent = dayCount + ' day' + (dayCount === 1 ? '' : 's');
+  if (startLabel) startLabel.textContent = mapRangeDateLabel(mapState.rangeStart);
+  if (endLabel) endLabel.textContent = mapRangeDateLabel(mapState.rangeEnd);
+  var layerCounts = mapVisibleCounts(trip);
+  MAP_LAYER_META.forEach(function (meta) {
+    var chip = document.querySelector('[data-action="toggle-map-layer"][data-layer="' + meta.key + '"]');
+    var chipCount = chip && chip.querySelector('.map-filter-count');
+    if (chipCount) chipCount.textContent = layerCounts[meta.key];
+  });
+}
+
+function scheduleMapRefresh(trip) {
+  if (mapState.refreshFrame) cancelAnimationFrame(mapState.refreshFrame);
+  mapState.refreshFrame = requestAnimationFrame(function () {
+    mapState.refreshFrame = null;
+    refreshMapLayers(trip, false);
+    loadMapBoundaries(trip, mapState.generation);
+  });
+}
+
+// Builds the Leaflet map only when the Map tab itself is mounted. Changing
+// filters or either date handle below deliberately updates layers in place.
 async function initMap(trip) {
   var canvas = document.getElementById('map-canvas');
-  if (!canvas) return; // the Map tab isn't the one currently on screen
-  centreSelectedMapDay();
-
-  // A guard against a slow, still-running geocoding pass from an EARLIER
-  // call to this function finishing after a NEWER call has already taken
-  // over (e.g. the viewer switched away from the Map tab and back again
-  // while lookups were still in flight). Every await below re-checks this
-  // before touching mapState or the DOM, so a stale call just quietly
-  // stops instead of clobbering whatever the newer call already built.
+  if (!canvas) return;
+  ensureMapRange(trip);
   mapState.generation++;
   var myGeneration = mapState.generation;
-
   if (mapState.instance) { mapState.instance.remove(); mapState.instance = null; mapState.layers = null; }
 
-  var map = L.map('map-canvas', { scrollWheelZoom: true }).setView([20, 0], 2);
+  var map = L.map('map-canvas', { scrollWheelZoom: true, worldCopyJump: true }).setView([20, 0], 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
   }).addTo(map);
-
   var layers = { destinations: L.layerGroup(), activities: L.layerGroup(), transport: L.layerGroup(), accommodation: L.layerGroup() };
   Object.keys(layers).forEach(function (key) { if (mapState.visibility[key]) layers[key].addTo(map); });
-
   mapState.instance = map;
   mapState.layers = layers;
+  map.on('zoomend', updateMapRouteArrows);
+  map.on('resize', updateMapRouteArrows);
 
-  var bounds = [];
-
-  function addPoint(category, coords, label, sub, stale) {
-    if (!coords) return;
-    var meta = MAP_LAYER_META.filter(function (m) { return m.key === category; })[0];
-    // A white ring around a near-opaque fill reads far more clearly
-    // against OpenStreetMap's busy, fairly light tiles than a
-    // same-colour ring blending into its own fill did — the pin pops
-    // instead of looking like a smudge, especially for the brighter
-    // category colours.
-    L.circleMarker([coords.lat, coords.lng], { radius: 8, color: '#ffffff', weight: 2, fillColor: meta.color, fillOpacity: stale ? 0.48 : 0.95, dashArray: stale ? '3 3' : null })
-      .bindPopup('<strong>' + esc(label) + '</strong>' + (sub ? '<br>' + esc(sub) : '') + (stale ? '<br><em>Location needs review</em>' : ''))
-      .addTo(layers[category]);
-    bounds.push([coords.lat, coords.lng]);
-  }
-
-  function addDestinationArea(point, boundary) {
-    if (!boundary || !boundary.geometry) return false;
-    var meta = MAP_LAYER_META.filter(function (m) { return m.key === 'destinations'; })[0];
-    var area = L.geoJSON(boundary.geometry, {
-      style: { color: meta.color, weight: 2, opacity: point.stale ? 0.45 : 0.8, fillColor: meta.color, fillOpacity: point.stale ? 0.08 : 0.18, dashArray: point.stale ? '4 4' : null }
-    }).bindPopup('<strong>' + esc(point.label) + '</strong>' + (point.sub ? '<br>' + esc(point.sub) : '') + (point.stale ? '<br><em>Location needs review</em>' : ''));
-    area.addTo(layers.destinations);
-    if (area.getBounds && area.getBounds().isValid()) bounds.push(area.getBounds());
-    return true;
-  }
-
-  // A small rotated triangle, dropped at the midpoint of a transport leg's
-  // line and pointing from "from" to "to", so the direction of travel is
-  // visible at a glance rather than only inferable from the popup text.
-  // Rotation is computed in the map's own projected pixel space (not raw
-  // lat/lng) so it always matches the straight line Leaflet actually
-  // draws on screen — and because that projection is conformal (angle
-  // preserving) at any given moment, the angle stays correct as the
-  // viewer zooms or pans afterwards; it's only ever recomputed here, when
-  // the leg is first drawn.
-  function addDirectionArrow(fromCoords, toCoords, color) {
-    var fromPt = map.project([fromCoords.lat, fromCoords.lng], map.getZoom());
-    var toPt = map.project([toCoords.lat, toCoords.lng], map.getZoom());
-    var midPt = L.point((fromPt.x + toPt.x) / 2, (fromPt.y + toPt.y) / 2);
-    var midLatLng = map.unproject(midPt, map.getZoom());
-    var angleDeg = Math.atan2(toPt.y - fromPt.y, toPt.x - fromPt.x) * 180 / Math.PI;
-    var icon = L.divIcon({
-      className: 'transport-arrow-icon',
-      html: '<div class="transport-arrow" style="border-left-color:' + color + ';transform:rotate(' + angleDeg + 'deg)"></div>',
-      iconSize: [16, 16], iconAnchor: [8, 8]
-    });
-    L.marker(midLatLng, { icon: icon, interactive: false, keyboard: false }).addTo(layers.transport);
-  }
-
-  var points = mapPointsForTrip(trip);
-  var legs = mapLegsForTrip(trip);
-  var missing = 0, placed = 0;
-  var statusEl = document.getElementById('map-status');
-
-  // Boundaries are retrieved in one small batch from Waypoint's KV-backed
-  // endpoint. It never calls the search provider while a map is opened.
-  var boundaryRefs = points.filter(function (p) { return p.category === 'destinations' && p.boundaryRef; }).map(function (p) { return p.boundaryRef; });
-  var boundaries = {};
-  if (boundaryRefs.length) {
-    try {
-      var boundaryResponse = await fetch('/WayPoint/api/location-boundaries', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refs: boundaryRefs.slice(0, 20) })
-      });
-      if (boundaryResponse.ok) boundaries = (await boundaryResponse.json()).boundaries || {};
-    } catch (err) { boundaries = {}; }
-    if (myGeneration !== mapState.generation) return;
-  }
-
-  function updateStatus() {
-    if (!statusEl) return;
-    if (missing > 0) statusEl.textContent = placed + ' saved locations shown. ' + missing + ' ' + (missing === 1 ? 'entry needs' : 'entries need') + ' a selected location or pin.';
-    else statusEl.textContent = placed ? 'All saved locations shown.' : 'No saved locations for this view yet. Use Find location or Set pin in an entry.';
-  }
-
-  for (var i = 0; i < points.length; i++) {
-    var p = points[i];
-    var areaDrawn = p.category === 'destinations' && addDestinationArea(p, boundaries[p.boundaryRef]);
-    if (p.coords) { addPoint(p.category, p.coords, p.label, p.sub, p.stale); placed++; }
-    else if (!areaDrawn) missing++;
-    else placed++;
-  }
-
-  for (var j = 0; j < legs.length; j++) {
-    var leg = legs[j];
-    var fromCoords = leg.fromCoords;
-    var toCoords = leg.toCoords;
-    if (fromCoords && toCoords) {
-      var lineMeta = MAP_LAYER_META.filter(function (m) { return m.key === 'transport'; })[0];
-      L.polyline([[fromCoords.lat, fromCoords.lng], [toCoords.lat, toCoords.lng]], {
-        color: lineMeta.color, weight: 4, opacity: 0.9, dashArray: leg.mode === 'Flight' ? '6 6' : null
-      }).bindPopup('<strong>' + esc(leg.label) + '</strong>').addTo(layers.transport);
-      addDirectionArrow(fromCoords, toCoords, lineMeta.color);
-      bounds.push([fromCoords.lat, fromCoords.lng], [toCoords.lat, toCoords.lng]);
-      placed++;
-    } else {
-      missing++;
-    }
-  }
-  updateStatus();
-  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+  refreshMapLayers(trip, true);
+  await loadMapBoundaries(trip, myGeneration);
 }
 
 /* ---------- 20. Render: Timeline tab ---------------------------------------
@@ -5016,40 +5332,30 @@ document.addEventListener('click', function (e) {
   if (action === 'back-to-dashboard') { currentView = 'dashboard'; currentTripId = null; render(); return; }
   if (action === 'switch-tab') { currentTab = el.dataset.tab; render(); return; }
   if (action === 'toggle-map-layer') {
-    // Handled directly against the live Leaflet map/layers rather than
-    // through updateState()/render() — this is a view preference, not
-    // trip data, and re-rendering would tear down and rebuild the whole
-    // map (see initMap()) just to flip one layer's visibility.
     var layerKey = el.dataset.layer;
-    mapState.visibility[layerKey] = el.checked;
+    if (!Object.prototype.hasOwnProperty.call(mapState.visibility, layerKey)) return;
+    // A filter is purely local view state. Flip its existing Leaflet layer
+    // rather than rerendering the page or disturbing the map viewport.
+    mapState.visibility[layerKey] = !mapState.visibility[layerKey];
     if (mapState.instance && mapState.layers && mapState.layers[layerKey]) {
-      if (el.checked) mapState.layers[layerKey].addTo(mapState.instance);
+      if (mapState.visibility[layerKey]) mapState.layers[layerKey].addTo(mapState.instance);
       else mapState.instance.removeLayer(mapState.layers[layerKey]);
     }
+    el.classList.toggle('is-active', mapState.visibility[layerKey]);
+    el.setAttribute('aria-pressed', String(mapState.visibility[layerKey]));
     return;
   }
-  if (action === 'map-day-prev' || action === 'map-day-next') {
-    if (!trip) return;
-    var mapDays = tripDayList(trip);
-    var mapDayIndex = mapDays.indexOf(mapState.day);
-    var direction = action === 'map-day-prev' ? -1 : 1;
-    if (mapDayIndex >= 0 && mapDays[mapDayIndex + direction]) {
-      mapState.day = mapDays[mapDayIndex + direction];
-      mapState.wholeTrip = false;
-      render();
+  if (action === 'map-fit-selection') { fitMapToSelection(); return; }
+  if (action === 'map-toggle-fullscreen') {
+    var mapShell = document.getElementById('map-shell');
+    if (!mapShell) return;
+    if (document.fullscreenElement === mapShell) {
+      document.exitFullscreen();
+    } else if (mapShell.requestFullscreen) {
+      mapShell.requestFullscreen().catch(function () { showToast('Full screen is not available in this browser'); });
+    } else {
+      showToast('Full screen is not available in this browser');
     }
-    return;
-  }
-  if (action === 'map-day-select') {
-    if (!trip || !el.dataset.day) return;
-    mapState.day = el.dataset.day;
-    mapState.wholeTrip = false;
-    render();
-    return;
-  }
-  if (action === 'map-show-whole-trip') {
-    mapState.wholeTrip = !mapState.wholeTrip;
-    render();
     return;
   }
   if (action === 'lookup-flight') { performFlightLookup(el); return; }
@@ -5156,6 +5462,35 @@ document.addEventListener('click', function (e) {
   if (action === 'new-expense') { openExpenseForm(trip); return; }
   if (action === 'edit-expense') { openExpenseForm(trip, byId(trip.expenses, el.dataset.id, 'expenseId')); return; }
   if (action === 'delete-expense') { deleteEntity(trip, 'expenses', el.dataset.id, 'expense'); return; }
+});
+
+// The two native range inputs are deliberately handled outside the generic
+// click dispatcher: `input` fires continuously while a handle is dragged,
+// which lets the map respond immediately without a full application render.
+document.addEventListener('input', function (e) {
+  var handle = e.target && e.target.dataset && e.target.dataset.mapRangeHandle;
+  if (!handle || currentView !== 'trip' || currentTab !== 'map') return;
+  var trip = currentTrip();
+  if (!trip) return;
+  var days = ensureMapRange(trip);
+  var value = Math.max(0, Math.min(days.length - 1, Number(e.target.value)));
+  var startIndex = days.indexOf(mapState.rangeStart);
+  var endIndex = days.indexOf(mapState.rangeEnd);
+  if (handle === 'start') mapState.rangeStart = days[Math.min(value, endIndex)];
+  else mapState.rangeEnd = days[Math.max(value, startIndex)];
+  updateMapRangeUi(trip);
+  scheduleMapRefresh(trip);
+});
+
+document.addEventListener('fullscreenchange', function () {
+  if (!mapState.instance) return;
+  // Leaflet measures its container only at construction time. Give the
+  // browser one frame to complete the fullscreen layout, then remeasure.
+  requestAnimationFrame(function () {
+    if (!mapState.instance) return;
+    mapState.instance.invalidateSize();
+    updateMapRouteArrows();
+  });
 });
 
 // Powers "reactive" forms: when a field named by the open form's
