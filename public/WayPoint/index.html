@@ -4541,7 +4541,8 @@ var mapState = {
   boundaryRequests: {},
   routeArrows: [],
   visibleBounds: null,
-  refreshFrame: null
+  refreshFrame: null,
+  currentTrip: null
 };
 
 function ensureMapRange(trip) {
@@ -4723,8 +4724,10 @@ function toDegrees(value) { return value * 180 / Math.PI; }
 // A transport leg is a schematic connection, not a road or rail route.
 // For long-haul trips, though, drawing the shortest path over the globe is
 // both more honest and much easier to read than a flat diagonal across a
-// Mercator map. The route is sampled along a great circle, then split at
-// the date line so Leaflet never draws a false line across the whole world.
+// Mercator map. The route is sampled along a great circle and its longitude
+// stays *unwrapped*: Tokyo → Los Angeles, for example, becomes 139° → 242°
+// rather than 139° → -118°. That lets Leaflet draw one continuous vector
+// across the Pacific instead of two pieces that appear broken at map edges.
 function greatCircleRoute(from, to) {
   var lat1 = toRadians(from.lat), lng1 = toRadians(from.lng);
   var lat2 = toRadians(to.lat), lng2 = toRadians(to.lng);
@@ -4746,39 +4749,34 @@ function greatCircleRoute(from, to) {
     var x = weightA * Math.cos(lat1) * Math.cos(lng1) + weightB * Math.cos(lat2) * Math.cos(lng2);
     var y = weightA * Math.cos(lat1) * Math.sin(lng1) + weightB * Math.cos(lat2) * Math.sin(lng2);
     var z = weightA * Math.sin(lat1) + weightB * Math.sin(lat2);
-    points.push({ lat: toDegrees(Math.atan2(z, Math.sqrt(x * x + y * y))), lng: normalizeLongitude(toDegrees(Math.atan2(y, x))) });
-  }
-
-  var routeSegments = [];
-  var section = [[points[0].lat, points[0].lng]];
-  var prior = { lat: points[0].lat, lng: points[0].lng };
-  for (var p = 1; p < points.length; p++) {
-    var current = { lat: points[p].lat, lng: points[p].lng };
-    while (current.lng - prior.lng > 180) current.lng -= 360;
-    while (current.lng - prior.lng < -180) current.lng += 360;
-    var delta = current.lng - prior.lng;
-    var crossing = null;
-    if (delta > 0) {
-      var eastBoundary = 180 + 360 * Math.floor((prior.lng + 180) / 360);
-      if (eastBoundary < current.lng) crossing = eastBoundary;
-    } else if (delta < 0) {
-      var westBoundary = -180 + 360 * Math.floor((prior.lng + 180) / 360);
-      if (westBoundary > current.lng) crossing = westBoundary;
+    var longitude = normalizeLongitude(toDegrees(Math.atan2(y, x)));
+    if (points.length) {
+      var previousLongitude = points[points.length - 1].lng;
+      while (longitude - previousLongitude > 180) longitude -= 360;
+      while (longitude - previousLongitude < -180) longitude += 360;
     }
-    if (crossing !== null) {
-      var crossingFraction = (crossing - prior.lng) / delta;
-      var crossingLat = prior.lat + (current.lat - prior.lat) * crossingFraction;
-      section.push([crossingLat, crossing > 0 ? 180 : -180]);
-      routeSegments.push(section);
-      section = [[crossingLat, crossing > 0 ? -180 : 180]];
-    }
-    section.push([current.lat, normalizeLongitude(current.lng)]);
-    prior = current;
+    points.push({ lat: toDegrees(Math.atan2(z, Math.sqrt(x * x + y * y))), lng: longitude });
   }
-  routeSegments.push(section);
 
   var arrowIndex = Math.max(1, Math.min(points.length - 1, Math.round((points.length - 1) * 0.58)));
-  return { points: points, segments: routeSegments, arrowBefore: points[arrowIndex - 1], arrowAfter: points[arrowIndex] };
+  return { points: points, arrowBefore: points[arrowIndex - 1], arrowAfter: points[arrowIndex] };
+}
+
+// Leaflet repeats the tile world but vector layers need to be placed in a
+// specific copy themselves. Reposition the entire unwrapped route into the
+// copy nearest the current view whenever panning finishes. Keeping one shared
+// offset preserves the short route and the arrow direction.
+function routeForMapView(route, centerLongitude) {
+  var first = route.points[0].lng;
+  var last = route.points[route.points.length - 1].lng;
+  var routeMidpoint = (first + last) / 2;
+  var offset = 360 * Math.round((centerLongitude - routeMidpoint) / 360);
+  function copyPoint(point) { return { lat: point.lat, lng: point.lng + offset }; }
+  return {
+    points: route.points.map(copyPoint),
+    arrowBefore: copyPoint(route.arrowBefore),
+    arrowAfter: copyPoint(route.arrowAfter)
+  };
 }
 
 function routeStyleForMode(mode) {
@@ -4882,6 +4880,7 @@ function wrappedMapBounds(coords) {
 function refreshMapLayers(trip, fitToSelection) {
   if (!mapState.instance || !mapState.layers) return;
   var map = mapState.instance;
+  mapState.currentTrip = trip;
   var layers = mapState.layers;
   Object.keys(layers).forEach(function (key) { layers[key].clearLayers(); });
   mapState.routeArrows = [];
@@ -4939,11 +4938,11 @@ function refreshMapLayers(trip, fitToSelection) {
   legs.forEach(function (leg) {
     if (!leg.fromCoords || !leg.toCoords) { missing++; return; }
     var route = greatCircleRoute(leg.fromCoords, leg.toCoords);
+    var renderedRoute = routeForMapView(route, map.getCenter().lng);
     var style = routeStyleForMode(leg.mode);
-    route.segments.forEach(function (segment) {
-      L.polyline(segment, style).bindPopup(routePopupHtml(leg)).addTo(layers.transport);
-    });
-    addRouteArrow(map, layers.transport, route.arrowBefore, route.arrowAfter, style.color);
+    L.polyline(renderedRoute.points.map(function (point) { return [point.lat, point.lng]; }), style)
+      .bindPopup(routePopupHtml(leg)).addTo(layers.transport);
+    addRouteArrow(map, layers.transport, renderedRoute.arrowBefore, renderedRoute.arrowAfter, style.color);
     route.points.forEach(function (point) { trackPoint(point.lat, point.lng); });
     placed++;
   });
@@ -5044,6 +5043,9 @@ async function initMap(trip) {
   mapState.layers = layers;
   map.on('zoomend', updateMapRouteArrows);
   map.on('resize', updateMapRouteArrows);
+  map.on('moveend', function () {
+    if (mapState.currentTrip) refreshMapLayers(mapState.currentTrip, false);
+  });
 
   refreshMapLayers(trip, true);
   await loadMapBoundaries(trip, myGeneration);

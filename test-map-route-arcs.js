@@ -9,29 +9,30 @@ const start = html.indexOf('function normalizeLongitude');
 const end = html.indexOf('function routeStyleForMode');
 if (start < 0 || end < 0) throw new Error('Could not locate map route helpers in index.html');
 
-const routes = new Function(html.slice(start, end) + '\nreturn { greatCircleRoute: greatCircleRoute };')();
+const routes = new Function(html.slice(start, end) + '\nreturn { greatCircleRoute: greatCircleRoute, routeForMapView: routeForMapView };')();
 
-function everyRenderedSegmentStaysLocal(route) {
-  route.segments.forEach(function (segment) {
-    for (let i = 1; i < segment.length; i++) {
-      assert(
-        Math.abs(segment[i][1] - segment[i - 1][1]) <= 180.001,
-        'a rendered segment must not cut across the full map at the date line'
-      );
-    }
-  });
+function everyRenderedStepStaysLocal(points) {
+  for (let i = 1; i < points.length; i++) {
+    assert(
+      Math.abs(points[i].lng - points[i - 1].lng) <= 180.001,
+      'an unwrapped route must never jump across the world'
+    );
+  }
 }
 
-// Tokyo → Los Angeles crosses the date line. It must render as two local
-// segments rather than a misleading line spanning almost the whole world.
+// Tokyo → Los Angeles crosses the date line. It must remain one continuous,
+// unwrapped arc so it can be drawn in the closest repeated map world.
 const pacific = routes.greatCircleRoute({ lat: 35.6762, lng: 139.6503 }, { lat: 34.0522, lng: -118.2437 });
-assert.strictEqual(pacific.segments.length, 2, 'Pacific route should split at the date line');
 assert(pacific.points.length > 12, 'long routes should be sampled into a visible arc');
-everyRenderedSegmentStaysLocal(pacific);
+everyRenderedStepStaysLocal(pacific.points);
+assert(pacific.points[pacific.points.length - 1].lng > 180, 'Pacific route should retain its unwrapped destination longitude');
+const pacificView = routes.routeForMapView(pacific, 180);
+assert(pacificView.points[0].lng > 0 && pacificView.points[pacificView.points.length - 1].lng > 180, 'Pacific-centred view should use the eastward world copy');
+const atlanticView = routes.routeForMapView(pacific, -180);
+assert(atlanticView.points[0].lng < 0 && atlanticView.points[atlanticView.points.length - 1].lng < 0, 'opposite view should use the adjacent westward world copy');
 
 // A normal Atlantic route remains a continuous great-circle arc.
 const atlantic = routes.greatCircleRoute({ lat: 40.7128, lng: -74.006 }, { lat: 51.5072, lng: -0.1276 });
-assert.strictEqual(atlantic.segments.length, 1, 'Atlantic route should not be unnecessarily split');
 assert(Math.abs(atlantic.points[0].lat - 40.7128) < 0.001, 'origin latitude should be preserved');
 assert(Math.abs(atlantic.points[atlantic.points.length - 1].lng + 0.1276) < 0.001, 'destination longitude should be preserved');
 
