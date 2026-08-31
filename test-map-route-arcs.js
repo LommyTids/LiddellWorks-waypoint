@@ -9,7 +9,7 @@ const start = html.indexOf('function normalizeLongitude');
 const end = html.indexOf('function routeStyleForMode');
 if (start < 0 || end < 0) throw new Error('Could not locate map route helpers in index.html');
 
-const routes = new Function(html.slice(start, end) + '\nreturn { greatCircleRoute: greatCircleRoute, routeForMapView: routeForMapView };')();
+const routes = new Function(html.slice(start, end) + '\nreturn { greatCircleRoute: greatCircleRoute, routeForMapView: routeForMapView, routeForSingleWorldView: routeForSingleWorldView };')();
 
 function everyRenderedStepStaysLocal(points) {
   for (let i = 1; i < points.length; i++) {
@@ -30,6 +30,13 @@ const pacificView = routes.routeForMapView(pacific, 180);
 assert(pacificView.points[0].lng > 0 && pacificView.points[pacificView.points.length - 1].lng > 180, 'Pacific-centred view should use the eastward world copy');
 const atlanticView = routes.routeForMapView(pacific, -180);
 assert(atlanticView.points[0].lng < 0 && atlanticView.points[atlanticView.points.length - 1].lng < 0, 'opposite view should use the adjacent westward world copy');
+const singleWorld = routes.routeForSingleWorldView(pacific);
+assert.strictEqual(singleWorld.segments.length, 2, 'single-world overview should split at its unavoidable edge');
+singleWorld.segments.forEach(function (segment) {
+  segment.forEach(function (point) {
+    assert(point[1] >= -180 && point[1] <= 180, 'single-world overview must stay inside one Earth copy');
+  });
+});
 
 // A normal Atlantic route remains a continuous great-circle arc.
 const atlantic = routes.greatCircleRoute({ lat: 40.7128, lng: -74.006 }, { lat: 51.5072, lng: -0.1276 });
@@ -39,5 +46,9 @@ assert(Math.abs(atlantic.points[atlantic.points.length - 1].lng + 0.1276) < 0.00
 assert(html.includes('data-map-range-handle="start"'), 'map should expose a draggable start handle');
 assert(html.includes('data-map-range-handle="end"'), 'map should expose a draggable end handle');
 assert(html.includes('data-action="map-fit-selection"'), 'map should expose a fit-selection action');
+assert(html.indexOf("{ key: 'destinations'") < html.indexOf("{ key: 'transport'"), 'destination filter should come before transport');
+assert(html.indexOf("{ key: 'transport'") < html.indexOf("{ key: 'accommodation'"), 'transport filter should come before accommodation');
+assert(html.indexOf("{ key: 'accommodation'") < html.indexOf("{ key: 'activities'"), 'accommodation filter should come before activities');
+assert(html.indexOf("'<div class=\"map-actions\">' + mapFiltersHtml(trip)") < html.indexOf('mapRangeControlsHtml(trip) +'), 'filter controls should appear above the date slider');
 
 console.log('map range and route-arc regression checks passed');
