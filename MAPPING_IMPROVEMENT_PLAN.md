@@ -53,7 +53,7 @@ Tile choice remains independent from Leaflet. The current OpenStreetMap raster b
 
 The primary workflow is:
 
-1. Enter a venue, address, destination or transport hub.
+1. Enter a destination, address, accommodation or transport hub. Activities keep their venue as a text note and search only their address.
 2. Select **Find location**, or press Enter.
 3. Review a short result list.
 4. Select and confirm the correct result.
@@ -129,7 +129,7 @@ Create one reusable `LocationPicker` used by all forms. Its standard presentatio
 
 ```text
 Location
-[ Venue, address, destination or transport hub        ]
+[ Address, destination or transport hub                ]
 [ Find location ]
 
 Selected location
@@ -183,7 +183,7 @@ The shared picker is composed into each form rather than copied and modified:
 | Subsection | Existing domain fields | Location-picker context | Additional behaviour |
 | --- | --- | --- | --- |
 | Destination | Name, country, dates | `destination` | May fetch and preview a boundary after selection |
-| Activity | Name, category, date/time, venue and address | `activity` | Venue and address retain independent saved locations, so a mappable address can supplement a missing POI |
+| Activity | Name, category, date/time, venue and address | `activity` | Venue is a text note; the separately selected or manually pinned address is the only map location |
 | Accommodation | Name, type, dates | `accommodation` | Bias toward hotel/hostel, campsite, rental and other stays |
 | Flight endpoint | Airport name/code | `airport` | Search local IATA dataset first; provider results appear in the same UI |
 | Train endpoint | Station name | `rail` | Bias toward railway and metro stations |

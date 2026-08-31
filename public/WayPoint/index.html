@@ -1919,8 +1919,8 @@ var ACTIVITY_FORM_SECTIONS = [
     { key: 'date', label: 'Date', type: 'date', required: true, wide: true },
     { key: 'startTime', label: 'Start time', type: 'time' },
     { key: 'endTime', label: 'End time', type: 'time' },
-    { key: 'location', label: 'Venue', type: 'location-picker', wide: true, placeholder: 'e.g. Hawksmoor or The Met Cloisters', locationPrefix: 'location', locationContext: 'activity', locationKind: 'point', summaryLabel: 'Venue location' },
-    { key: 'address', label: 'Address', type: 'location-picker', wide: true, placeholder: 'e.g. street address, neighbourhood or nearby landmark', locationPrefix: 'address', locationContext: 'activity', locationKind: 'point', locationValue: 'address', summaryLabel: 'Address location' }
+    { key: 'location', label: 'Venue (optional)', type: 'text', wide: true, placeholder: 'e.g. Hawksmoor Steakhouse' },
+    { key: 'address', label: 'Address', type: 'location-picker', wide: true, placeholder: 'e.g. street address, neighbourhood or nearby landmark', locationPrefix: 'address', locationContext: 'activity', locationKind: 'point', locationValue: 'address', summaryLabel: 'Map location' }
   ] },
   { title: 'Booking and contact', hint: 'Optional confirmation details and the person or provider to contact.', collapsible: true, fields: [
     { key: 'bookingRef', label: 'Booking / confirmation #', type: 'text' },
@@ -2368,7 +2368,7 @@ function openDestinationForm(trip, existing) {
 }
 
 function openActivityForm(trip, existing, seed) {
-  var initial = existing ? Object.assign({ category: 'Other' }, existing, pickerInitial(existing, 'location'), activityAddressPickerInitial(existing)) : Object.assign({ category: 'Other' }, seed || {});
+  var initial = existing ? Object.assign({ category: 'Other' }, existing, activityAddressPickerInitial(existing)) : Object.assign({ category: 'Other' }, seed || {});
   openForm({
     title: existing ? 'Edit activity' : 'Add activity',
     sections: sectionsWithTagPickerLock(ACTIVITY_FORM_SECTIONS, !!existing && !canFullyEditTrip(trip)),
@@ -2376,13 +2376,11 @@ function openActivityForm(trip, existing, seed) {
     onSubmit: function (v) {
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
-        var venue = readPickerLocation(v, 'location');
         var address = readPickerLocation(v, 'address');
         var rec = {
           activityId: existing ? existing.activityId : newId(), title: v.title, category: v.category || 'Other', destinationId: v.destinationId || '',
           date: v.date, startTime: v.startTime || '', endTime: v.endTime || '',
           location: v.location || '', address: v.address || '',
-          lat: venue.lat, lng: venue.lng, locationRef: venue.locationRef, locationMethod: venue.locationMethod, locationGranularity: venue.locationGranularity, locationStale: venue.locationStale, locationKindLabel: venue.locationKindLabel,
           addressLat: address.lat, addressLng: address.lng, addressLocationRef: address.locationRef, addressLocationMethod: address.locationMethod, addressLocationGranularity: address.locationGranularity, addressLocationStale: address.locationStale, addressLocationKindLabel: address.locationKindLabel,
           bookingRef: v.bookingRef || '',
           contactId: v.contactId || '', costAmount: v.costAmount || '', costCurrency: (v.costCurrency || '').toUpperCase(),
@@ -4515,16 +4513,10 @@ function mapPointsForTrip(trip) {
   });
   (trip.activities || []).forEach(function (a) {
     if (!mapDayVisible(a.date, a.date, mapState.day)) return;
-    var venueCoords = savedCoords(a, 'lat', 'lng');
     var addressCoords = savedCoords(a, 'addressLat', 'addressLng');
-    if (venueCoords) points.push({ category: 'activities', coords: venueCoords, label: a.title, sub: a.location ? 'Venue: ' + a.location : '', stale: a.locationStale });
-    // A restaurant or attraction can be absent from provider POI data while
-    // its street address is still easy to place. Keep both saved locations
-    // rather than making one overwrite the other; avoid two indistinguishable
-    // pins when they resolve to exactly the same coordinate.
-    if (addressCoords && (!venueCoords || addressCoords.lat !== venueCoords.lat || addressCoords.lng !== venueCoords.lng)) {
-      points.push({ category: 'activities', coords: addressCoords, label: a.title, sub: 'Address: ' + (a.address || 'Saved address'), stale: a.addressLocationStale });
-    }
+    // The venue is a note, not a geocoded place. Activity pins are always
+    // driven by their separately selected or manually pinned street address.
+    if (addressCoords) points.push({ category: 'activities', coords: addressCoords, label: a.title, sub: (a.location ? 'Venue: ' + a.location + ' · ' : '') + 'Address: ' + (a.address || 'Saved address'), stale: a.addressLocationStale });
   });
   (trip.accommodation || []).forEach(function (ac) {
     // Checkout day is included: a place is still useful map context until

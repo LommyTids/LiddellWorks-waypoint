@@ -751,7 +751,7 @@ const ACCOMMODATION_TYPE_VALUES = new Set(["Other", "Hotel / hostel", "Apartment
 
 const ITEM_FIELDS = {
   destinations: ["destinationId", "name", "country", "arriveDate", "departDate", "timezone", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel", "bbox", "boundaryRef", "boundaryQuality"],
-  activities: ["activityId", "title", "category", "destinationId", "date", "startTime", "endTime", "location", "address", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel", "addressLat", "addressLng", "addressLocationRef", "addressLocationMethod", "addressLocationGranularity", "addressLocationStale", "addressLocationKindLabel"],
+  activities: ["activityId", "title", "category", "destinationId", "date", "startTime", "endTime", "location", "address", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "addressLat", "addressLng", "addressLocationRef", "addressLocationMethod", "addressLocationGranularity", "addressLocationStale", "addressLocationKindLabel"],
   transport: ["transportId", "mode", "carrier", "flightNumber", "licensePlate", "fromLocation", "toLocation", "departDateTime", "arriveDateTime", "paymentType", "costCurrency", "costAmount", "costRate", "pointsProgram", "pointsAmount", "bookingRef", "contactId", "receiptRef", "companions", "notes", "fromLat", "fromLng", "toLat", "toLng", "fromLocationRef", "toLocationRef", "fromLocationMethod", "toLocationMethod", "fromLocationGranularity", "toLocationGranularity", "fromLocationStale", "toLocationStale", "fromLocationKindLabel", "toLocationKindLabel"],
   accommodation: ["accommodationId", "name", "type", "destinationId", "address", "checkIn", "checkOut", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel"],
   contacts: ["contactId", "name", "role", "phone", "email", "address", "notes"],
@@ -804,7 +804,7 @@ function safeLocationValue(value, values, label) {
   return text;
 }
 
-function normaliseBbox(value) {
+function normaliseBbox(value, centre) {
   if (!Array.isArray(value) || value.length !== 4) return null;
   const raw = value.map(Number);
   if (!raw.every(Number.isFinite)) return null;
@@ -813,21 +813,38 @@ function normaliseBbox(value) {
       south >= -90 && south <= 90 && north >= -90 && north <= 90 &&
       west <= east && south <= north;
   };
-  // Waypoint stores [west, south, east, north]. This is tried first so
-  // already-saved values always round-trip unchanged.
-  if (valid(raw[0], raw[1], raw[2], raw[3])) return raw;
-  // Some geocoders use Nominatim's [south, north, west, east] order.
-  if (valid(raw[2], raw[0], raw[3], raw[1])) return [raw[2], raw[0], raw[3], raw[1]];
-  // Others return [south, west, north, east]. Accept it at the storage
-  // boundary and normalize it once rather than rejecting valid places such
-  // as Seoul because longitude appears in the second position.
-  if (valid(raw[1], raw[0], raw[3], raw[2])) return [raw[1], raw[0], raw[3], raw[2]];
-  return null;
+  const candidates = [
+    raw, // Waypoint's stored [west, south, east, north] order.
+    [raw[2], raw[0], raw[3], raw[1]], // Nominatim / LocationIQ [south, north, west, east].
+    [raw[1], raw[0], raw[3], raw[2]] // [south, west, north, east].
+  ].filter(function (bbox) { return valid(bbox[0], bbox[1], bbox[2], bbox[3]); });
+  if (!candidates.length) return null;
+
+  // Some places (for example Cairo) can make more than one coordinate
+  // ordering look numerically valid. When the destination has a saved point,
+  // choose the bounds that contain it and whose centre is closest. That makes
+  // normalisation work in every latitude/longitude region, not only Seoul.
+  const lat = centre && centre.lat !== "" && centre.lat !== null && centre.lat !== undefined ? Number(centre.lat) : NaN;
+  const lng = centre && centre.lng !== "" && centre.lng !== null && centre.lng !== undefined ? Number(centre.lng) : NaN;
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    const containing = candidates.filter(function (bbox) {
+      return lng >= bbox[0] && lng <= bbox[2] && lat >= bbox[1] && lat <= bbox[3];
+    });
+    if (containing.length) {
+      containing.sort(function (a, b) {
+        const da = Math.pow((a[0] + a[2]) / 2 - lng, 2) + Math.pow((a[1] + a[3]) / 2 - lat, 2);
+        const db = Math.pow((b[0] + b[2]) / 2 - lng, 2) + Math.pow((b[1] + b[3]) / 2 - lat, 2);
+        return da - db;
+      });
+      return containing[0];
+    }
+  }
+  return candidates[0];
 }
 
-function safeBbox(value) {
+function safeBbox(value, centre) {
   if (value === "" || value === null || value === undefined) return [];
-  const bbox = normaliseBbox(value);
+  const bbox = normaliseBbox(value, centre);
   if (!bbox) throw new Error("Invalid location bounds in trip data.");
   return bbox;
 }
@@ -850,7 +867,7 @@ function sanitizeItem(listKey, item) {
     else if (key === "locationGranularity" || key === "fromLocationGranularity" || key === "toLocationGranularity" || key === "addressLocationGranularity") output[key] = safeLocationValue(value, LOCATION_GRANULARITY_VALUES, "location granularity");
     else if (key === "boundaryQuality") output[key] = safeLocationValue(value, BOUNDARY_QUALITY_VALUES, "boundary quality");
     else if (key === "locationStale" || key === "fromLocationStale" || key === "toLocationStale" || key === "addressLocationStale") output[key] = value === true;
-    else if (key === "bbox") output[key] = safeBbox(value);
+    else if (key === "bbox") output[key] = safeBbox(value, item);
     else if (listKey === "activities" && key === "category") {
       const category = safeText(value, 80);
       output.category = ACTIVITY_CATEGORY_VALUES.has(category) ? category : "Other";
@@ -2181,7 +2198,11 @@ function parseBoundaryRecord(raw) {
     const value = JSON.parse(raw);
     const geometry = sanitizeBoundaryGeometry(value.geometry);
     if (!geometry) return null;
-    const bbox = safeBbox(value.bbox);
+    const geometryBounds = geometryBbox(geometry);
+    const bbox = safeBbox(value.bbox, geometryBounds ? {
+      lat: (geometryBounds[1] + geometryBounds[3]) / 2,
+      lng: (geometryBounds[0] + geometryBounds[2]) / 2,
+    } : null);
     if (!bbox.length) return null;
     return { geometry: geometry, geometryQuality: "exact_simplified", bbox: bbox, source: "openstreetmap" };
   } catch (err) {
