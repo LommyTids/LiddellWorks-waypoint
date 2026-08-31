@@ -845,8 +845,10 @@ function normaliseBbox(value, centre) {
 function safeBbox(value, centre) {
   if (value === "" || value === null || value === undefined) return [];
   const bbox = normaliseBbox(value, centre);
-  if (!bbox) throw new Error("Invalid location bounds in trip data.");
-  return bbox;
+  // Bounds only improve map framing and are never needed to keep a trip
+  // record valid. Providers and older records can contain an unknown order,
+  // so fall back to a point rather than rejecting the entire save.
+  return bbox || [];
 }
 
 function sanitizeItem(listKey, item) {

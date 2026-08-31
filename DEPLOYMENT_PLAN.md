@@ -19,6 +19,7 @@ This release includes:
 - local airport lookup and manual Leaflet pin placement;
 - persisted coordinates and location metadata on itinerary records;
 - validated destination `Polygon` and `MultiPolygon` boundaries stored once in shared KV;
+- a point fallback when a provider or legacy record has unrecognised bounds, so an area can still save;
 - destination shading, saved point markers and transport lines in the existing Leaflet map;
 - a Map-tab day stepper and whole-trip view;
 - no browser-side Nominatim lookup and no geocoding merely from opening the Map tab;
