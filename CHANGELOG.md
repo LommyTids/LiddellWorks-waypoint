@@ -72,6 +72,19 @@
 - Direction arrows use adjacent points along the curve and are recalculated after zoom and resize events.
 - Bounds fitting now chooses the smallest wrapped longitude window, keeping Pacific routes compact.
 
+#### Seam-aware Pacific route wrapping
+
+**Layman’s explanation**
+
+- Flights and other journeys across the Pacific now remain visibly connected instead of appearing to stop at one side of the map and restart at the other.
+- As the map is panned around the world, the route follows the nearest copy of the map so it stays in view as one continuous journey.
+
+**Technical details**
+
+- Great-circle points now retain an unwrapped longitude sequence across the international date line (for example, Los Angeles is represented as 242°E when following a route from Tokyo).
+- Replaced date-line segment splitting with a single Leaflet polyline that selects its ±360° world copy from the current map centre.
+- Routes and direction arrows are recalculated after `moveend`, ensuring the vector layer stays aligned with Leaflet’s repeated map tiles.
+
 ### Verification
 
 - `node test-security.mjs` — passed.
