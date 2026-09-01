@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-09-01 — Global design tokens and typography
+
+### What changed
+
+- Replaced ambiguous legacy colour variables with a two-layer primitive and semantic token system used throughout the application.
+- Preserved WayPoint's approved light and dark palettes while giving canvas, surface, text, border, action, location and state colours explicit roles.
+- Tokenised destination, transport, accommodation and activity map colours, including softer chip treatments, and routed JavaScript-owned Leaflet styling through the same CSS source of truth.
+- Consolidated user-facing typography into six roles: Display, Heading, Body, Label, Meta and Micro. Body text and editable fields now use a 16px baseline, with a 32px mobile Display variant.
+- Replaced the remaining settings heading one-offs and assigned avatar/control glyphs to named asset-size tokens.
+- Added a design-token regression test to prevent legacy variables and arbitrary text sizes from returning.
+
+### Verification
+
+- `npm test` — passed, including security and design-token regression checks.
+- `node test-map-route-arcs.js` — passed.
+- All inline and referenced script blocks parsed successfully; all referenced CSS custom properties are defined.
+- Browser interaction tests could not start in this workspace because the configured Chromium executables are not installed.
+
 ## 2026-09-01 — Destination people defaults
 
 ### What changed

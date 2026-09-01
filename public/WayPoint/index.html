@@ -29,109 +29,187 @@
 
 /* ---- 1. Design tokens --------------------------------------- */
 :root {
-  --bg: #eef0ec;
-  --surface: #ffffff;
-  --surface-2: #e3e6dd;
-  --ink: #1a2233;
-  --ink-soft: #56607a;
-  --ink-faint: #838d9e;
-  --line: #d5d9cd;
-  --accent: #a6752b;
-  --accent-ink: #ffffff;
-  --accent-soft: #f3e6d2;
-  --teal: #1f6f63;
-  --teal-soft: #dcefe9;
-  --danger: #b24444;
-  --danger-soft: #f6e1df;
-  --success: #2f7d4f;
-  --success-soft: #dff0e3;
-  --shadow: 0 1px 2px rgba(26,34,51,.06), 0 8px 24px -12px rgba(26,34,51,.18);
+  /* Primitive interface palette. Avatar data colours and translucent
+     shadow/overlay effects are documented exceptions. */
+  --wp-color-mist-100: #eef0ec;
+  --wp-color-paper-0: #ffffff;
+  --wp-color-mist-200: #e3e6dd;
+  --wp-color-ink-900: #1a2233;
+  --wp-color-ink-600: #56607a;
+  --wp-color-ink-400: #838d9e;
+  --wp-color-line-300: #d5d9cd;
+  --wp-color-brass-600: #a6752b;
+  --wp-color-brass-100: #f3e6d2;
+  --wp-color-teal-700: #1f6f63;
+  --wp-color-teal-100: #dcefe9;
+  --wp-color-red-700: #b24444;
+  --wp-color-red-100: #f6e1df;
+  --wp-color-green-700: #2f7d4f;
+  --wp-color-green-100: #dff0e3;
+  --wp-color-night-950: #12161c;
+  --wp-color-night-900: #1b212b;
+  --wp-color-night-800: #232b37;
+  --wp-color-night-line: #2c3542;
+  --wp-color-paper-50: #edefea;
+  --wp-color-slate-300: #a2acbe;
+  --wp-color-slate-500: #6e788c;
+  --wp-color-brass-400: #d9a24b;
+  --wp-color-brass-900: #3a2d15;
+  --wp-color-teal-400: #4fbfae;
+  --wp-color-teal-900: #16302c;
+  --wp-color-red-400: #e08585;
+  --wp-color-red-900: #3a2020;
+  --wp-color-green-400: #6fcb94;
+  --wp-color-green-900: #1c3527;
+  --wp-color-map-blue: #1e88ff;
+  --wp-color-map-pink: #ff2d78;
+  --wp-color-map-orange: #ff8c1a;
+
+  /* Semantic colour roles used by application components. */
+  --wp-bg-canvas: var(--wp-color-mist-100);
+  --wp-bg-surface: var(--wp-color-paper-0);
+  --wp-bg-subdued: var(--wp-color-mist-200);
+  --wp-text-primary: var(--wp-color-ink-900);
+  --wp-text-secondary: var(--wp-color-ink-600);
+  --wp-text-muted: var(--wp-color-ink-400);
+  --wp-text-on-strong: var(--wp-color-paper-0);
+  --wp-border-default: var(--wp-color-line-300);
+  --wp-border-strong: var(--wp-color-ink-400);
+  --wp-action-primary: var(--wp-color-ink-900);
+  --wp-action-accent: var(--wp-color-brass-600);
+  --wp-action-accent-subtle: var(--wp-color-brass-100);
+  --wp-context-location: var(--wp-color-teal-700);
+  --wp-context-location-subtle: var(--wp-color-teal-100);
+  --wp-state-danger: var(--wp-color-red-700);
+  --wp-state-danger-subtle: var(--wp-color-red-100);
+  --wp-state-success: var(--wp-color-green-700);
+  --wp-state-success-subtle: var(--wp-color-green-100);
+  --wp-map-destination: var(--wp-context-location);
+  --wp-map-transport: var(--wp-color-map-blue);
+  --wp-map-accommodation: var(--wp-color-map-pink);
+  --wp-map-activity: var(--wp-color-map-orange);
+  --wp-map-destination-subtle: var(--wp-context-location-subtle);
+  --wp-map-transport-subtle: color-mix(in srgb, var(--wp-map-transport) 14%, var(--wp-bg-subdued));
+  --wp-map-accommodation-subtle: color-mix(in srgb, var(--wp-map-accommodation) 14%, var(--wp-bg-subdued));
+  --wp-map-activity-subtle: color-mix(in srgb, var(--wp-map-activity) 14%, var(--wp-bg-subdued));
+  --wp-shadow-surface: 0 1px 2px rgba(26,34,51,.06), 0 8px 24px -12px rgba(26,34,51,.18);
+
+  /* Six approved typography roles. */
+  --wp-font-display: "Fraunces", Georgia, serif;
+  --wp-font-body: "Work Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --wp-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --wp-type-display-size: 36px;
+  --wp-type-display-leading: 42px;
+  --wp-type-heading-size: 24px;
+  --wp-type-heading-leading: 30px;
+  --wp-type-body-size: 16px;
+  --wp-type-body-leading: 24px;
+  --wp-type-label-size: 14px;
+  --wp-type-label-leading: 20px;
+  --wp-type-meta-size: 12px;
+  --wp-type-meta-leading: 18px;
+  --wp-type-micro-size: 11px;
+  --wp-type-micro-leading: 16px;
+  --wp-type-display: 700 var(--wp-type-display-size)/var(--wp-type-display-leading) var(--wp-font-display);
+  --wp-type-heading: 600 var(--wp-type-heading-size)/var(--wp-type-heading-leading) var(--wp-font-display);
+  --wp-type-body: 400 var(--wp-type-body-size)/var(--wp-type-body-leading) var(--wp-font-body);
+  --wp-type-label: 600 var(--wp-type-label-size)/var(--wp-type-label-leading) var(--wp-font-body);
+  --wp-type-meta: 500 var(--wp-type-meta-size)/var(--wp-type-meta-leading) var(--wp-font-mono);
+  --wp-type-micro: 600 var(--wp-type-micro-size)/var(--wp-type-micro-leading) var(--wp-font-body);
+
+  /* Glyphs are visual assets rather than text, but still use named sizes. */
+  --wp-glyph-xs: 12px;
+  --wp-glyph-sm: 14px;
+  --wp-glyph-md: 16px;
+  --wp-glyph-lg: 18px;
+
   --radius: 12px;
   --radius-sm: 8px;
-  --font-display: "Fraunces", Georgia, serif;
-  --font-body: "Work Sans", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #12161c;
-    --surface: #1b212b;
-    --surface-2: #232b37;
-    --ink: #edefea;
-    --ink-soft: #a2acbe;
-    --ink-faint: #6e788c;
-    --line: #2c3542;
-    --accent: #d9a24b;
-    --accent-ink: #1a1206;
-    --accent-soft: #3a2d15;
-    --teal: #4fbfae;
-    --teal-soft: #16302c;
-    --danger: #e08585;
-    --danger-soft: #3a2020;
-    --success: #6fcb94;
-    --success-soft: #1c3527;
-    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    --wp-bg-canvas: var(--wp-color-night-950);
+    --wp-bg-surface: var(--wp-color-night-900);
+    --wp-bg-subdued: var(--wp-color-night-800);
+    --wp-text-primary: var(--wp-color-paper-50);
+    --wp-text-secondary: var(--wp-color-slate-300);
+    --wp-text-muted: var(--wp-color-slate-500);
+    --wp-text-on-strong: var(--wp-color-night-950);
+    --wp-border-default: var(--wp-color-night-line);
+    --wp-border-strong: var(--wp-color-slate-500);
+    --wp-action-primary: var(--wp-color-paper-50);
+    --wp-action-accent: var(--wp-color-brass-400);
+    --wp-action-accent-subtle: var(--wp-color-brass-900);
+    --wp-context-location: var(--wp-color-teal-400);
+    --wp-context-location-subtle: var(--wp-color-teal-900);
+    --wp-state-danger: var(--wp-color-red-400);
+    --wp-state-danger-subtle: var(--wp-color-red-900);
+    --wp-state-success: var(--wp-color-green-400);
+    --wp-state-success-subtle: var(--wp-color-green-900);
+    --wp-shadow-surface: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #12161c;
-  --surface: #1b212b;
-  --surface-2: #232b37;
-  --ink: #edefea;
-  --ink-soft: #a2acbe;
-  --ink-faint: #6e788c;
-  --line: #2c3542;
-  --accent: #d9a24b;
-  --accent-ink: #1a1206;
-  --accent-soft: #3a2d15;
-  --teal: #4fbfae;
-  --teal-soft: #16302c;
-  --danger: #e08585;
-  --danger-soft: #3a2020;
-  --success: #6fcb94;
-  --success-soft: #1c3527;
-  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  --wp-bg-canvas: var(--wp-color-night-950);
+  --wp-bg-surface: var(--wp-color-night-900);
+  --wp-bg-subdued: var(--wp-color-night-800);
+  --wp-text-primary: var(--wp-color-paper-50);
+  --wp-text-secondary: var(--wp-color-slate-300);
+  --wp-text-muted: var(--wp-color-slate-500);
+  --wp-text-on-strong: var(--wp-color-night-950);
+  --wp-border-default: var(--wp-color-night-line);
+  --wp-border-strong: var(--wp-color-slate-500);
+  --wp-action-primary: var(--wp-color-paper-50);
+  --wp-action-accent: var(--wp-color-brass-400);
+  --wp-action-accent-subtle: var(--wp-color-brass-900);
+  --wp-context-location: var(--wp-color-teal-400);
+  --wp-context-location-subtle: var(--wp-color-teal-900);
+  --wp-state-danger: var(--wp-color-red-400);
+  --wp-state-danger-subtle: var(--wp-color-red-900);
+  --wp-state-success: var(--wp-color-green-400);
+  --wp-state-success-subtle: var(--wp-color-green-900);
+  --wp-shadow-surface: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
 }
 
 /* ---- 2. Reset & base ------------------------------------------ */
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.5;
+  background: var(--wp-bg-canvas);
+  color: var(--wp-text-primary);
+  font: var(--wp-type-body);
   -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; margin: 0; text-wrap: balance; }
+h1 { font: var(--wp-type-display); }
+h2, h3, h4 { font: var(--wp-type-heading); }
+h1, h2, h3, h4 { margin: 0; text-wrap: balance; }
 p { margin: 0; }
-a { color: var(--teal); }
+a { color: var(--wp-context-location); }
 button { font-family: inherit; }
-input, select, textarea { font-family: inherit; font-size: 14px; }
+input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-size); line-height: var(--wp-type-body-leading); }
 .icon { width: 1em; height: 1em; display: inline-block; vertical-align: -0.15em; }
-::selection { background: var(--accent-soft); }
+::selection { background: var(--wp-action-accent-subtle); }
 
 /* ---- 3. Layout shell -------------------------------------------- */
 .topbar {
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; padding: 12px 20px;
-  background: var(--surface); border-bottom: 1px solid var(--line);
+  background: var(--wp-bg-surface); border-bottom: 1px solid var(--wp-border-default);
 }
-.brand { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 700; font-size: 19px; letter-spacing: .01em; }
-.brand .icon { width: 22px; height: 22px; color: var(--accent); }
-.save-indicator { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); min-width: 90px; text-align: right; }
-.save-indicator[data-kind="saving"] { color: var(--ink-soft); }
-.save-indicator[data-kind="error"] { color: var(--danger); }
-.save-indicator[data-kind="readonly"] { color: var(--danger); }
-.save-indicator[data-kind="saved"] { color: var(--success); }
+.brand { display: flex; align-items: center; gap: 8px; font: var(--wp-type-heading); letter-spacing: .01em; }
+.brand .icon { width: 22px; height: 22px; color: var(--wp-action-accent); }
+.save-indicator { font: var(--wp-type-meta); color: var(--wp-text-muted); min-width: 90px; text-align: right; }
+.save-indicator[data-kind="saving"] { color: var(--wp-text-secondary); }
+.save-indicator[data-kind="error"] { color: var(--wp-state-danger); }
+.save-indicator[data-kind="readonly"] { color: var(--wp-state-danger); }
+.save-indicator[data-kind="saved"] { color: var(--wp-state-success); }
 
 /* Accounts/login: who's signed in, "Manage accounts" (site owner only),
    Log out — lives in the topbar next to the save indicator. See
    applyAuthUI(). */
 .account-bar { display: flex; align-items: center; gap: 8px; }
-.account-label { font-size: 12.5px; color: var(--ink-soft); margin-right: 2px; white-space: nowrap; }
+.account-label { font: var(--wp-type-label); color: var(--wp-text-secondary); margin-right: 2px; white-space: nowrap; }
 
 /* ---- Avatars (Companions/Avatars feature) ---------------------------
    One small circle marker, used in three slightly different contexts:
@@ -148,24 +226,24 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
    style attributes directly. */
 .avatar-marker {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 20px; height: 20px; border-radius: 50%; font-size: 12px; line-height: 1;
+  width: 20px; height: 20px; border-radius: 50%; font-size: var(--wp-glyph-xs); line-height: 1;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
 }
-.avatar-marker-smiley { font-size: 12px; font-weight: 700; }
+.avatar-marker-smiley { font-size: var(--wp-glyph-xs); font-weight: 700; }
 .avatar-row { display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; }
 .account-avatar-btn {
   display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; background: none;
-  border-radius: 999px; padding: 3px 8px 3px 3px; cursor: pointer; color: var(--ink);
+  border-radius: 999px; padding: 3px 8px 3px 3px; cursor: pointer; color: var(--wp-text-primary);
 }
-.account-avatar-btn:hover { border-color: var(--line); background: var(--surface-2); }
-.account-avatar-btn .avatar-marker { width: 24px; height: 24px; font-size: 14px; }
+.account-avatar-btn:hover { border-color: var(--wp-border-default); background: var(--wp-bg-subdued); }
+.account-avatar-btn .avatar-marker { width: 24px; height: 24px; font-size: var(--wp-glyph-sm); }
 .trip-card-avatars { margin-top: -2px; }
 /* Overflow bubble for a trip card with more companions than fit — see
    MAX_CARD_AVATARS in tripCardAvatarsHtml(). Reuses .avatar-marker's size
    so it lines up with the real markers beside it, but with a flat neutral
    background/text instead of an inline avatar colour (it isn't a real
    person's marker, so it deliberately doesn't look like one). */
-.avatar-marker-overflow { background: var(--surface-2); color: var(--ink-soft); font-size: 10px; font-weight: 700; box-shadow: inset 0 0 0 1px var(--line); }
+.avatar-marker-overflow { background: var(--wp-bg-subdued); color: var(--wp-text-secondary); font-size: var(--wp-type-micro-size); font-weight: 700; box-shadow: inset 0 0 0 1px var(--wp-border-default); }
 
 /* The avatar-picker modal: two small swatch grids (colours, then
    animals), each option rendered as its own little circle button --
@@ -173,11 +251,11 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
    see openAvatarPicker()'s click handling) until Save actually submits
    the pair together. */
 .avatar-picker-section { margin-bottom: 16px; }
-.avatar-picker-section h4 { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 8px; }
+.avatar-picker-section h4 { font: var(--wp-type-label); color: var(--wp-text-secondary); margin-bottom: 8px; }
 .avatar-swatch-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .avatar-swatch-btn {
   width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center; font-size: 16px;
+  display: inline-flex; align-items: center; justify-content: center; font-size: var(--wp-glyph-md);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
   /* This class is used both on the non-interactive <span> the 'avatar-color'
      form field renders (its background always set inline per swatch -- see
@@ -186,18 +264,18 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
      since an animal swatch's colour is the neutral chip below, not a
      colour choice itself). padding/font/background here undo the browser's
      default button chrome so both uses look identical either way. */
-  padding: 0; font-family: inherit; background: var(--surface-2);
+  padding: 0; font-family: inherit; background: var(--wp-bg-subdued);
 }
-.avatar-swatch-btn.is-selected { border-color: var(--ink); }
+.avatar-swatch-btn.is-selected { border-color: var(--wp-text-primary); }
 /* The 'avatar-color' form-field case in fieldHtml() uses real (visually
    hidden) radio inputs rather than JS click-handling — this is the CSS
    that actually shows which one is picked. */
 .avatar-swatch-label { position: relative; display: inline-block; cursor: pointer; line-height: 0; }
 .avatar-swatch-radio { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
-.avatar-swatch-radio:checked + .avatar-swatch-btn { border-color: var(--ink); }
-.avatar-swatch-radio:focus-visible + .avatar-swatch-btn { outline: 2px solid var(--accent); outline-offset: 2px; }
-.avatar-picker-preview { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding: 10px; background: var(--surface-2); border-radius: var(--radius-sm); }
-.avatar-picker-preview .avatar-marker { width: 36px; height: 36px; font-size: 18px; }
+.avatar-swatch-radio:checked + .avatar-swatch-btn { border-color: var(--wp-text-primary); }
+.avatar-swatch-radio:focus-visible + .avatar-swatch-btn { outline: 2px solid var(--wp-action-accent); outline-offset: 2px; }
+.avatar-picker-preview { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding: 10px; background: var(--wp-bg-subdued); border-radius: var(--radius-sm); }
+.avatar-picker-preview .avatar-marker { width: 36px; height: 36px; font-size: var(--wp-glyph-lg); }
 
 /* NOTE: there used to be a single blanket "read-only-mode" body class
    here that hid every Add/Edit/Delete control at once for a non-Admin
@@ -219,90 +297,86 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
    other the way they visually should. Wrapping them in one of these
    makes the pair itself a single flex item instead. */
 .head-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
-/* A plain sub-heading inside a tab body, splitting it into named
-   sections -- e.g. "Companions" vs "Guests" on the Companions tab.
-   Kept deliberately tiny/reusable rather than growing renderSettingsTab()'s
-   inline `style="font-size:15px..."` one-offs into a genuinely new
-   pattern -- this is that exact same look, just given a name since the
-   Companions tab now uses it twice on one screen. */
-.section-subhead { font-size: 15px; margin-bottom: 8px; }
+/* A shared heading role inside a tab body, splitting it into named
+   sections -- e.g. "Companions" vs "Guests" on the Companions tab. */
+.section-subhead { font: var(--wp-type-heading); margin-bottom: 8px; }
 .section-subhead:not(:first-child) { margin-top: 28px; }
 
 /* Login / first-run setup screen — shown instead of the normal app
    whenever there's no valid session (see renderAuthScreen()/renderBoot()). */
 .auth-screen { display: flex; justify-content: center; padding: 60px 20px; }
-.auth-card { width: 100%; max-width: 360px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow); }
-.auth-card h1 { font-family: var(--font-display); font-size: 22px; margin-bottom: 6px; }
+.auth-card { width: 100%; max-width: 360px; background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius); padding: 28px; box-shadow: var(--wp-shadow-surface); }
+.auth-card h1 { font: var(--wp-type-heading); margin-bottom: 6px; }
 .auth-card .field-hint { margin-bottom: 16px; }
-.auth-error { background: var(--danger-soft); color: var(--danger); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 13px; margin-bottom: 14px; }
+.auth-error { background: var(--wp-state-danger-subtle); color: var(--wp-state-danger); border-radius: var(--radius-sm); padding: 8px 10px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); margin-bottom: 14px; }
 
 .page { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
 
 /* ---- 4a. Buttons & form controls --------------------------------- */
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
-  border-radius: 999px; padding: 8px 16px; font-size: 13.5px; font-weight: 500;
+  border: 1px solid var(--wp-border-default); background: var(--wp-bg-surface); color: var(--wp-text-primary);
+  border-radius: 999px; padding: 8px 16px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); font-weight: 600;
   cursor: pointer; transition: border-color .15s, background .15s;
 }
-.btn:hover { border-color: var(--ink-faint); }
-.btn-primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
-.btn-primary:hover { opacity: .9; border-color: var(--ink); }
-.btn-accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-.btn-danger { background: transparent; color: var(--danger); border-color: var(--danger-soft); }
-.btn-danger:hover { background: var(--danger-soft); }
+.btn:hover { border-color: var(--wp-text-muted); }
+.btn-primary { background: var(--wp-action-primary); color: var(--wp-text-on-strong); border-color: var(--wp-action-primary); }
+.btn-primary:hover { opacity: .9; border-color: var(--wp-action-primary); }
+.btn-accent { background: var(--wp-action-accent); color: var(--wp-text-on-strong); border-color: var(--wp-action-accent); }
+.btn-danger { background: transparent; color: var(--wp-state-danger); border-color: var(--wp-state-danger-subtle); }
+.btn-danger:hover { background: var(--wp-state-danger-subtle); }
 .btn-icon { padding: 7px; border-radius: 8px; }
 .btn-ghost { border-color: transparent; background: transparent; }
-.btn-ghost:hover { background: var(--surface-2); }
+.btn-ghost:hover { background: var(--wp-bg-subdued); }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 
-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 4px; }
+label { display: block; font: var(--wp-type-label); color: var(--wp-text-secondary); margin-bottom: 4px; }
 input[type="text"], input[type="number"], input[type="date"], input[type="time"], input[type="password"], select, textarea {
-  width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--ink);
+  width: 100%; padding: 9px 10px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm);
+  background: var(--wp-bg-surface); color: var(--wp-text-primary);
 }
 textarea { resize: vertical; min-height: 60px; }
 .field { margin-bottom: 14px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.field-hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 3px; }
-.form-section + .form-section { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 20px; }
+.field-hint { font: var(--wp-type-micro); color: var(--wp-text-muted); margin-top: 3px; }
+.form-section + .form-section { border-top: 1px solid var(--wp-border-default); margin-top: 22px; padding-top: 20px; }
 .form-section-head { margin-bottom: 14px; }
-.form-section-head h3 { font-size: 14px; }
-.form-section-head p { margin-top: 2px; font-size: 11.5px; color: var(--ink-faint); }
-.form-details { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); margin-top: 12px; }
-.form-details summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; padding: 10px 12px; color: var(--ink); font-size: 13px; font-weight: 600; }
+.form-section-head h3 { font: var(--wp-type-label); }
+.form-section-head p { margin-top: 2px; font: var(--wp-type-micro); color: var(--wp-text-muted); }
+.form-details { border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-subdued); margin-top: 12px; }
+.form-details summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; padding: 10px 12px; color: var(--wp-text-primary); font: var(--wp-type-label); }
 .form-details summary::-webkit-details-marker { display: none; }
-.form-details summary::after { content: '+'; color: var(--ink-faint); font-size: 16px; font-weight: 400; }
+.form-details summary::after { content: '+'; color: var(--wp-text-muted); font-size: var(--wp-glyph-md); font-weight: 400; }
 .form-details[open] summary::after { content: '−'; }
 .form-details-body { padding: 2px 12px 2px; }
 .form-details-body .field:last-child { margin-bottom: 12px; }
-.checkbox-field { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
-.checkbox-field input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
+.checkbox-field { display: flex; align-items: center; gap: 8px; cursor: pointer; font: var(--wp-type-label); }
+.checkbox-field input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--wp-action-accent); }
 .activity-timing-field { display: flex; flex-direction: column; gap: 10px; }
 .activity-timing-field > label { margin-bottom: 0; }
 .activity-timing-grid { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 10px; }
 .activity-timing-rail { position: relative; display: flex; flex-direction: column; align-items: center; padding: 25px 0; }
-.activity-timing-rail::before { content: ''; position: absolute; top: 31px; bottom: 31px; width: 2px; background: var(--line); }
-.activity-timing-dot { position: relative; z-index: 1; width: 11px; height: 11px; border: 2px solid var(--accent); border-radius: 50%; background: var(--surface); }
+.activity-timing-rail::before { content: ''; position: absolute; top: 31px; bottom: 31px; width: 2px; background: var(--wp-border-default); }
+.activity-timing-dot { position: relative; z-index: 1; width: 11px; height: 11px; border: 2px solid var(--wp-action-accent); border-radius: 50%; background: var(--wp-bg-surface); }
 .activity-timing-dot:last-child { margin-top: auto; }
 .activity-timing-moments { min-width: 0; }
 .activity-timing-moment + .activity-timing-moment { margin-top: 0; }
 .activity-timing-moment-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
-.activity-timing-moment-head strong { font-size: 13px; }
-.activity-timing-moment-head span { font-size: 11.5px; color: var(--ink-faint); }
+.activity-timing-moment-head strong { font: var(--wp-type-label); }
+.activity-timing-moment-head span { font: var(--wp-type-micro); color: var(--wp-text-muted); }
 .activity-date-time-row { display: grid; grid-template-columns: minmax(0,1fr) 126px; gap: 10px; }
 .activity-date-time-row .field { margin: 0; }
-.activity-date-time-row .field label { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 0; }
-.activity-date-time-row .field { display: grid; grid-template-columns: 16px minmax(0,1fr); grid-template-areas: 'icon label' 'icon input'; column-gap: 8px; align-items: center; min-height: 56px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
-.activity-date-time-row .field::before { grid-area: icon; color: var(--accent); font-size: 15px; content: '◷'; }
-.activity-date-time-row .activity-date-field::before { content: '□'; font-size: 17px; }
+.activity-date-time-row .field label { font: var(--wp-type-micro); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 0; }
+.activity-date-time-row .field { display: grid; grid-template-columns: 16px minmax(0,1fr); grid-template-areas: 'icon label' 'icon input'; column-gap: 8px; align-items: center; min-height: 56px; padding: 8px 10px; border: 1px solid var(--wp-border-default); border-radius: 10px; background: var(--wp-bg-subdued); }
+.activity-date-time-row .field::before { grid-area: icon; color: var(--wp-action-accent); font-size: var(--wp-glyph-md); content: '◷'; }
+.activity-date-time-row .activity-date-field::before { content: '□'; font-size: var(--wp-glyph-lg); }
 .activity-date-time-row .field label { grid-area: label; }
 .activity-date-time-row .field input { grid-area: input; min-width: 0; padding: 0; border: 0; background: transparent; font-weight: 600; }
-.activity-timing-duration { display: flex; align-items: center; gap: 8px; height: 40px; color: var(--ink-faint); font-size: 12px; }
-.activity-timing-duration::before, .activity-timing-duration::after { content: ''; height: 1px; background: var(--line); }
+.activity-timing-duration { display: flex; align-items: center; gap: 8px; height: 40px; color: var(--wp-text-muted); font: var(--wp-type-meta); }
+.activity-timing-duration::before, .activity-timing-duration::after { content: ''; height: 1px; background: var(--wp-border-default); }
 .activity-timing-duration::before { width: 18px; }
 .activity-timing-duration::after { flex: 1; }
-.activity-timing-duration span { padding: 5px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); font-weight: 600; white-space: nowrap; }
+.activity-timing-duration span { padding: 5px 9px; border-radius: 999px; background: var(--wp-action-accent-subtle); color: var(--wp-text-primary); font-weight: 600; white-space: nowrap; }
 .activity-timing-field.is-all-day .activity-time-field { display: none; }
 .activity-timing-field.is-all-day .activity-date-time-row { grid-template-columns: 1fr; }
 .activity-timing-field.is-all-day .activity-timing-duration { display: none; }
@@ -311,41 +385,41 @@ textarea { resize: vertical; min-height: 60px; }
    companion, wrapping once there are more than fit on one line. */
 .tag-picker { display: flex; flex-wrap: wrap; gap: 8px; }
 .tag-picker-item {
-  display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;
-  padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2);
+  display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading);
+  padding: 6px 10px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-subdued);
 }
-.tag-picker-item input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
+.tag-picker-item input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--wp-action-accent); }
 .tag-picker-role, .tag-role {
-  color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--wp-action-accent); font: var(--wp-type-micro); letter-spacing: .04em; text-transform: uppercase;
 }
 .tag-picker-role { margin-left: 2px; }
 .tag-role { margin-left: 3px; }
 .flight-lookup-row { display: flex; gap: 8px; }
 .flight-lookup-row input { flex: 1; }
 .flight-lookup-row .btn { flex-shrink: 0; white-space: nowrap; }
-.flight-lookup-status { font-size: 11.5px; color: var(--ink-faint); margin-top: 6px; min-height: 14px; }
-.flight-lookup-status.is-error { color: var(--danger); }
-.flight-lookup-status.is-ok { color: var(--ink-soft); }
-.airport-resolve-hint.is-ok { color: var(--success); }
-.airport-resolve-hint.is-unresolved { color: var(--ink-faint); }
+.flight-lookup-status { font: var(--wp-type-micro); color: var(--wp-text-muted); margin-top: 6px; min-height: var(--wp-type-micro-leading); }
+.flight-lookup-status.is-error { color: var(--wp-state-danger); }
+.flight-lookup-status.is-ok { color: var(--wp-text-secondary); }
+.airport-resolve-hint.is-ok { color: var(--wp-state-success); }
+.airport-resolve-hint.is-unresolved { color: var(--wp-text-muted); }
 .location-picker { position: relative; }
 .location-picker-row { display: flex; gap: 8px; }
 .location-picker-row input { flex: 1; }
 .location-picker-row .btn { flex-shrink: 0; white-space: nowrap; }
-.location-results { max-height: 288px; margin-top: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--surface); }
-.location-result { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 9px 10px; color: var(--ink); cursor: pointer; }
+.location-results { max-height: 288px; margin-top: 8px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--wp-bg-surface); }
+.location-result { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--wp-border-default); background: transparent; padding: 9px 10px; color: var(--wp-text-primary); cursor: pointer; }
 .location-result:last-child { border-bottom: 0; }
-.location-result:hover, .location-result:focus { background: var(--surface-2); outline: none; }
-.location-result-title { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 650; }
-.location-result-kind { font-size: 11px; color: var(--ink-soft); font-weight: 500; white-space: nowrap; }
-.location-result-address { margin-top: 2px; color: var(--ink-soft); font-size: 11.5px; }
-.location-selected { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; margin-top: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); font-size: 12px; }
-.location-selected.is-stale { border-color: var(--danger-soft); }
-.location-selected-status { color: var(--success); font-weight: 650; }
-.location-selected.is-stale .location-selected-status { color: var(--danger); }
+.location-result:hover, .location-result:focus { background: var(--wp-bg-subdued); outline: none; }
+.location-result-title { display: flex; justify-content: space-between; gap: 10px; font: var(--wp-type-label); }
+.location-result-kind { font: var(--wp-type-micro); color: var(--wp-text-secondary); white-space: nowrap; }
+.location-result-address { margin-top: 2px; color: var(--wp-text-secondary); font: var(--wp-type-micro); }
+.location-selected { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; margin-top: 8px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-subdued); font: var(--wp-type-meta); }
+.location-selected.is-stale { border-color: var(--wp-state-danger-subtle); }
+.location-selected-status { color: var(--wp-state-success); font-weight: 650; }
+.location-selected.is-stale .location-selected-status { color: var(--wp-state-danger); }
 .location-picker-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 7px; }
-.location-picker-actions .btn { padding: 5px 8px; font-size: 12px; }
-.location-pin-map { display: none; height: 220px; margin-top: 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.location-picker-actions .btn { padding: 5px 8px; font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+.location-pin-map { display: none; height: 220px; margin-top: 9px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); overflow: hidden; }
 .location-pin-map.is-open { display: block; }
 /* Generic suggestion dropdown — shared by EVERY field with app-managed
    suggestions (currency, country, city, timezone, airport; see
@@ -363,112 +437,112 @@ textarea { resize: vertical; min-height: 60px; }
 .suggest-input-wrap { position: relative; }
 .suggest-list {
   display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
-  box-shadow: var(--shadow); max-height: 220px; overflow-y: auto; z-index: 50;
+  background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm);
+  box-shadow: var(--wp-shadow-surface); max-height: 220px; overflow-y: auto; z-index: 50;
 }
 .suggest-list.is-open { display: block; }
-.suggest-item { padding: 8px 10px; font-size: 13px; cursor: pointer; }
-.suggest-item.is-active, .suggest-item:hover { background: var(--surface-2); }
-.suggest-empty { padding: 8px 10px; font-size: 12.5px; color: var(--ink-faint); }
+.suggest-item { padding: 8px 10px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); cursor: pointer; }
+.suggest-item.is-active, .suggest-item:hover { background: var(--wp-bg-subdued); }
+.suggest-empty { padding: 8px 10px; font: var(--wp-type-label); color: var(--wp-text-muted); }
 
 /* ---- 4b. Dashboard ------------------------------------------------ */
 .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
-.section-head h1 { font-size: 26px; }
+.section-head h1 { font: var(--wp-type-display); }
 .trip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .trip-card {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 18px; cursor: pointer; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px;
+  background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius);
+  padding: 18px; cursor: pointer; box-shadow: var(--wp-shadow-surface); display: flex; flex-direction: column; gap: 10px;
   transition: transform .12s;
 }
 .trip-card:hover { transform: translateY(-2px); }
 .trip-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.trip-card h3 { font-size: 18px; }
-.trip-dates { font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); }
-.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
-.pill-upcoming { background: var(--teal-soft); color: var(--teal); }
-.pill-ongoing { background: var(--accent-soft); color: var(--accent); }
-.pill-past { background: var(--surface-2); color: var(--ink-faint); }
-.trip-stats { display: flex; gap: 14px; font-size: 12.5px; color: var(--ink-soft); flex-wrap: wrap; }
-.trip-stats b { color: var(--ink); font-family: var(--font-mono); font-weight: 600; }
+.trip-card h3 { font: var(--wp-type-heading); }
+.trip-dates { font: var(--wp-type-meta); color: var(--wp-text-secondary); }
+.pill { display: inline-flex; align-items: center; gap: 4px; font: var(--wp-type-micro); padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+.pill-upcoming { background: var(--wp-context-location-subtle); color: var(--wp-context-location); }
+.pill-ongoing { background: var(--wp-action-accent-subtle); color: var(--wp-action-accent); }
+.pill-past { background: var(--wp-bg-subdued); color: var(--wp-text-muted); }
+.trip-stats { display: flex; gap: 14px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-secondary); flex-wrap: wrap; }
+.trip-stats b { color: var(--wp-text-primary); font: var(--wp-type-meta); font-weight: 600; }
 .card-actions { display: flex; gap: 4px; }
-.empty-state { text-align: center; padding: 60px 20px; color: var(--ink-soft); border: 1px dashed var(--line); border-radius: var(--radius); }
-.empty-state .icon { width: 34px; height: 34px; color: var(--ink-faint); margin-bottom: 10px; }
-.empty-state h3 { margin-bottom: 6px; color: var(--ink); }
-.empty-state p { max-width: 440px; margin: 0 auto; font-size: 13.5px; }
-.intro-note { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; font-size: 13px; color: var(--ink-soft); }
-.intro-note strong { color: var(--ink); }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--wp-text-secondary); border: 1px dashed var(--wp-border-default); border-radius: var(--radius); }
+.empty-state .icon { width: 34px; height: 34px; color: var(--wp-text-muted); margin-bottom: 10px; }
+.empty-state h3 { margin-bottom: 6px; color: var(--wp-text-primary); }
+.empty-state p { max-width: 440px; margin: 0 auto; font: var(--wp-type-body); }
+.intro-note { background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; font: var(--wp-type-label); color: var(--wp-text-secondary); }
+.intro-note strong { color: var(--wp-text-primary); }
 
 /* ---- 4c. Trip header & tabs ---------------------------------------- */
 .trip-header { margin-bottom: 22px; }
-.back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--ink-soft); background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 10px; }
+.back-link { display: inline-flex; align-items: center; gap: 4px; font: var(--wp-type-label); color: var(--wp-text-secondary); background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 10px; }
 .back-link .icon { width: 14px; height: 14px; transform: rotate(180deg); }
 .trip-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
-.trip-title-row h1 { font-size: 28px; }
-.trip-meta { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; font-size: 13px; color: var(--ink-soft); }
-.trip-meta b { font-family: var(--font-mono); color: var(--ink); }
-.warn-link { color: var(--danger); cursor: pointer; background: none; border: none; font-size: 13px; padding: 0; text-decoration: underline; }
+.trip-title-row h1 { font: var(--wp-type-display); }
+.trip-meta { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-secondary); }
+.trip-meta b { font: var(--wp-type-meta); color: var(--wp-text-primary); }
+.warn-link { color: var(--wp-state-danger); cursor: pointer; background: none; border: none; font: var(--wp-type-label); padding: 0; text-decoration: underline; }
 
 /* Navigation is deliberately grouped by the job someone is doing: View
    (Timeline/Map), Plan, People and Manage. The groups wrap rather than
    disappear on small screens, so the structure makes the many trip views
    easier to scan without reintroducing the old hidden-tab problem. */
-.nav-group-label { margin-top: 18px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--ink-faint); }
+.nav-group-label { margin-top: 18px; font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .08em; color: var(--wp-text-muted); }
 /* The two "big picture" views (Timeline, Map) — larger and more prominent
    than the regular data-entry tabs below, since they're the main thing
    most people open a trip to look at. */
 .hero-row { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
 .hero-btn {
   display: inline-flex; align-items: center; gap: 10px;
-  padding: 14px 22px; border-radius: var(--radius); border: 1px solid var(--line);
-  background: var(--surface); color: var(--ink); box-shadow: var(--shadow);
-  font-family: var(--font-display); font-weight: 600; font-size: 16px; cursor: pointer;
+  padding: 14px 22px; border-radius: var(--radius); border: 1px solid var(--wp-border-default);
+  background: var(--wp-bg-surface); color: var(--wp-text-primary); box-shadow: var(--wp-shadow-surface);
+  font: var(--wp-type-body); font-weight: 600; cursor: pointer;
   transition: transform .12s, border-color .15s;
 }
-.hero-btn .icon { width: 20px; height: 20px; color: var(--accent); }
+.hero-btn .icon { width: 20px; height: 20px; color: var(--wp-action-accent); }
 .hero-btn:hover { transform: translateY(-1px); }
-.hero-btn.active { background: var(--ink); color: var(--surface); border-color: var(--ink); }
-.hero-btn.active .icon { color: var(--accent); }
+.hero-btn.active { background: var(--wp-action-primary); color: var(--wp-text-on-strong); border-color: var(--wp-action-primary); }
+.hero-btn.active .icon { color: var(--wp-action-accent); }
 
 /* Each group owns its own short tab row. This keeps related controls
    together on wide screens and still lets every group wrap in full on a
    phone, rather than hiding tabs in a horizontal scroll strip. */
 .tabbar { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 20px 0 22px; overflow-x: visible; }
 .tab-group { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.tab-group-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--ink-faint); }
-.tab-group-tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--line); }
+.tab-group-label { font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .08em; color: var(--wp-text-muted); }
+.tab-group-tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--wp-border-default); }
 .tab-btn {
   padding: 9px 14px; background: none; border: none; border-bottom: 2px solid transparent;
-  color: var(--ink-soft); font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
+  color: var(--wp-text-secondary); font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); font-weight: 500; cursor: pointer; white-space: nowrap;
   display: inline-flex; align-items: center; gap: 6px;
 }
-.tab-btn:hover { color: var(--ink); }
-.tab-btn.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-btn:hover { color: var(--wp-text-primary); }
+.tab-btn.active { color: var(--wp-text-primary); border-bottom-color: var(--wp-action-accent); font-weight: 600; }
 .tab-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
-.tab-panel-head h2 { font-size: 18px; }
+.tab-panel-head h2 { font: var(--wp-type-heading); }
 
 /* ---- 4d. Item list rows (destinations/activities/transport/etc) ------ */
 .item-list { display: flex; flex-direction: column; gap: 10px; }
 .item-row {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm);
   padding: 13px 14px; display: flex; gap: 12px; align-items: flex-start;
 }
 .item-row .item-icon {
-  width: 34px; height: 34px; border-radius: 9px; background: var(--surface-2); color: var(--ink-soft);
+  width: 34px; height: 34px; border-radius: 9px; background: var(--wp-bg-subdued); color: var(--wp-text-secondary);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .item-row .item-icon .icon { width: 17px; height: 17px; }
 /* Companions tab: the row's "icon" slot is the person's actual avatar
    marker instead of a generic SVG glyph -- see renderCompanionsTab(). */
 .item-row .item-icon.item-icon-avatar { background: none; }
-.item-row .item-icon.item-icon-avatar .avatar-marker { width: 30px; height: 30px; font-size: 16px; }
+.item-row .item-icon.item-icon-avatar .avatar-marker { width: 30px; height: 30px; font-size: var(--wp-glyph-md); }
 .item-main { flex: 1; min-width: 0; }
 .item-title-row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-.item-title { font-weight: 600; font-size: 14.5px; }
-.item-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.item-title { font: var(--wp-type-label); }
+.item-sub { font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-secondary); margin-top: 2px; }
 .item-tags { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
-.tag { font-size: 11px; font-family: var(--font-mono); color: var(--ink-soft); background: var(--surface-2); border-radius: 6px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 4px; }
+.tag { font: var(--wp-type-meta); color: var(--wp-text-secondary); background: var(--wp-bg-subdued); border-radius: 6px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 4px; }
 .tag .icon { width: 11px; height: 11px; }
-.tag-cost { color: var(--accent); background: var(--accent-soft); }
+.tag-cost { color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); }
 /* Companions tab: Guest vs Companion, and a Companion's access-level tag
    (Super/Admin/User/Viewer) -- see renderCompanionsTab() and the
    COMPANIONS & AVATARS comment in src/worker.js's resolveCompanionAccessLevels()
@@ -479,71 +553,71 @@ textarea { resize: vertical; min-height: 60px; }
    most worth noticing at a glance); User/Viewer and Guest stay the plain
    neutral grey `.tag` already used for everything else, since they're
    not something you need to specifically notice. */
-.tag-role-superuser, .tag-role-admin { color: var(--accent); background: var(--accent-soft); }
+.tag-role-superuser, .tag-role-admin { color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); }
 .item-actions { display: flex; gap: 2px; flex-shrink: 0; }
-.copy-btn { background: none; border: none; color: var(--ink-faint); cursor: pointer; padding: 2px; display: inline-flex; }
-.copy-btn:hover { color: var(--ink); }
+.copy-btn { background: none; border: none; color: var(--wp-text-muted); cursor: pointer; padding: 2px; display: inline-flex; }
+.copy-btn:hover { color: var(--wp-text-primary); }
 .copy-btn .icon { width: 12px; height: 12px; }
 
 /* ---- 4e. Timeline ------------------------------------------------- */
 .day-card { display: flex; gap: 14px; margin-bottom: 22px; }
 .day-rail { display: flex; flex-direction: column; align-items: center; width: 46px; flex-shrink: 0; }
-.day-num { font-family: var(--font-mono); font-weight: 600; font-size: 15px; background: var(--ink); color: var(--surface); width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-.day-line { flex: 1; width: 2px; background: var(--line); margin-top: 4px; }
+.day-num { font: var(--wp-type-meta); font-weight: 600; background: var(--wp-action-primary); color: var(--wp-text-on-strong); width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.day-line { flex: 1; width: 2px; background: var(--wp-border-default); margin-top: 4px; }
 .day-body { flex: 1; min-width: 0; padding-bottom: 4px; }
 .day-heading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
-.day-heading h3 { font-size: 15.5px; }
+.day-heading h3 { font: var(--wp-type-heading); }
 .day-areas { display: flex; gap: 6px; flex-wrap: wrap; }
-.area-chip { font-size: 11px; background: var(--teal-soft); color: var(--teal); border-radius: 999px; padding: 2px 9px; display: inline-flex; align-items: center; gap: 4px; }
+.area-chip { font: var(--wp-type-micro); background: var(--wp-context-location-subtle); color: var(--wp-context-location); border-radius: 999px; padding: 2px 9px; display: inline-flex; align-items: center; gap: 4px; }
 .day-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-left: auto; }
-.timeline-add-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-soft); font-size: 11.5px; cursor: pointer; }
-.timeline-add-btn:hover { color: var(--ink); border-color: var(--ink-faint); }
+.timeline-add-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-micro); cursor: pointer; }
+.timeline-add-btn:hover { color: var(--wp-text-primary); border-color: var(--wp-text-muted); }
 .timeline-add-btn .icon { width: 12px; height: 12px; }
 .day-events { display: flex; flex-direction: column; gap: 8px; }
-.event-row { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
-.event-time { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-soft); width: 44px; flex-shrink: 0; padding-top: 1px; }
+.event-row { display: flex; gap: 10px; align-items: flex-start; background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); padding: 10px 12px; }
+.event-time { font: var(--wp-type-meta); color: var(--wp-text-secondary); width: 44px; flex-shrink: 0; padding-top: 1px; }
 .event-icon { width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .event-icon .icon { width: 14px; height: 14px; }
-.event-icon.k-activity { background: var(--accent-soft); color: var(--accent); }
-.event-icon.k-transport { background: var(--teal-soft); color: var(--teal); }
-.event-icon.k-stay { background: var(--surface-2); color: var(--ink-soft); }
+.event-icon.k-activity { background: var(--wp-action-accent-subtle); color: var(--wp-action-accent); }
+.event-icon.k-transport { background: var(--wp-context-location-subtle); color: var(--wp-context-location); }
+.event-icon.k-stay { background: var(--wp-bg-subdued); color: var(--wp-text-secondary); }
 .event-main { flex: 1; min-width: 0; }
-.event-title { font-weight: 600; font-size: 13.5px; }
-.event-sub { font-size: 12px; color: var(--ink-soft); margin-top: 1px; }
-.overnight-note { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-faint); margin-top: 8px; padding-left: 2px; }
+.event-title { font: var(--wp-type-label); }
+.event-sub { font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); color: var(--wp-text-secondary); margin-top: 1px; }
+.overnight-note { display: flex; align-items: center; gap: 7px; font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); color: var(--wp-text-muted); margin-top: 8px; padding-left: 2px; }
 .overnight-note .icon { width: 13px; height: 13px; }
-.no-day-events { font-size: 12.5px; color: var(--ink-faint); font-style: italic; padding: 4px 0; }
+.no-day-events { font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-muted); font-style: italic; padding: 4px 0; }
 
 /* ---- 4f. Expenses table ------------------------------------------- */
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 10px; margin-bottom: 18px; }
-.stat-tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; }
-.stat-tile .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-faint); font-weight: 600; }
-.stat-tile .stat-value { font-family: var(--font-mono); font-size: 19px; font-weight: 600; margin-top: 4px; }
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
-th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); }
-th { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-faint); background: var(--surface-2); font-weight: 600; }
-td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.stat-tile { background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); padding: 12px 14px; }
+.stat-tile .stat-label { font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .04em; color: var(--wp-text-muted); }
+.stat-tile .stat-value { font: var(--wp-type-heading); margin-top: 4px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); }
+table { width: 100%; border-collapse: collapse; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); min-width: 640px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--wp-border-default); }
+th { font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .03em; color: var(--wp-text-muted); background: var(--wp-bg-subdued); }
+td.num, th.num { text-align: right; font: var(--wp-type-meta); font-variant-numeric: tabular-nums; }
 tr:last-child td { border-bottom: none; }
-.rate-missing { color: var(--danger); font-size: 11.5px; }
+.rate-missing { color: var(--wp-state-danger); font: var(--wp-type-micro); }
 .rate-table label { margin: 0; }
 .rate-table .field-row { grid-template-columns: 1fr 1fr; align-items: end; }
 
 /* ---- 4g. Modal & toast --------------------------------------------- */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(15,18,24,.5); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 100; }
-.modal { background: var(--surface); border-radius: var(--radius); max-width: 520px; width: 100%; box-shadow: var(--shadow); }
-.modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
-.modal-head h2 { font-size: 17px; }
+.modal { background: var(--wp-bg-surface); border-radius: var(--radius); max-width: 520px; width: 100%; box-shadow: var(--wp-shadow-surface); }
+.modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--wp-border-default); }
+.modal-head h2 { font: var(--wp-type-heading); }
 .modal-body { padding: 18px 20px; max-height: 65vh; overflow-y: auto; }
-.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line); }
-.confirm-text { font-size: 14px; color: var(--ink-soft); }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--wp-border-default); }
+.confirm-text { font: var(--wp-type-label); color: var(--wp-text-secondary); }
 
-.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 10px 18px; border-radius: 999px; font-size: 13px; box-shadow: var(--shadow); z-index: 200; opacity: 0; transition: opacity .2s; }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--wp-action-primary); color: var(--wp-text-on-strong); padding: 10px 18px; border-radius: 999px; font: var(--wp-type-label); box-shadow: var(--wp-shadow-surface); z-index: 200; opacity: 0; transition: opacity .2s; }
 .toast.show { opacity: 1; }
 
 @media (max-width: 640px) {
   .field-row { grid-template-columns: 1fr; }
-  .trip-title-row h1 { font-size: 23px; }
+  :root { --wp-type-display-size: 32px; --wp-type-display-leading: 38px; }
 }
 
 /* ---- 4h. Map tab -----------------------------------------------------
@@ -553,48 +627,48 @@ tr:last-child td { border-bottom: none; }
 .map-workspace { width: min(1240px, calc(100vw - 32px)); margin-left: 50%; transform: translateX(-50%); }
 .map-toolbar { display: flex; flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 12px; }
 .map-range-controls { width: 100%; }
-.map-range-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--ink-soft); font-size: 12px; }
-.map-range-summary strong { color: var(--ink); font-size: 14px; }
-.map-range-days { font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; }
+.map-range-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--wp-text-secondary); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+.map-range-summary strong { color: var(--wp-text-primary); font: var(--wp-type-label); }
+.map-range-days { font: var(--wp-type-meta); white-space: nowrap; }
 .map-range-slider { --range-start: 0%; --range-end: 100%; position: relative; height: 44px; margin: 0 8px; }
 .map-range-rail, .map-range-fill { position: absolute; top: 21px; height: 6px; border-radius: 999px; }
-.map-range-rail { left: 0; right: 0; background: var(--line); }
-.map-range-fill { left: var(--range-start); right: calc(100% - var(--range-end)); background: var(--accent); }
+.map-range-rail { left: 0; right: 0; background: var(--wp-border-default); }
+.map-range-fill { left: var(--range-start); right: calc(100% - var(--range-end)); background: var(--wp-action-accent); }
 .map-range-input { position: absolute; z-index: 2; top: 12px; left: -8px; width: calc(100% + 16px); height: 22px; margin: 0; appearance: none; -webkit-appearance: none; pointer-events: none; background: transparent; }
 .map-range-input::-webkit-slider-runnable-track { height: 6px; background: transparent; }
-.map-range-input::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -8px; appearance: none; -webkit-appearance: none; pointer-events: auto; cursor: grab; border: 3px solid var(--surface); border-radius: 50%; background: var(--accent); box-shadow: 0 1px 3px rgba(26,34,51,.28); }
+.map-range-input::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -8px; appearance: none; -webkit-appearance: none; pointer-events: auto; cursor: grab; border: 3px solid var(--wp-bg-surface); border-radius: 50%; background: var(--wp-action-accent); box-shadow: 0 1px 3px rgba(26,34,51,.28); }
 .map-range-input:active::-webkit-slider-thumb { cursor: grabbing; }
 .map-range-input::-moz-range-track { height: 6px; background: transparent; }
-.map-range-input::-moz-range-thumb { width: 16px; height: 16px; pointer-events: auto; cursor: grab; border: 3px solid var(--surface); border-radius: 50%; background: var(--accent); box-shadow: 0 1px 3px rgba(26,34,51,.28); }
-.map-range-input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
-.map-range-input:focus-visible::-moz-range-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
-.map-range-handle-label { position: absolute; top: 0; z-index: 3; transform: translateX(-50%); padding: 1px 5px; border-radius: 4px; background: var(--surface); color: var(--ink-soft); font-family: var(--font-mono); font-size: 10px; line-height: 1.2; pointer-events: none; white-space: nowrap; }
+.map-range-input::-moz-range-thumb { width: 16px; height: 16px; pointer-events: auto; cursor: grab; border: 3px solid var(--wp-bg-surface); border-radius: 50%; background: var(--wp-action-accent); box-shadow: 0 1px 3px rgba(26,34,51,.28); }
+.map-range-input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--wp-text-primary); outline-offset: 2px; }
+.map-range-input:focus-visible::-moz-range-thumb { outline: 2px solid var(--wp-text-primary); outline-offset: 2px; }
+.map-range-handle-label { position: absolute; top: 0; z-index: 3; transform: translateX(-50%); padding: 1px 5px; border-radius: 4px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-meta); pointer-events: none; white-space: nowrap; }
 .map-range-handle-label.is-start { left: var(--range-start); }
 .map-range-handle-label.is-end { left: var(--range-end); }
 .map-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .map-filter-bar { display: flex; gap: 6px; flex-wrap: wrap; }
-.map-filter-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-soft); font: inherit; font-size: 12.5px; cursor: pointer; }
-.map-filter-chip:hover { border-color: var(--ink-faint); color: var(--ink); }
-.map-filter-chip.is-active { border-color: var(--map-color); background: var(--map-soft); color: var(--ink); }
+.map-filter-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-label); cursor: pointer; }
+.map-filter-chip:hover { border-color: var(--wp-text-muted); color: var(--wp-text-primary); }
+.map-filter-chip.is-active { border-color: var(--map-color); background: var(--map-soft); color: var(--wp-text-primary); }
 .map-filter-chip .icon { width: 14px; height: 14px; color: var(--map-color); }
-.map-filter-count { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint); }
+.map-filter-count { font: var(--wp-type-meta); color: var(--wp-text-muted); }
 .map-shell { position: relative; }
-.map-canvas { height: clamp(500px, 65dvh, 720px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
-.map-status { position: absolute; z-index: 600; left: 12px; bottom: 12px; max-width: min(420px, calc(100% - 24px)); padding: 6px 9px; border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--surface) 90%, transparent); box-shadow: var(--shadow); color: var(--ink-soft); font-size: 11.5px; pointer-events: none; backdrop-filter: blur(8px); }
-.map-status.has-warning { border-color: var(--accent); color: var(--ink); }
+.map-canvas { height: clamp(500px, 65dvh, 720px); border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-subdued); overflow: hidden; }
+.map-status { position: absolute; z-index: 600; left: 12px; bottom: 12px; max-width: min(420px, calc(100% - 24px)); padding: 6px 9px; border: 1px solid color-mix(in srgb, var(--wp-border-default) 80%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--wp-bg-surface) 90%, transparent); box-shadow: var(--wp-shadow-surface); color: var(--wp-text-secondary); font: var(--wp-type-micro); pointer-events: none; backdrop-filter: blur(8px); }
+.map-status.has-warning { border-color: var(--wp-action-accent); color: var(--wp-text-primary); }
 .map-marker-icon { background: transparent; border: 0; }
-.map-marker { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 3px solid var(--surface); border-radius: 10px 10px 10px 2px; background: var(--map-color); color: #fff; box-shadow: 0 2px 5px rgba(26,34,51,.32); transform: rotate(-45deg); }
+.map-marker { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 3px solid var(--wp-bg-surface); border-radius: 10px 10px 10px 2px; background: var(--map-color); color: var(--wp-color-paper-0); box-shadow: 0 2px 5px rgba(26,34,51,.32); transform: rotate(-45deg); }
 .map-marker .icon { width: 16px; height: 16px; transform: rotate(45deg); }
-.map-marker.is-stale { opacity: .58; outline: 1px dashed var(--ink); outline-offset: 2px; }
-.map-marker-count { position: absolute; right: -7px; top: -7px; min-width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; padding: 0 3px; border: 2px solid var(--surface); border-radius: 999px; background: var(--ink); color: var(--surface); font-family: var(--font-mono); font-size: 9px; font-weight: 700; transform: rotate(45deg); }
+.map-marker.is-stale { opacity: .58; outline: 1px dashed var(--wp-text-primary); outline-offset: 2px; }
+.map-marker-count { position: absolute; right: -7px; top: -7px; min-width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; padding: 0 3px; border: 2px solid var(--wp-bg-surface); border-radius: 999px; background: var(--wp-action-primary); color: var(--wp-text-on-strong); font: var(--wp-type-micro); transform: rotate(45deg); }
 .map-marker-popup { display: flex; flex-direction: column; gap: 7px; }
-.map-marker-popup-item + .map-marker-popup-item { padding-top: 7px; border-top: 1px solid var(--line); }
+.map-marker-popup-item + .map-marker-popup-item { padding-top: 7px; border-top: 1px solid var(--wp-border-default); }
 .map-marker-popup-title { display: flex; align-items: center; gap: 5px; font-weight: 650; }
 .map-marker-popup-title .icon { width: 14px; height: 14px; color: var(--map-color); }
-.map-marker-popup-sub { color: var(--ink-soft); font-size: 12px; }
+.map-marker-popup-sub { color: var(--wp-text-secondary); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
 .map-route-popup { display: flex; flex-direction: column; gap: 3px; }
-.map-route-popup .map-route-meta { color: var(--ink-soft); font-size: 12px; }
-.map-shell:fullscreen { width: 100%; height: 100%; padding: 16px; background: var(--bg); }
+.map-route-popup .map-route-meta { color: var(--wp-text-secondary); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+.map-shell:fullscreen { width: 100%; height: 100%; padding: 16px; background: var(--wp-bg-canvas); }
 .map-shell:fullscreen .map-canvas { height: 100%; border-radius: 0; }
 .map-shell:fullscreen .map-status { left: 28px; bottom: 28px; }
 /* The little direction-of-travel triangle dropped at the midpoint of
@@ -615,8 +689,8 @@ tr:last-child td { border-bottom: none; }
 /* Leaflet's popup chrome is styled inline by the library; these few rules
    just make it sit comfortably against the app's own card/surface look
    instead of Leaflet's plain-white default. */
-.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
-.leaflet-popup-content { font-family: var(--font-body); font-size: 13px; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--wp-bg-surface); color: var(--wp-text-primary); }
+.leaflet-popup-content { font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); }
 
 @media (max-width: 640px) {
   .map-workspace { width: 100%; margin-left: 0; transform: none; }
@@ -718,6 +792,13 @@ function esc(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// Resolves a semantic design token for JavaScript-owned surfaces such as
+// Leaflet paths. Keeping the source of truth in CSS means these elements use
+// the same approved light/dark palette as the rest of the application.
+function cssToken(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 // Finds one item in `list` by its id. Most of Waypoint's data now uses a
@@ -3283,7 +3364,7 @@ function pickerHint(wrapper, message, isError) {
   var hint = wrapper.querySelector('[data-location-hint]');
   if (!hint) return;
   hint.textContent = message || '';
-  hint.style.color = isError ? 'var(--danger)' : '';
+  hint.style.color = isError ? 'var(--wp-state-danger)' : '';
 }
 
 function abortLocationSearch(wrapper) {
@@ -3446,7 +3527,8 @@ function openLocationPickerMap(wrapper, allowPlacement) {
   if (Number.isFinite(lat) && Number.isFinite(lng)) setMarker(L.latLng(lat, lng), false);
   var boundary = locationPickerBoundaries[prefix];
   if (boundary && boundary.geometry) {
-    var layer = L.geoJSON(boundary.geometry, { style: { color: '#1f6f63', weight: 2, fillColor: '#1f6f63', fillOpacity: 0.18 } }).addTo(map);
+    var destinationColor = cssToken('--wp-map-destination');
+    var layer = L.geoJSON(boundary.geometry, { style: { color: destinationColor, weight: 2, fillColor: destinationColor, fillOpacity: 0.18 } }).addTo(map);
     map.fitBounds(layer.getBounds(), { padding: [16, 16] });
   }
   if (allowPlacement) {
@@ -4715,10 +4797,10 @@ function renderCompanionsTab(trip) {
 // they actually pop against the (fairly busy, fairly light) OpenStreetMap
 // tiles instead of blending into the background.
 var MAP_LAYER_META = [
-  { key: 'destinations', label: 'Destinations', color: '#1f6f63' },
-  { key: 'transport', label: 'Transport', color: '#1e88ff' },
-  { key: 'accommodation', label: 'Accommodation', color: '#ff2d78' },
-  { key: 'activities', label: 'Activities', color: '#ff8c1a' }
+  { key: 'destinations', label: 'Destinations', color: cssToken('--wp-map-destination'), soft: 'var(--wp-map-destination-subtle)' },
+  { key: 'transport', label: 'Transport', color: cssToken('--wp-map-transport'), soft: 'var(--wp-map-transport-subtle)' },
+  { key: 'accommodation', label: 'Accommodation', color: cssToken('--wp-map-accommodation'), soft: 'var(--wp-map-accommodation-subtle)' },
+  { key: 'activities', label: 'Activities', color: cssToken('--wp-map-activity'), soft: 'var(--wp-map-activity-subtle)' }
 ];
 
 // Everything the Map tab needs to remember between renders that ISN'T part
@@ -4875,7 +4957,7 @@ function mapFiltersHtml(trip) {
   var counts = mapVisibleCounts(trip);
   return '<div class="map-filter-bar" role="group" aria-label="Map layers">' + MAP_LAYER_META.map(function (meta) {
     var active = !!mapState.visibility[meta.key];
-    return '<button type="button" class="map-filter-chip' + (active ? ' is-active' : '') + '" data-action="toggle-map-layer" data-layer="' + meta.key + '" aria-pressed="' + active + '" style="--map-color:' + meta.color + ';--map-soft:' + (meta.key === 'destinations' ? 'var(--teal-soft)' : 'var(--surface-2)') + '">' +
+    return '<button type="button" class="map-filter-chip' + (active ? ' is-active' : '') + '" data-action="toggle-map-layer" data-layer="' + meta.key + '" aria-pressed="' + active + '" style="--map-color:' + meta.color + ';--map-soft:' + meta.soft + '">' +
       icon(mapLayerIconName(meta.key)) + '<span>' + esc(meta.label) + '</span><span class="map-filter-count">' + counts[meta.key] + '</span></button>';
   }).join('') + '</div>';
 }
@@ -5486,7 +5568,7 @@ function renderExpensesTab(trip) {
 
   return head +
     '<div class="stat-row"><div class="stat-tile"><div class="stat-label">Total (' + trip.homeCurrency + ')</div><div class="stat-value">' + money(spend.known, trip.homeCurrency) + '</div></div>' + catTiles + '</div>' +
-    (spend.unknownCount ? '<div class="intro-note" style="border-color:var(--danger-soft)"><strong>' + spend.unknownCount + ' item(s)</strong> are in a currency with no exchange rate set — <button class="warn-link" data-action="switch-tab" data-tab="settings">set one in Settings</button> to include them in the total.</div>' : '') +
+    (spend.unknownCount ? '<div class="intro-note" style="border-color:var(--wp-state-danger-subtle)"><strong>' + spend.unknownCount + ' item(s)</strong> are in a currency with no exchange rate set — <button class="warn-link" data-action="switch-tab" data-tab="settings">set one in Settings</button> to include them in the total.</div>' : '') +
     '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount</th><th class="num">' + esc(trip.homeCurrency) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
@@ -5541,8 +5623,8 @@ function renderSettingsTab(trip) {
         : '<p class="field-hint">No foreign-currency costs logged yet — rates will appear here once you add one.</p>') +
       (canEdit ? '<button type="submit" class="btn btn-primary">Save currency settings</button>' : '') +
     '</form>' +
-    (canEdit ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)">' +
-      '<h3 style="font-size:15px;margin-bottom:8px">Integrations</h3>' +
+    (canEdit ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--wp-border-default)">' +
+      '<h3 class="section-subhead">Integrations</h3>' +
       '<p class="field-hint">The "Look up" button on the transport form (Flight number field) uses the ' +
       '<strong>AeroDataBox Free Tier, through RapidAPI</strong>, to fill in the airline, airports and ' +
       'scheduled times for a flight number + date. This is a per-site setup, not something stored in this ' +
@@ -5554,12 +5636,12 @@ function renderSettingsTab(trip) {
     // this trip and who's tagged as a companion on it turned out to be
     // one and the same "who's on this trip" question. Just a pointer for
     // anyone who remembers it being here.
-    (canShareTrip(trip) ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)">' +
-      '<h3 style="font-size:15px;margin-bottom:8px">Sharing</h3>' +
+    (canShareTrip(trip) ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--wp-border-default)">' +
+      '<h3 class="section-subhead">Sharing</h3>' +
       '<p class="field-hint">Manage who has access to this trip from the <button class="warn-link" data-action="switch-tab" data-tab="companions">Companions tab</button>.</p>' +
     '</div>' : '') +
-    (canEdit ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--line)">' +
-      '<h3 style="font-size:15px;margin-bottom:8px">Danger zone</h3>' +
+    (canEdit ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--wp-border-default)">' +
+      '<h3 class="section-subhead">Danger zone</h3>' +
       '<button class="btn btn-danger" data-action="delete-trip" data-id="' + trip.tripId + '">' + icon('trash') + ' Delete this trip</button>' +
     '</div>' : '')
   );
