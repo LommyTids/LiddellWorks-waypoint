@@ -278,6 +278,34 @@ textarea { resize: vertical; min-height: 60px; }
 .form-details-body .field:last-child { margin-bottom: 12px; }
 .checkbox-field { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
 .checkbox-field input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
+.activity-timing-field { display: flex; flex-direction: column; gap: 10px; }
+.activity-timing-field > label { margin-bottom: 0; }
+.activity-timing-grid { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 10px; }
+.activity-timing-rail { position: relative; display: flex; flex-direction: column; align-items: center; padding: 25px 0; }
+.activity-timing-rail::before { content: ''; position: absolute; top: 31px; bottom: 31px; width: 2px; background: var(--line); }
+.activity-timing-dot { position: relative; z-index: 1; width: 11px; height: 11px; border: 2px solid var(--accent); border-radius: 50%; background: var(--surface); }
+.activity-timing-dot:last-child { margin-top: auto; }
+.activity-timing-moments { min-width: 0; }
+.activity-timing-moment + .activity-timing-moment { margin-top: 0; }
+.activity-timing-moment-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+.activity-timing-moment-head strong { font-size: 13px; }
+.activity-timing-moment-head span { font-size: 11.5px; color: var(--ink-faint); }
+.activity-date-time-row { display: grid; grid-template-columns: minmax(0,1fr) 126px; gap: 10px; }
+.activity-date-time-row .field { margin: 0; }
+.activity-date-time-row .field label { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 0; }
+.activity-date-time-row .field { display: grid; grid-template-columns: 16px minmax(0,1fr); grid-template-areas: 'icon label' 'icon input'; column-gap: 8px; align-items: center; min-height: 56px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.activity-date-time-row .field::before { grid-area: icon; color: var(--accent); font-size: 15px; content: '◷'; }
+.activity-date-time-row .activity-date-field::before { content: '□'; font-size: 17px; }
+.activity-date-time-row .field label { grid-area: label; }
+.activity-date-time-row .field input { grid-area: input; min-width: 0; padding: 0; border: 0; background: transparent; font-weight: 600; }
+.activity-timing-duration { display: flex; align-items: center; gap: 8px; height: 40px; color: var(--ink-faint); font-size: 12px; }
+.activity-timing-duration::before, .activity-timing-duration::after { content: ''; height: 1px; background: var(--line); }
+.activity-timing-duration::before { width: 18px; }
+.activity-timing-duration::after { flex: 1; }
+.activity-timing-duration span { padding: 5px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); font-weight: 600; white-space: nowrap; }
+.activity-timing-field.is-all-day .activity-time-field { display: none; }
+.activity-timing-field.is-all-day .activity-date-time-row { grid-template-columns: 1fr; }
+.activity-timing-field.is-all-day .activity-timing-duration { display: none; }
 /* The Companions "tag-picker" field (see fieldHtml()'s 'tag-picker' case)
    — a row of small pill-shaped checkboxes, one per companion, that wraps
    onto multiple lines once there are more than fit on one. */
@@ -518,8 +546,8 @@ tr:last-child td { border-bottom: none; }
    itinerary/editor tabs: routes are spatial information, so squeezing them
    into the normal reading-column width makes the view less useful. */
 .map-workspace { width: min(1240px, calc(100vw - 32px)); margin-left: 50%; transform: translateX(-50%); }
-.map-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.map-range-controls { flex: 1 1 520px; min-width: min(100%, 320px); }
+.map-toolbar { display: flex; flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 12px; }
+.map-range-controls { width: 100%; }
 .map-range-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--ink-soft); font-size: 12px; }
 .map-range-summary strong { color: var(--ink); font-size: 14px; }
 .map-range-days { font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; }
@@ -588,7 +616,6 @@ tr:last-child td { border-bottom: none; }
 @media (max-width: 640px) {
   .map-workspace { width: 100%; margin-left: 0; transform: none; }
   .map-toolbar { align-items: stretch; }
-  .map-range-controls { flex-basis: 100%; }
   .map-actions { justify-content: space-between; }
   .map-filter-bar { flex: 1; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
   .map-filter-bar::-webkit-scrollbar { display: none; }
@@ -765,6 +792,31 @@ function combineDateTime(date, time) {
 }
 function splitDateTime(iso) {
   return { date: dateOnly(iso), time: timeOnly(iso) };
+}
+
+// Activities originally stored one `date` plus optional times. Keep that
+// field as a compatibility mirror, while all new UI reads the explicit range.
+// This lets an older saved activity open naturally in the redesigned editor
+// and makes every date-aware view use the same inclusive range.
+function activityStartDate(activity) { return (activity && (activity.startDate || activity.date)) || ''; }
+function activityEndDate(activity) { return (activity && (activity.endDate || activityStartDate(activity))) || ''; }
+function activityIsAllDay(activity) {
+  if (!activity) return true;
+  return activity.allDay === true || activity.allDay === 'true' || (!activity.startTime && !activity.endTime);
+}
+function activityOccursOn(activity, day) {
+  var start = activityStartDate(activity), end = activityEndDate(activity);
+  return !!(day && start && start <= day && day <= end);
+}
+function activityDateTimeLabel(activity) {
+  var start = activityStartDate(activity), end = activityEndDate(activity);
+  if (!start) return '';
+  var dates = formatDateShort(start) + (end && end !== start ? ' – ' + formatDateShort(end) : '');
+  if (activityIsAllDay(activity)) return dates + ' · All day';
+  var startTime = activity.startTime || '';
+  var endTime = activity.endTime || '';
+  if (end && end !== start) return dates + (startTime ? ' · ' + startTime : '') + (endTime ? ' → ' + endTime : '');
+  return dates + (startTime ? ' · ' + startTime : '') + (endTime ? '–' + endTime : '');
 }
 
 function todayStr() {
@@ -1600,6 +1652,37 @@ function locationPickerHtml(field, val, req, trip, allValues) {
     '<div class="location-pin-map" data-location-pin-map></div><div class="field-hint" data-location-hint></div></div>';
 }
 
+// The activity's timing is one coherent concept, so it deliberately uses a
+// single bespoke form field rather than four unrelated date/time boxes. The
+// normal form collector still sees ordinary named inputs underneath it.
+function activityTimingHtml(values) {
+  var startDate = values.startDate || values.date || '';
+  var endDate = values.endDate || startDate;
+  var allDay = values.allDay === true || values.allDay === 'true' || values.allDay === 'on' || (!values.startTime && !values.endTime);
+  // While the end date equals the start date it remains an automatic value.
+  // A deliberate edit flips this marker in the change handler below, after
+  // which changing the start never tramples the person's chosen end date.
+  var autoEndDate = !endDate || endDate === startDate;
+  return '<div class="field activity-timing-field' + (allDay ? ' is-all-day' : '') + '" style="grid-column:1/-1" data-activity-timing>' +
+    '<label>When</label>' +
+    '<label class="checkbox-field activity-timing-toggle"><input type="checkbox" name="allDay"' + (allDay ? ' checked' : '') + '> All day</label>' +
+    '<div class="activity-timing-grid">' +
+      '<div class="activity-timing-rail" aria-hidden="true"><span class="activity-timing-dot"></span><span class="activity-timing-dot"></span></div>' +
+      '<div class="activity-timing-moments">' +
+      '<div class="activity-timing-moment"><div class="activity-timing-moment-head"><strong>Start</strong><span>Local time</span></div><div class="activity-date-time-row">' +
+        '<div class="field activity-date-field"><label>Start date</label><input type="date" name="startDate" value="' + esc(startDate) + '" required></div>' +
+        '<div class="field activity-time-field"><label>Start time</label><input type="time" name="startTime" value="' + esc(values.startTime || '') + '"' + (allDay ? ' disabled' : '') + '></div>' +
+      '</div>' +
+      '</div><div class="activity-timing-duration" data-activity-duration><span>Duration</span></div>' +
+      '<div class="activity-timing-moment"><div class="activity-timing-moment-head"><strong>End</strong><span>Local time</span></div><div class="activity-date-time-row">' +
+        '<div class="field activity-date-field"><label>End date</label><input type="date" name="endDate" value="' + esc(endDate) + '" min="' + esc(startDate) + '" required data-auto-synced="' + (autoEndDate ? 'true' : 'false') + '"></div>' +
+        '<div class="field activity-time-field"><label>End time</label><input type="time" name="endTime" value="' + esc(values.endTime || '') + '"' + (allDay ? ' disabled' : '') + '></div>' +
+      '</div>' +
+      '</div></div>' +
+    '</div>' +
+  '</div>';
+}
+
 function fieldHtml(field, value, trip, allValues) {
   // allValues (optional): every value currently in the form (initial
   // values, or the live values on a reactive re-render — see
@@ -1653,6 +1736,8 @@ function fieldHtml(field, value, trip, allValues) {
       (field.locked ? '<div class="field-hint">Who this is tagged to isn\'t something you can change.</div>' : '') +
       '</div>';
   }
+
+  if (field.type === 'activity-timing') return activityTimingHtml(allValues || {});
 
   var inputHtml;
   switch (field.type) {
@@ -1960,14 +2045,12 @@ var ACTIVITY_FORM_SECTIONS = [
     { key: 'title', label: 'Activity', type: 'text', required: true, wide: true },
     { key: 'category', label: 'Category', type: 'select', options: ACTIVITY_CATEGORIES },
     { key: 'destinationId', label: 'Area', type: 'select-destination' },
-    { key: 'date', label: 'Date', type: 'date', required: true, wide: true },
-    { key: 'startTime', label: 'Start time', type: 'time' },
-    { key: 'endTime', label: 'End time', type: 'time' },
+    { key: 'timing', label: 'When', type: 'activity-timing', wide: true },
     { key: 'location', label: 'Venue (optional)', type: 'text', wide: true, placeholder: 'e.g. Hawksmoor Steakhouse' },
     { key: 'address', label: 'Address', type: 'location-picker', wide: true, placeholder: 'e.g. street address, neighbourhood or nearby landmark', locationPrefix: 'address', locationContext: 'activity', locationKind: 'point', locationValue: 'address', summaryLabel: 'Map location' }
   ] },
   { title: 'Booking and contact', hint: 'Optional confirmation details and the person or provider to contact.', collapsible: true, fields: [
-    { key: 'bookingRef', label: 'Booking / confirmation #', type: 'text' },
+    { key: 'bookingRef', label: 'Booking reference', type: 'text' },
     { key: 'contactId', label: 'Contact', type: 'select-contact' }
   ] },
   { title: 'Cost and receipt', hint: 'Optional — activity costs also appear automatically in Expenses.', collapsible: true, fields: [
@@ -2064,9 +2147,11 @@ function transportFieldsForMode(values) {
     .concat(modeFields, [
       { key: 'fromLocation', label: 'From', type: 'location-picker', wide: true, required: true, placeholder: mode === 'Flight' ? 'e.g. LHR or Heathrow' : 'e.g. station, port or address', locationPrefix: 'from', locationContext: locationContext, locationKind: 'point', summaryLabel: 'Departure location' },
       { key: 'toLocation', label: 'To', type: 'location-picker', wide: true, required: true, placeholder: mode === 'Flight' ? 'e.g. JFK or JFK Airport' : 'e.g. station, port or address', locationPrefix: 'to', locationContext: locationContext, locationKind: 'point', summaryLabel: 'Arrival location' },
+      // Keep each travel moment together: date + time mirror the
+      // check-in/check-out rows in Accommodation and start/end in Activity.
       { key: 'departDate', label: 'Depart date', type: 'date', required: true },
-      { key: 'arriveDate', label: 'Arrive date', type: 'date', required: true },
       { key: 'departTime', label: 'Depart time', type: 'time' },
+      { key: 'arriveDate', label: 'Arrive date', type: 'date', required: true },
       { key: 'arriveTime', label: 'Arrive time', type: 'time' }
     ], transportPaymentFields(values), [
       { key: 'bookingRef', label: 'Booking reference', type: 'text' },
@@ -2411,19 +2496,51 @@ function openDestinationForm(trip, existing) {
   });
 }
 
+function activityFormInitial(record) {
+  var values = record || {};
+  var startDate = values.startDate || values.date || '';
+  var endDate = values.endDate || startDate;
+  // Older records did not have an all-day flag; no saved times is the
+  // unambiguous legacy equivalent of an all-day activity.
+  var allDay = values.allDay === undefined
+    ? !(values.startTime || values.endTime)
+    : (values.allDay === true || values.allDay === 'true' || values.allDay === 'on');
+  return Object.assign({}, values, { startDate: startDate, endDate: endDate, allDay: allDay });
+}
+
 function openActivityForm(trip, existing, seed) {
-  var initial = existing ? Object.assign({ category: 'Other' }, existing, activityAddressPickerInitial(existing)) : Object.assign({ category: 'Other' }, seed || {});
+  var initial = existing
+    ? Object.assign({ category: 'Other' }, activityFormInitial(existing), activityAddressPickerInitial(existing))
+    : Object.assign({ category: 'Other', allDay: true }, activityFormInitial(seed || {}));
   openForm({
     title: existing ? 'Edit activity' : 'Add activity',
     sections: sectionsWithTagPickerLock(ACTIVITY_FORM_SECTIONS, !!existing && !canFullyEditTrip(trip)),
     initial: initial, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
+      var startDate = v.startDate || '';
+      var endDate = v.endDate || startDate;
+      var allDay = !!v.allDay;
+      if (!startDate || !endDate) {
+        showToast('Add a start and end date for this activity.');
+        return false;
+      }
+      if (endDate < startDate) {
+        showToast('The end date cannot be before the start date.');
+        return false;
+      }
+      if (!allDay && startDate === endDate && v.startTime && v.endTime && v.endTime < v.startTime) {
+        showToast('For a same-day activity, the end time must be after the start time.');
+        return false;
+      }
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
         var address = readPickerLocation(v, 'address');
         var rec = {
           activityId: existing ? existing.activityId : newId(), title: v.title, category: v.category || 'Other', destinationId: v.destinationId || '',
-          date: v.date, startTime: v.startTime || '', endTime: v.endTime || '',
+          // `date` stays in sync as a compatibility mirror for older saved
+          // trips and browser copies. New date-aware views use start/end.
+          date: startDate, startDate: startDate, endDate: endDate, allDay: allDay,
+          startTime: allDay ? '' : (v.startTime || ''), endTime: allDay ? '' : (v.endTime || ''),
           location: v.location || '', address: v.address || '',
           addressLat: address.lat, addressLng: address.lng, addressLocationRef: address.locationRef, addressLocationMethod: address.locationMethod, addressLocationGranularity: address.locationGranularity, addressLocationStale: address.locationStale, addressLocationKindLabel: address.locationKindLabel,
           bookingRef: v.bookingRef || '',
@@ -3835,7 +3952,7 @@ function deleteTrip(id) {
 function allCostLines(trip) {
   var lines = [];
   trip.activities.forEach(function (a) {
-    if (a.costAmount) lines.push({ date: a.date, type: 'Activity', desc: a.title, amount: a.costAmount, currency: a.costCurrency, rateOverride: a.costRate, receiptRef: a.receiptRef, bookingRef: a.bookingRef, category: 'Activities' });
+    if (a.costAmount) lines.push({ date: activityStartDate(a), type: 'Activity', desc: a.title, amount: a.costAmount, currency: a.costCurrency, rateOverride: a.costRate, receiptRef: a.receiptRef, bookingRef: a.bookingRef, category: 'Activities' });
   });
   trip.transport.forEach(function (t) {
     if (t.costAmount) lines.push({ date: dateOnly(t.departDateTime), type: 'Transport', desc: transportLabel(t), amount: t.costAmount, currency: t.costCurrency, rateOverride: t.costRate, receiptRef: t.receiptRef, bookingRef: t.bookingRef, category: 'Transport' });
@@ -3904,7 +4021,7 @@ function tripDayList(trip) {
   function add(d) { if (d) dates[d] = true; }
   add(trip.startDate); add(trip.endDate);
   trip.destinations.forEach(function (d) { add(d.arriveDate); add(d.departDate); });
-  trip.activities.forEach(function (a) { add(a.date); });
+  trip.activities.forEach(function (a) { add(activityStartDate(a)); add(activityEndDate(a)); });
   trip.transport.forEach(function (t) { add(dateOnly(t.departDateTime)); add(dateOnly(t.arriveDateTime)); });
   trip.accommodation.forEach(function (a) { add(dateOnly(a.checkIn)); add(dateOnly(a.checkOut)); });
   var keys = Object.keys(dates).sort();
@@ -3917,7 +4034,13 @@ function tripDayList(trip) {
 function eventsForDay(trip, day) {
   var events = [];
   trip.activities.forEach(function (a) {
-    if (a.date === day) events.push({ time: a.startTime || '00:00', kind: 'activity', data: a });
+    if (!activityOccursOn(a, day)) return;
+    var startsToday = activityStartDate(a) === day;
+    events.push({
+      time: activityIsAllDay(a) || !startsToday ? '00:00' : (a.startTime || '00:00'),
+      displayTime: activityIsAllDay(a) ? 'All day' : (startsToday ? (a.startTime || 'Time TBD') : 'Continues'),
+      kind: 'activity', data: a, continues: !startsToday
+    });
   });
   trip.accommodation.forEach(function (ac) {
     if (dateOnly(ac.checkIn) === day) events.push({ time: timeOnly(ac.checkIn) || '15:00', kind: 'checkin', data: ac });
@@ -4219,7 +4342,7 @@ function renderDestinationsTab(trip) {
 
 function renderActivitiesTab(trip) {
   if (trip.activities.length === 0) return emptyTab(trip, 'ticket', 'No activities yet', 'Tours, museum visits, dinner reservations — anything with a date and time.', 'new-activity', 'Add activity');
-  var sorted = trip.activities.slice().sort(function (a, b) { return ((a.date || '') + (a.startTime || '')) < ((b.date || '') + (b.startTime || '')) ? -1 : 1; });
+  var sorted = trip.activities.slice().sort(function (a, b) { return (activityStartDate(a) + (a.startTime || '')) < (activityStartDate(b) + (b.startTime || '')) ? -1 : 1; });
   var rows = sorted.map(function (a) {
     var dest = a.destinationId ? byId(trip.destinations, a.destinationId, 'destinationId') : null;
     var contact = a.contactId ? byId(trip.contacts, a.contactId, 'contactId') : null;
@@ -4232,7 +4355,7 @@ function renderActivitiesTab(trip) {
     if (a.costAmount) tags.push(costTag(trip, a.costAmount, a.costCurrency, a.costRate));
     if (a.companions && a.companions.length) tags.push(companionTags(trip, a.companions));
     return '<div class="item-row"><div class="item-icon">' + icon('ticket') + '</div><div class="item-main">' +
-      '<div class="item-title-row"><span class="item-title">' + esc(a.title) + '</span><span class="item-sub">' + formatDateShort(a.date) + (a.startTime ? ' · ' + a.startTime : '') + (a.endTime ? '–' + a.endTime : '') + '</span></div>' +
+      '<div class="item-title-row"><span class="item-title">' + esc(a.title) + '</span><span class="item-sub">' + esc(activityDateTimeLabel(a)) + '</span></div>' +
       (a.address ? '<div class="item-sub">' + esc(a.address) + ' ' + mapsLink(a.address) + '</div>' : '') +
       '<div class="item-tags">' + tags.join('') + '</div>' +
       (a.notes ? '<div class="item-sub" style="margin-top:6px">' + esc(a.notes) + '</div>' : '') +
@@ -4519,9 +4642,9 @@ function renderCompanionsTab(trip) {
 // tiles instead of blending into the background.
 var MAP_LAYER_META = [
   { key: 'destinations', label: 'Destinations', color: '#1f6f63' },
-  { key: 'activities', label: 'Activities', color: '#ff8c1a' },
   { key: 'transport', label: 'Transport', color: '#1e88ff' },
-  { key: 'accommodation', label: 'Accommodation', color: '#ff2d78' }
+  { key: 'accommodation', label: 'Accommodation', color: '#ff2d78' },
+  { key: 'activities', label: 'Activities', color: '#ff8c1a' }
 ];
 
 // Everything the Map tab needs to remember between renders that ISN'T part
@@ -4542,7 +4665,10 @@ var mapState = {
   routeArrows: [],
   visibleBounds: null,
   refreshFrame: null,
-  currentTrip: null
+  currentTrip: null,
+  worldCenter: 0,
+  worldBoundsKey: '',
+  minimumZoom: 0
 };
 
 function ensureMapRange(trip) {
@@ -4585,7 +4711,7 @@ function mapPointsForTrip(trip) {
     points.push({ category: 'destinations', coords: savedCoords(d, 'lat', 'lng'), label: d.name, sub: d.country, boundaryRef: d.boundaryRef || '', boundaryQuality: d.boundaryQuality || '', stale: d.locationStale });
   });
   (trip.activities || []).forEach(function (a) {
-    if (!mapRangeVisible(a.date, a.date)) return;
+    if (!mapRangeVisible(activityStartDate(a), activityEndDate(a))) return;
     var addressCoords = savedCoords(a, 'addressLat', 'addressLng');
     // The venue is a note, not a geocoded place. Activity pins are always
     // driven by their separately selected or manually pinned street address.
@@ -4694,11 +4820,11 @@ function renderMapTab(trip) {
   return (
     '<div class="map-workspace">' +
       '<div class="map-toolbar">' +
-        mapRangeControlsHtml(trip) +
         '<div class="map-actions">' + mapFiltersHtml(trip) +
           '<button type="button" class="btn btn-ghost" data-action="map-fit-selection">Fit selection</button>' +
           '<button type="button" class="btn btn-icon" data-action="map-toggle-fullscreen" aria-label="Expand map" title="Expand map">' + icon('arrowRight') + '</button>' +
         '</div>' +
+        mapRangeControlsHtml(trip) +
       '</div>' +
       '<div id="map-shell" class="map-shell">' +
         '<div id="map-canvas" class="map-canvas"></div>' +
@@ -4716,6 +4842,36 @@ function normalizeLongitude(lng) {
   while (lng > 180) lng -= 360;
   while (lng < -180) lng += 360;
   return lng;
+}
+
+// Leaflet accepts longitudes outside the conventional -180°…+180° range.
+// Keeping every vector in one deliberately chosen 360° window lets a
+// Pacific trip use 139°…242° while still showing only one visible Earth.
+function longitudeNear(lng, referenceLongitude) {
+  return lng + 360 * Math.round((referenceLongitude - lng) / 360);
+}
+
+function mapWorldCenterForCoordinates(coords) {
+  if (!coords.length) return 0;
+  var anchor = coords[0].lng;
+  var minLongitude = Infinity, maxLongitude = -Infinity;
+  coords.forEach(function (coord) {
+    var longitude = longitudeNear(coord.lng, anchor);
+    minLongitude = Math.min(minLongitude, longitude);
+    maxLongitude = Math.max(maxLongitude, longitude);
+  });
+  return (minLongitude + maxLongitude) / 2;
+}
+
+function mapWorldWindow(centerLongitude) {
+  return { west: centerLongitude - 180, east: centerLongitude + 180 };
+}
+
+// At this zoom a 256px Leaflet world is at least as wide as the map canvas,
+// so the furthest-out view cannot reveal a second horizontal copy.
+function mapMinimumWorldZoom(canvasWidth) {
+  var safeWidth = Math.max(256, Number(canvasWidth) || 256);
+  return Math.log(safeWidth / 256) / Math.LN2;
 }
 
 function toRadians(value) { return value * Math.PI / 180; }
@@ -4762,10 +4918,8 @@ function greatCircleRoute(from, to) {
   return { points: points, arrowBefore: points[arrowIndex - 1], arrowAfter: points[arrowIndex] };
 }
 
-// Leaflet repeats the tile world but vector layers need to be placed in a
-// specific copy themselves. Reposition the entire unwrapped route into the
-// copy nearest the current view whenever panning finishes. Keeping one shared
-// offset preserves the short route and the arrow direction.
+// Reposition the entire unwrapped route into the map's selected world window.
+// Keeping one shared offset preserves both the short route and arrow direction.
 function routeForMapView(route, centerLongitude) {
   var first = route.points[0].lng;
   var last = route.points[route.points.length - 1].lng;
@@ -4777,6 +4931,41 @@ function routeForMapView(route, centerLongitude) {
     arrowBefore: copyPoint(route.arrowBefore),
     arrowAfter: copyPoint(route.arrowAfter)
   };
+}
+
+function prepareMapGeometry(points, legs) {
+  var worldCoordinates = [];
+  var preparedLegs = [];
+  var missingLegs = 0;
+
+  // Routes are added first so a date-line crossing establishes the useful
+  // unwrapped longitude sequence before ordinary markers are folded near it.
+  legs.forEach(function (leg) {
+    if (!leg.fromCoords || !leg.toCoords) { missingLegs++; return; }
+    var route = greatCircleRoute(leg.fromCoords, leg.toCoords);
+    preparedLegs.push({ leg: leg, route: route });
+    route.points.forEach(function (point) { worldCoordinates.push(point); });
+  });
+  points.forEach(function (point) {
+    if (point.coords) worldCoordinates.push(point.coords);
+  });
+
+  return {
+    preparedLegs: preparedLegs,
+    missingLegs: missingLegs,
+    worldCenter: mapWorldCenterForCoordinates(worldCoordinates)
+  };
+}
+
+function applyMapWorldWindow(map, centerLongitude) {
+  var world = mapWorldWindow(centerLongitude);
+  var boundsKey = world.west.toFixed(5) + '|' + world.east.toFixed(5);
+  mapState.worldCenter = centerLongitude;
+  if (mapState.worldBoundsKey !== boundsKey) {
+    mapState.worldBoundsKey = boundsKey;
+    map.setMaxBounds([[-85.05112878, world.west], [85.05112878, world.east]]);
+  }
+  return world;
 }
 
 function routeStyleForMode(mode) {
@@ -4855,28 +5044,6 @@ function updateMapStatus(placed, missing) {
   }
 }
 
-// Leaflet's ordinary bounds treat -179° and +179° as almost a full world
-// apart. For fitting we instead find the smallest wrapped longitude window,
-// keeping Pacific trips compact while preserving normal city and continental
-// views. Leaflet can render longitudes outside ±180° when worldCopyJump is on.
-function wrappedMapBounds(coords) {
-  if (!coords.length) return null;
-  var minLat = Infinity, maxLat = -Infinity;
-  var longitudes = coords.map(function (coord) {
-    minLat = Math.min(minLat, coord.lat); maxLat = Math.max(maxLat, coord.lat);
-    return (normalizeLongitude(coord.lng) + 360) % 360;
-  }).sort(function (a, b) { return a - b; });
-  var largestGap = -1, gapIndex = 0;
-  for (var i = 0; i < longitudes.length; i++) {
-    var next = i === longitudes.length - 1 ? longitudes[0] + 360 : longitudes[i + 1];
-    var gap = next - longitudes[i];
-    if (gap > largestGap) { largestGap = gap; gapIndex = i; }
-  }
-  var west = longitudes[(gapIndex + 1) % longitudes.length];
-  var east = west + (360 - largestGap);
-  return L.latLngBounds([[minLat, west], [maxLat, east]]);
-}
-
 function refreshMapLayers(trip, fitToSelection) {
   if (!mapState.instance || !mapState.layers) return;
   var map = mapState.instance;
@@ -4887,14 +5054,15 @@ function refreshMapLayers(trip, fitToSelection) {
 
   var points = mapPointsForTrip(trip);
   var legs = mapLegsForTrip(trip);
+  var geometry = prepareMapGeometry(points, legs);
+  var worldCenter = geometry.worldCenter;
+  applyMapWorldWindow(map, worldCenter);
   var pointGroups = {};
   var bounds = L.latLngBounds([]);
-  var viewCoords = [];
-  var placed = 0, missing = 0;
+  var placed = 0, missing = geometry.missingLegs;
 
   function trackPoint(lat, lng) {
     bounds.extend([lat, lng]);
-    viewCoords.push({ lat: lat, lng: lng });
   }
 
   function addDestinationArea(point) {
@@ -4902,13 +5070,15 @@ function refreshMapLayers(trip, fitToSelection) {
     if (!boundary || !boundary.geometry) return false;
     var meta = mapLayerMeta('destinations');
     var area = L.geoJSON(boundary.geometry, {
-      style: { color: meta.color, weight: 2, opacity: point.stale ? 0.45 : 0.8, fillColor: meta.color, fillOpacity: point.stale ? 0.08 : 0.18, dashArray: point.stale ? '4 4' : null }
+      style: { color: meta.color, weight: 2, opacity: point.stale ? 0.45 : 0.8, fillColor: meta.color, fillOpacity: point.stale ? 0.08 : 0.18, dashArray: point.stale ? '4 4' : null },
+      coordsToLatLng: function (coords) {
+        return L.latLng(coords[1], longitudeNear(coords[0], worldCenter), coords[2]);
+      }
     }).bindPopup(pointPopupHtml([point]));
     area.addTo(layers.destinations);
     if (area.getBounds && area.getBounds().isValid()) {
       var areaBounds = area.getBounds();
       bounds.extend(areaBounds);
-      viewCoords.push({ lat: areaBounds.getSouth(), lng: areaBounds.getWest() }, { lat: areaBounds.getNorth(), lng: areaBounds.getEast() });
     }
     return true;
   }
@@ -4929,28 +5099,46 @@ function refreshMapLayers(trip, fitToSelection) {
     var groupedPoints = pointGroups[key];
     var first = groupedPoints[0];
     var needsReview = groupedPoints.some(function (point) { return !!point.stale; });
-    L.marker([first.coords.lat, first.coords.lng], { icon: mapMarkerIcon(first.category, needsReview, groupedPoints.length) })
+    var renderedLongitude = longitudeNear(first.coords.lng, worldCenter);
+    L.marker([first.coords.lat, renderedLongitude], { icon: mapMarkerIcon(first.category, needsReview, groupedPoints.length) })
       .bindPopup(pointPopupHtml(groupedPoints)).addTo(layers[first.category]);
-    trackPoint(first.coords.lat, first.coords.lng);
+    trackPoint(first.coords.lat, renderedLongitude);
     placed += groupedPoints.length;
   });
 
-  legs.forEach(function (leg) {
-    if (!leg.fromCoords || !leg.toCoords) { missing++; return; }
-    var route = greatCircleRoute(leg.fromCoords, leg.toCoords);
-    var renderedRoute = routeForMapView(route, map.getCenter().lng);
-    var style = routeStyleForMode(leg.mode);
+  geometry.preparedLegs.forEach(function (prepared) {
+    var style = routeStyleForMode(prepared.leg.mode);
+    var renderedRoute = routeForMapView(prepared.route, worldCenter);
     L.polyline(renderedRoute.points.map(function (point) { return [point.lat, point.lng]; }), style)
-      .bindPopup(routePopupHtml(leg)).addTo(layers.transport);
+      .bindPopup(routePopupHtml(prepared.leg)).addTo(layers.transport);
     addRouteArrow(map, layers.transport, renderedRoute.arrowBefore, renderedRoute.arrowAfter, style.color);
-    route.points.forEach(function (point) { trackPoint(point.lat, point.lng); });
+    renderedRoute.points.forEach(function (point) { trackPoint(point.lat, point.lng); });
     placed++;
   });
 
-  mapState.visibleBounds = wrappedMapBounds(viewCoords) || (bounds.isValid() ? bounds : null);
+  mapState.visibleBounds = bounds.isValid() ? bounds : null;
   updateMapStatus(placed, missing);
   requestAnimationFrame(updateMapRouteArrows);
   if (fitToSelection && mapState.visibleBounds) map.fitBounds(mapState.visibleBounds, { padding: [34, 34], maxZoom: 12 });
+}
+
+function showMapLoadError(error) {
+  var statusEl = document.getElementById('map-status');
+  if (statusEl) {
+    statusEl.textContent = 'Map could not load. Refresh the page or try another date range.';
+    statusEl.classList.add('has-warning');
+  }
+  console.error('Map rendering failed:', error);
+}
+
+function safelyRefreshMapLayers(trip, fitToSelection) {
+  try {
+    refreshMapLayers(trip, fitToSelection);
+    return true;
+  } catch (error) {
+    showMapLoadError(error);
+    return false;
+  }
 }
 
 function loadMapBoundaries(trip, generation) {
@@ -4968,7 +5156,7 @@ function loadMapBoundaries(trip, generation) {
   }).then(function (data) {
     if (!data || mapState.generation !== generation) return;
     Object.assign(mapState.boundaries, data.boundaries || {});
-    refreshMapLayers(trip, false);
+    safelyRefreshMapLayers(trip, false);
   }).catch(function () {
     // A boundary is a visual enhancement. A transient failure must never stop
     // pins or routes rendering, and retries remain possible on a later range.
@@ -5017,9 +5205,20 @@ function scheduleMapRefresh(trip) {
   if (mapState.refreshFrame) cancelAnimationFrame(mapState.refreshFrame);
   mapState.refreshFrame = requestAnimationFrame(function () {
     mapState.refreshFrame = null;
-    refreshMapLayers(trip, false);
+    safelyRefreshMapLayers(trip, false);
     loadMapBoundaries(trip, mapState.generation);
   });
+}
+
+function updateMapMinimumWorldZoom() {
+  var map = mapState.instance;
+  var canvas = document.getElementById('map-canvas');
+  if (!map || !canvas) return;
+  var width = canvas.clientWidth || canvas.getBoundingClientRect().width;
+  var minimumZoom = mapMinimumWorldZoom(width);
+  mapState.minimumZoom = minimumZoom;
+  map.setMinZoom(minimumZoom);
+  if (map.getZoom() < minimumZoom) map.setZoom(minimumZoom);
 }
 
 // Builds the Leaflet map only when the Map tab itself is mounted. Changing
@@ -5027,28 +5226,51 @@ function scheduleMapRefresh(trip) {
 async function initMap(trip) {
   var canvas = document.getElementById('map-canvas');
   if (!canvas) return;
-  ensureMapRange(trip);
-  mapState.generation++;
-  var myGeneration = mapState.generation;
-  if (mapState.instance) { mapState.instance.remove(); mapState.instance = null; mapState.layers = null; }
+  try {
+    ensureMapRange(trip);
+    mapState.generation++;
+    var myGeneration = mapState.generation;
+    if (mapState.instance) { mapState.instance.remove(); mapState.instance = null; mapState.layers = null; }
 
-  var map = L.map('map-canvas', { scrollWheelZoom: true, worldCopyJump: true }).setView([20, 0], 2);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
-  }).addTo(map);
-  var layers = { destinations: L.layerGroup(), activities: L.layerGroup(), transport: L.layerGroup(), accommodation: L.layerGroup() };
-  Object.keys(layers).forEach(function (key) { if (mapState.visibility[key]) layers[key].addTo(map); });
-  mapState.instance = map;
-  mapState.layers = layers;
-  map.on('zoomend', updateMapRouteArrows);
-  map.on('resize', updateMapRouteArrows);
-  map.on('moveend', function () {
-    if (mapState.currentTrip) refreshMapLayers(mapState.currentTrip, false);
-  });
+    var initialGeometry = prepareMapGeometry(mapPointsForTrip(trip), mapLegsForTrip(trip));
+    var initialWorldCenter = initialGeometry.worldCenter;
+    var initialWorld = mapWorldWindow(initialWorldCenter);
+    var canvasWidth = canvas.clientWidth || canvas.getBoundingClientRect().width;
+    var minimumZoom = mapMinimumWorldZoom(canvasWidth);
+    var map = L.map('map-canvas', {
+      scrollWheelZoom: true,
+      worldCopyJump: false,
+      minZoom: minimumZoom,
+      zoomSnap: 0,
+      zoomDelta: 0.5,
+      maxBounds: [[-85.05112878, initialWorld.west], [85.05112878, initialWorld.east]],
+      maxBoundsViscosity: 1
+    }).setView([20, initialWorldCenter], minimumZoom);
+    // Tile addressing may wrap internally so a Pacific-centred window can use
+    // longitudes above 180°, but maxBounds plus minZoom expose only one Earth.
+    // These tile options are never toggled after startup.
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
+    }).addTo(map);
+    var layers = { destinations: L.layerGroup(), activities: L.layerGroup(), transport: L.layerGroup(), accommodation: L.layerGroup() };
+    Object.keys(layers).forEach(function (key) { if (mapState.visibility[key]) layers[key].addTo(map); });
+    mapState.instance = map;
+    mapState.layers = layers;
+    mapState.worldCenter = initialWorldCenter;
+    mapState.worldBoundsKey = initialWorld.west.toFixed(5) + '|' + initialWorld.east.toFixed(5);
+    mapState.minimumZoom = minimumZoom;
+    map.on('zoomend', updateMapRouteArrows);
+    map.on('resize', function () {
+      updateMapMinimumWorldZoom();
+      updateMapRouteArrows();
+    });
 
-  refreshMapLayers(trip, true);
-  await loadMapBoundaries(trip, myGeneration);
+    if (!safelyRefreshMapLayers(trip, true)) return;
+    await loadMapBoundaries(trip, myGeneration);
+  } catch (error) {
+    showMapLoadError(error);
+  }
 }
 
 /* ---------- 20. Render: Timeline tab ---------------------------------------
@@ -5061,7 +5283,7 @@ function eventRowHtml(trip, ev) {
   var kindClass = (ev.kind === 'activity') ? 'k-activity' : (ev.kind === 'depart' || ev.kind === 'arrive') ? 'k-transport' : 'k-stay';
   var iconName, title, sub;
   if (ev.kind === 'activity') {
-    iconName = 'ticket'; title = ev.data.title;
+    iconName = 'ticket'; title = ev.continues ? 'Continues: ' + ev.data.title : ev.data.title;
     sub = (ev.data.location || '') + (ev.data.costAmount ? ' · ' + money(ev.data.costAmount, ev.data.costCurrency) : '');
   } else if (ev.kind === 'checkin') {
     iconName = 'bed'; title = 'Check in: ' + ev.data.name; sub = ev.data.address || '';
@@ -5101,7 +5323,7 @@ function eventRowHtml(trip, ev) {
   // deleting stays a full-scope action everywhere.
   var section = ev.kind === 'activity' ? 'activity' : ((ev.kind === 'checkin' || ev.kind === 'checkout') ? 'accommodation' : 'transport');
   var actionsHtml = rowActions(trip, section, ev.data);
-  return '<div class="event-row"><span class="event-time">' + esc(ev.time) + '</span>' +
+  return '<div class="event-row"><span class="event-time">' + esc(ev.displayTime || ev.time) + '</span>' +
     '<span class="event-icon ' + kindClass + '">' + icon(iconName) + '</span>' +
     '<div class="event-main"><div class="event-title">' + esc(title) + '</div>' + (sub ? '<div class="event-sub">' + esc(sub) + '</div>' : '') + avatarsHtml + '</div>' + actionsHtml + '</div>';
 }
@@ -5491,6 +5713,7 @@ document.addEventListener('fullscreenchange', function () {
   requestAnimationFrame(function () {
     if (!mapState.instance) return;
     mapState.instance.invalidateSize();
+    updateMapMinimumWorldZoom();
     updateMapRouteArrows();
   });
 });
@@ -5504,11 +5727,56 @@ document.addEventListener('fullscreenchange', function () {
 // "Mode" (swaps in flight-number vs. license-plate etc.), "Paid with"
 // (swaps in the Cash/Points/Combo fields), and the exchange-rate
 // checkbox (shows/hides its override input) — see openTransportForm().
+function updateActivityTimingPresentation(form) {
+  var timing = form && form.querySelector('[data-activity-timing]');
+  if (!timing) return;
+  var allDayInput = form.elements.allDay;
+  var allDay = !!(allDayInput && allDayInput.checked);
+  timing.classList.toggle('is-all-day', allDay);
+  Array.prototype.forEach.call(timing.querySelectorAll('input[type="time"]'), function (input) {
+    input.disabled = allDay;
+  });
+  updateActivityDuration(form);
+}
+
+function updateActivityDuration(form) {
+  var label = form && form.querySelector('[data-activity-duration] span');
+  if (!label || (form.elements.allDay && form.elements.allDay.checked)) return;
+  var startDate = form.elements.startDate && form.elements.startDate.value;
+  var endDate = form.elements.endDate && form.elements.endDate.value;
+  var startTime = form.elements.startTime && form.elements.startTime.value;
+  var endTime = form.elements.endTime && form.elements.endTime.value;
+  if (!startDate || !endDate || !startTime || !endTime) { label.textContent = 'Duration'; return; }
+  var minutes = (new Date(endDate + 'T' + endTime) - new Date(startDate + 'T' + startTime)) / 60000;
+  if (!isFinite(minutes) || minutes < 0) { label.textContent = 'Duration'; return; }
+  var hours = Math.floor(minutes / 60), remainder = minutes % 60;
+  label.textContent = (hours ? hours + ' hour' + (hours === 1 ? '' : 's') : '') + (hours && remainder ? ' ' : '') + (remainder ? remainder + ' min' : '');
+}
+
+function syncActivityEndDate(form) {
+  var startInput = form && form.elements.startDate;
+  var endInput = form && form.elements.endDate;
+  if (!startInput || !endInput) return;
+  endInput.min = startInput.value || '';
+  if (startInput.value && (!endInput.value || endInput.dataset.autoSynced === 'true')) {
+    endInput.value = startInput.value;
+    endInput.dataset.autoSynced = 'true';
+  }
+}
+
 document.addEventListener('change', function (e) {
+  var form = e.target.closest('#entity-form');
+  var timing = form && form.querySelector('[data-activity-timing]');
+  if (timing) {
+    if (e.target.name === 'allDay') updateActivityTimingPresentation(form);
+    if (e.target.name === 'endDate') e.target.dataset.autoSynced = 'false';
+    if (e.target.name === 'startDate') syncActivityEndDate(form);
+    if (['startDate', 'endDate', 'startTime', 'endTime'].indexOf(e.target.name) !== -1) updateActivityDuration(form);
+  }
+
   var cfg = window.__formConfig;
   if (!cfg || !cfg.reactiveKey) return;
   var keys = Array.isArray(cfg.reactiveKey) ? cfg.reactiveKey : [cfg.reactiveKey];
-  var form = e.target.closest('#entity-form');
   if (!form || keys.indexOf(e.target.name) === -1) return;
   var values = currentFormValues(form);
   var container = document.getElementById('modal-fields');
@@ -5586,7 +5854,9 @@ document.addEventListener('submit', function (e) {
     // reactive form (e.g. Transport) that's whichever mode-specific
     // fields are currently shown, not a fixed list.
     var values = currentFormValues(e.target);
-    cfg.onSubmit(values);
+    // A form can reject its own values (for example an activity whose end
+    // falls before its start) and keep the modal open with a helpful toast.
+    if (cfg.onSubmit(values) === false) return;
     closeModal();
     return;
   }
@@ -5631,3 +5901,4 @@ document.addEventListener('submit', function (e) {
 </script>
 </body>
 </html>
+

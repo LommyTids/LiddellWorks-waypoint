@@ -80,7 +80,7 @@ function waitForServer(url, tries) {
     await page.click('[data-action="switch-tab"][data-tab="activities"]');
     await page.click('[data-action="new-activity"]');
     await page.fill('input[name="title"]', 'Cooking class');
-    await page.fill('input[name="date"]', '2027-11-03');
+    await page.fill('input[name="startDate"]', '2027-11-03');
     await page.locator('.tag-picker-item', { hasText: 'Mike' }).locator('input[type="checkbox"]').check();
     await page.click('#entity-form button[type="submit"]');
     await waitForSaveToSettle(page);

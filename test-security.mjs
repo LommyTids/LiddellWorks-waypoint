@@ -75,7 +75,7 @@ const saved = await jsonCall(env, "/WayPoint/api/data", "POST", { trips: [{
     { destinationId: "id_hidden_dest", name: "Secret address", country: "US", arriveDate: "", departDate: "", timezone: "", companions: ["id_other"], notes: "" },
   ],
   activities: [
-    { activityId: "id_visible_activity", title: "Visible activity", destinationId: "id_visible_dest", date: "2026-08-29", contactId: "id_visible_contact", companions: ["id_alice"], location: "Museum note", address: "1 Example Street", addressLat: 51.52, addressLng: -0.14, addressLocationRef: "liq:N457", addressLocationMethod: "selected", addressLocationGranularity: "address", addressLocationKindLabel: "Address", addressLocationStale: false },
+    { activityId: "id_visible_activity", title: "Visible activity", destinationId: "id_visible_dest", date: "1999-01-01", startDate: "2026-08-29", endDate: "2026-08-31", allDay: true, startTime: "09:00", endTime: "17:00", contactId: "id_visible_contact", companions: ["id_alice"], location: "Museum note", address: "1 Example Street", addressLat: 51.52, addressLng: -0.14, addressLocationRef: "liq:N457", addressLocationMethod: "selected", addressLocationGranularity: "address", addressLocationKindLabel: "Address", addressLocationStale: false },
     { activityId: "id_hidden_activity", title: "Hidden activity", destinationId: "id_hidden_dest", date: "2026-08-29", address: "Hidden street", contactId: "id_hidden_contact", companions: ["id_other"] },
   ],
   transport: [{ transportId: "id_transport", mode: "Flight", fromLocation: "LHR", toLocation: "JFK", departDateTime: "2026-09-01T10:30", arriveDateTime: "2026-09-01T13:30", companions: ["id_alice"], fromLat: 51.47, fromLng: -0.45, toLat: 40.64, toLng: -73.78, fromLocationRef: "local:airport:LHR", toLocationRef: "local:airport:JFK", fromLocationMethod: "selected", toLocationMethod: "selected", fromLocationGranularity: "airport", toLocationGranularity: "airport", fromLocationKindLabel: "Airport", toLocationKindLabel: "Airport", fromLocationStale: false, toLocationStale: false }],
@@ -101,6 +101,12 @@ assert.deepEqual(rawStoredTrip.destinations[3].bbox, [-74.3, 40.4, -73.6, 40.9])
 assert.deepEqual(rawStoredTrip.destinations[4].bbox, []);
 assert.equal(rawStoredTrip.activities[0].lat, undefined);
 assert.equal(rawStoredTrip.activities[0].addressLocationRef, "liq:N457");
+assert.equal(rawStoredTrip.activities[0].date, "2026-08-29");
+assert.equal(rawStoredTrip.activities[0].startDate, "2026-08-29");
+assert.equal(rawStoredTrip.activities[0].endDate, "2026-08-31");
+assert.equal(rawStoredTrip.activities[0].allDay, true);
+assert.equal(rawStoredTrip.activities[0].startTime, "");
+assert.equal(rawStoredTrip.activities[0].endTime, "");
 assert.equal(rawStoredTrip.transport[0].toLocationRef, "local:airport:JFK");
 assert.equal(rawStoredTrip.accommodation[0].locationMethod, "manual");
 
