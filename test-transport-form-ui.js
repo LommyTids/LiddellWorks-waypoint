@@ -1,6 +1,6 @@
 // Regression test for the Transport ("flight") form cleanup: seat
-// number removed entirely; From/To, Depart/Arrive date, Depart/Arrive
-// time, and Booking reference/Contact each paired onto one row; and
+// number removed entirely; From/To, each departure/arrival date+time
+// pair, and Booking reference/Contact each paired onto one row; and
 // the new "Paid with" selector (Cash / Points / Combo / Free) that
 // swaps in currency+amount+rate-override, or points program+count, or
 // both, or neither — see transportPaymentFields()/transportFieldsForMode()
@@ -68,8 +68,8 @@ function waitForServer(url, tries) {
 
     // ---- Layout pairing. ----
     console.log('2. From/To share one row:', await sameRow('fromLocation', 'toLocation'));
-    console.log('3. Depart date/Arrive date share one row:', await sameRow('departDate', 'arriveDate'));
-    console.log('4. Depart time/Arrive time share one row:', await sameRow('departTime', 'arriveTime'));
+    console.log('3. Depart date/time share one row:', await sameRow('departDate', 'departTime'));
+    console.log('4. Arrive date/time share one row:', await sameRow('arriveDate', 'arriveTime'));
     console.log('5. Booking reference/Contact share one row:', await sameRow('bookingRef', 'contactId'));
 
     // ---- "Paid with" defaults to Free on a brand-new leg, showing no
