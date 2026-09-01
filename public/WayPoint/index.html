@@ -518,8 +518,8 @@ tr:last-child td { border-bottom: none; }
    itinerary/editor tabs: routes are spatial information, so squeezing them
    into the normal reading-column width makes the view less useful. */
 .map-workspace { width: min(1240px, calc(100vw - 32px)); margin-left: 50%; transform: translateX(-50%); }
-.map-toolbar { display: flex; flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 12px; }
-.map-range-controls { width: 100%; }
+.map-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.map-range-controls { flex: 1 1 520px; min-width: min(100%, 320px); }
 .map-range-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--ink-soft); font-size: 12px; }
 .map-range-summary strong { color: var(--ink); font-size: 14px; }
 .map-range-days { font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; }
@@ -588,6 +588,7 @@ tr:last-child td { border-bottom: none; }
 @media (max-width: 640px) {
   .map-workspace { width: 100%; margin-left: 0; transform: none; }
   .map-toolbar { align-items: stretch; }
+  .map-range-controls { flex-basis: 100%; }
   .map-actions { justify-content: space-between; }
   .map-filter-bar { flex: 1; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
   .map-filter-bar::-webkit-scrollbar { display: none; }
@@ -4518,16 +4519,10 @@ function renderCompanionsTab(trip) {
 // tiles instead of blending into the background.
 var MAP_LAYER_META = [
   { key: 'destinations', label: 'Destinations', color: '#1f6f63' },
+  { key: 'activities', label: 'Activities', color: '#ff8c1a' },
   { key: 'transport', label: 'Transport', color: '#1e88ff' },
-  { key: 'accommodation', label: 'Accommodation', color: '#ff2d78' },
-  { key: 'activities', label: 'Activities', color: '#ff8c1a' }
+  { key: 'accommodation', label: 'Accommodation', color: '#ff2d78' }
 ];
-
-// At the furthest-out view, Waypoint shows one restrained world rather than
-// repeated copies of the Earth. The normal, closer trip view keeps wrapping
-// enabled so routes across the Pacific can remain visually continuous.
-var MAP_WORLD_OVERVIEW_ZOOM = 2;
-var MAP_WORLD_BOUNDS = [[-85.05112878, -180], [85.05112878, 180]];
 
 // Everything the Map tab needs to remember between renders that ISN'T part
 // of the saved trip data — which Leaflet map/layers are currently mounted,
@@ -4547,9 +4542,7 @@ var mapState = {
   routeArrows: [],
   visibleBounds: null,
   refreshFrame: null,
-  currentTrip: null,
-  tileLayer: null,
-  isWorldOverview: false
+  currentTrip: null
 };
 
 function ensureMapRange(trip) {
@@ -4701,9 +4694,9 @@ function renderMapTab(trip) {
   return (
     '<div class="map-workspace">' +
       '<div class="map-toolbar">' +
+        mapRangeControlsHtml(trip) +
         '<div class="map-actions">' + mapFiltersHtml(trip) +
           '<button type="button" class="btn btn-ghost" data-action="map-fit-selection">Fit selection</button>' +
-        mapRangeControlsHtml(trip) +
           '<button type="button" class="btn btn-icon" data-action="map-toggle-fullscreen" aria-label="Expand map" title="Expand map">' + icon('arrowRight') + '</button>' +
         '</div>' +
       '</div>' +
@@ -4779,39 +4772,6 @@ function routeForMapView(route, centerLongitude) {
   var routeMidpoint = (first + last) / 2;
   var offset = 360 * Math.round((centerLongitude - routeMidpoint) / 360);
   function copyPoint(point) { return { lat: point.lat, lng: point.lng + offset }; }
-// A conventional, single Mercator world has an unavoidable edge at ±180°.
-// At the fully zoomed-out overview we honour that edge rather than rendering
-// duplicate worlds. A route which crosses it is deliberately shown in two
-// edge-local pieces; zooming in restores the continuous world-copy route.
-function routeForSingleWorldView(route) {
-  var segments = [];
-  var first = route.points[0];
-  var section = [[first.lat, normalizeLongitude(first.lng)]];
-  for (var i = 1; i < route.points.length; i++) {
-    var previous = route.points[i - 1];
-    var current = route.points[i];
-    var delta = current.lng - previous.lng;
-    if (Math.abs(delta) > 180) throw new Error('Route points must remain locally unwrapped.');
-    var crossesEast = previous.lng < 180 && current.lng > 180;
-    var crossesWest = previous.lng > -180 && current.lng < -180;
-    if (crossesEast || crossesWest) {
-      var edge = crossesEast ? 180 : -180;
-      var crossingFraction = (edge - previous.lng) / delta;
-      var crossingLat = previous.lat + (current.lat - previous.lat) * crossingFraction;
-      section.push([crossingLat, edge]);
-      segments.push(section);
-      section = [[crossingLat, edge === 180 ? -180 : 180]];
-    }
-    section.push([current.lat, normalizeLongitude(current.lng)]);
-  }
-  segments.push(section);
-  return {
-    segments: segments,
-    arrowBefore: { lat: route.arrowBefore.lat, lng: normalizeLongitude(route.arrowBefore.lng) },
-    arrowAfter: { lat: route.arrowAfter.lat, lng: normalizeLongitude(route.arrowAfter.lng) }
-  };
-}
-
   return {
     points: route.points.map(copyPoint),
     arrowBefore: copyPoint(route.arrowBefore),
@@ -4978,16 +4938,10 @@ function refreshMapLayers(trip, fitToSelection) {
   legs.forEach(function (leg) {
     if (!leg.fromCoords || !leg.toCoords) { missing++; return; }
     var route = greatCircleRoute(leg.fromCoords, leg.toCoords);
+    var renderedRoute = routeForMapView(route, map.getCenter().lng);
     var style = routeStyleForMode(leg.mode);
-    var renderedRoute = mapState.isWorldOverview ? routeForSingleWorldView(route) : routeForMapView(route, map.getCenter().lng);
-    if (renderedRoute.segments) {
-      renderedRoute.segments.forEach(function (segment) {
-        L.polyline(segment, style).bindPopup(routePopupHtml(leg)).addTo(layers.transport);
-      });
-    } else {
-      L.polyline(renderedRoute.points.map(function (point) { return [point.lat, point.lng]; }), style)
-        .bindPopup(routePopupHtml(leg)).addTo(layers.transport);
-    }
+    L.polyline(renderedRoute.points.map(function (point) { return [point.lat, point.lng]; }), style)
+      .bindPopup(routePopupHtml(leg)).addTo(layers.transport);
     addRouteArrow(map, layers.transport, renderedRoute.arrowBefore, renderedRoute.arrowAfter, style.color);
     route.points.forEach(function (point) { trackPoint(point.lat, point.lng); });
     placed++;
@@ -5066,19 +5020,6 @@ function scheduleMapRefresh(trip) {
     refreshMapLayers(trip, false);
     loadMapBoundaries(trip, mapState.generation);
   });
-function updateMapWorldOverview() {
-  var map = mapState.instance;
-  var tileLayer = mapState.tileLayer;
-  if (!map || !tileLayer) return;
-  var isOverview = map.getZoom() <= MAP_WORLD_OVERVIEW_ZOOM;
-  if (mapState.isWorldOverview === isOverview) return;
-  mapState.isWorldOverview = isOverview;
-  tileLayer.options.noWrap = isOverview;
-  tileLayer.redraw();
-  map.setMaxBounds(isOverview ? MAP_WORLD_BOUNDS : null);
-  if (mapState.currentTrip) refreshMapLayers(mapState.currentTrip, false);
-}
-
 }
 
 // Builds the Leaflet map only when the Map tab itself is mounted. Changing
@@ -5091,20 +5032,16 @@ async function initMap(trip) {
   var myGeneration = mapState.generation;
   if (mapState.instance) { mapState.instance.remove(); mapState.instance = null; mapState.layers = null; }
 
-  var map = L.map('map-canvas', { scrollWheelZoom: true, worldCopyJump: true, minZoom: MAP_WORLD_OVERVIEW_ZOOM, maxBoundsViscosity: 1 }).setView([20, 0], MAP_WORLD_OVERVIEW_ZOOM);
-  var tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  var map = L.map('map-canvas', { scrollWheelZoom: true, worldCopyJump: true }).setView([20, 0], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
-    noWrap: true,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
   }).addTo(map);
   var layers = { destinations: L.layerGroup(), activities: L.layerGroup(), transport: L.layerGroup(), accommodation: L.layerGroup() };
   Object.keys(layers).forEach(function (key) { if (mapState.visibility[key]) layers[key].addTo(map); });
   mapState.instance = map;
-  mapState.tileLayer = tileLayer;
-  mapState.isWorldOverview = true;
-  map.setMaxBounds(MAP_WORLD_BOUNDS);
   mapState.layers = layers;
-  map.on('zoomend', function () { updateMapWorldOverview(); updateMapRouteArrows(); });
+  map.on('zoomend', updateMapRouteArrows);
   map.on('resize', updateMapRouteArrows);
   map.on('moveend', function () {
     if (mapState.currentTrip) refreshMapLayers(mapState.currentTrip, false);

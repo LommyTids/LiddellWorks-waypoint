@@ -85,17 +85,17 @@
 - Replaced date-line segment splitting with a single Leaflet polyline that selects its ±360° world copy from the current map centre.
 - Routes and direction arrows are recalculated after `moveend`, ensuring the vector layer stays aligned with Leaflet’s repeated map tiles.
 
-#### Single-world overview and map control order
+#### Map control order and startup reliability
 
 **Layman’s explanation**
 
-- At the furthest-out map view, only one copy of the Earth is shown rather than a repeated strip of maps.
-- Zooming into a trip restores the continuous Pacific route view. The map controls now place destinations, transport, accommodation and activities first, with the date slider directly beneath them.
+- The map loads reliably again and Pacific routes remain visible as continuous arcs.
+- The map controls now place destinations, transport, accommodation and activities first, with the date slider directly beneath them.
 
 **Technical details**
 
-- Added a minimum overview zoom with non-wrapping tiles and world bounds at that level; leaving the overview re-enables wrapped tiles for close trip views.
-- Routes that cross the fixed edge of the one-world overview render as edge-local segments, while closer views retain the unwrapped, nearest-world polyline.
+- Removed the incompatible one-world tile/bounds mode and restored Leaflet’s standard wrapped map lifecycle.
+- Restored the unwrapped, nearest-world polyline for all map zoom levels, including route direction arrows.
 - Reordered `MAP_LAYER_META` and changed the toolbar structure to render the filter/action row before the dual-handle date-range controls.
 
 ### Verification
