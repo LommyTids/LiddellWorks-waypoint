@@ -10,7 +10,8 @@ const requiredTokens = [
   '--wp-state-danger', '--wp-state-success',
   '--wp-map-destination', '--wp-map-transport', '--wp-map-accommodation', '--wp-map-activity',
   '--wp-type-display', '--wp-type-heading', '--wp-type-body',
-  '--wp-type-label', '--wp-type-meta', '--wp-type-micro'
+  '--wp-type-label', '--wp-type-meta', '--wp-type-micro',
+  '--wp-icon-xs', '--wp-icon-sm', '--wp-icon-md', '--wp-icon-lg', '--wp-icon-xl'
 ];
 
 for (const token of requiredTokens) {

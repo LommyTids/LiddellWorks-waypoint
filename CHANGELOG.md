@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-01 — Consolidated icon system
+
+### What changed
+
+- Added a local, dependency-free semantic SVG registry with a consistent 24×24 grid, 1.75px rounded stroke and visible diagnostic fallback for unsupported names.
+- Introduced five icon-size tokens and migrated navigation, lists, tags, timelines, map markers, actions and empty states away from one-off dimensions.
+- Replaced the activity form's text-character date/time symbols and disclosure plus/minus characters with accessible SVG artwork.
+- Gave activities and booking references distinct symbols, added a dedicated generic-route icon, and replaced the map's arrow with an expand symbol.
+- Kept rotated map-pin containers while correcting their internal glyphs to remain upright.
+- Fixed the reversed Back icon and moved the WayPoint compass mark into the shared registry.
+- Added accessible names to modal close, edit, delete, copy, companion-management and map icon buttons, with 44px targets on touch pointers.
+- Added inline comments documenting the icon architecture, semantic aliases, security restrictions, map rotation and sizing decisions.
+
+### Verification
+
+- `npm test` — passed, including security, design-token and icon-system regression checks.
+- `node test-map-route-arcs.js` — passed.
+- All application script blocks and the new icon asset parsed successfully.
+
 ## 2026-09-01 — Global design tokens and typography
 
 ### What changed
