@@ -67,7 +67,7 @@ const saved = await jsonCall(env, "/WayPoint/api/data", "POST", { trips: [{
   tripId: "id_trip", name: "Trip", startDate: "", endDate: "", homeCurrency: "GBP", notes: "",
   currencyRates: {},
   destinations: [
-    { destinationId: "id_visible_dest", name: "Visible", country: "KR", arriveDate: "", departDate: "", timezone: "", companions: ["id_alice"], notes: "", lat: 37.57, lng: 126.98, locationRef: "liq:R123", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [37.4, 126.7, 37.7, 127.2], boundaryRef: "liq:R123", boundaryQuality: "exact_simplified" },
+    { destinationId: "id_visible_dest", name: "Visible", country: "KR", arriveDate: "", departDate: "", timezone: "", companions: ["id_alice", "__trip_superuser__"], notes: "", lat: 37.57, lng: 126.98, locationRef: "liq:R123", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [37.4, 126.7, 37.7, 127.2], boundaryRef: "liq:R123", boundaryQuality: "exact_simplified" },
     { destinationId: "id_nominatim_dest", name: "Seoul", country: "KR", arriveDate: "", departDate: "", timezone: "", companions: [], notes: "", lat: 37.57, lng: 126.98, locationRef: "liq:R124", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [37.4, 37.7, 126.7, 127.2], boundaryRef: "liq:R124", boundaryQuality: "exact_simplified" },
     { destinationId: "id_cairo_dest", name: "Cairo", country: "EG", arriveDate: "", departDate: "", timezone: "", companions: [], notes: "", lat: 30.04, lng: 31.24, locationRef: "liq:R125", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [29.8, 30.2, 31.1, 31.5], boundaryRef: "liq:R125", boundaryQuality: "exact_simplified" },
     { destinationId: "id_canonical_dest", name: "New York", country: "US", arriveDate: "", departDate: "", timezone: "", companions: [], notes: "", lat: 40.72, lng: -74.01, locationRef: "liq:R126", locationMethod: "selected", locationGranularity: "area", locationStale: false, locationKindLabel: "City", bbox: [-74.3, 40.4, -73.6, 40.9], boundaryRef: "liq:R126", boundaryQuality: "exact_simplified" },
@@ -75,7 +75,7 @@ const saved = await jsonCall(env, "/WayPoint/api/data", "POST", { trips: [{
     { destinationId: "id_hidden_dest", name: "Secret address", country: "US", arriveDate: "", departDate: "", timezone: "", companions: ["id_other"], notes: "" },
   ],
   activities: [
-    { activityId: "id_visible_activity", title: "Visible activity", destinationId: "id_visible_dest", date: "1999-01-01", startDate: "2026-08-29", endDate: "2026-08-31", allDay: true, startTime: "09:00", endTime: "17:00", contactId: "id_visible_contact", companions: ["id_alice"], location: "Museum note", address: "1 Example Street", addressLat: 51.52, addressLng: -0.14, addressLocationRef: "liq:N457", addressLocationMethod: "selected", addressLocationGranularity: "address", addressLocationKindLabel: "Address", addressLocationStale: false },
+    { activityId: "id_visible_activity", title: "Visible activity", destinationId: "id_visible_dest", date: "1999-01-01", startDate: "2026-08-29", endDate: "2026-08-31", allDay: true, startTime: "09:00", endTime: "17:00", contactId: "id_visible_contact", companions: ["id_alice", "__trip_superuser__"], location: "Museum note", address: "1 Example Street", addressLat: 51.52, addressLng: -0.14, addressLocationRef: "liq:N457", addressLocationMethod: "selected", addressLocationGranularity: "address", addressLocationKindLabel: "Address", addressLocationStale: false },
     { activityId: "id_hidden_activity", title: "Hidden activity", destinationId: "id_hidden_dest", date: "2026-08-29", address: "Hidden street", contactId: "id_hidden_contact", companions: ["id_other"] },
   ],
   transport: [{ transportId: "id_transport", mode: "Flight", fromLocation: "LHR", toLocation: "JFK", departDateTime: "2026-09-01T10:30", arriveDateTime: "2026-09-01T13:30", companions: ["id_alice"], fromLat: 51.47, fromLng: -0.45, toLat: 40.64, toLng: -73.78, fromLocationRef: "local:airport:LHR", toLocationRef: "local:airport:JFK", fromLocationMethod: "selected", toLocationMethod: "selected", fromLocationGranularity: "airport", toLocationGranularity: "airport", fromLocationKindLabel: "Airport", toLocationKindLabel: "Airport", fromLocationStale: false, toLocationStale: false }],
@@ -91,6 +91,7 @@ const saved = await jsonCall(env, "/WayPoint/api/data", "POST", { trips: [{
 assert.equal(saved.status, 200);
 const rawStoredTrip = JSON.parse(env.WAYPOINT_KV.values.get("trip:id_trip"));
 assert.equal(Object.hasOwn(rawStoredTrip, "arbitraryTopLevel"), false);
+assert.equal(Object.hasOwn(rawStoredTrip, "superuserParticipant"), false);
 assert.equal(rawStoredTrip.transport[0].departDateTime, "2026-09-01T10:30");
 assert.equal(rawStoredTrip.accommodation[0].checkIn, "2026-09-01T15:00");
 assert.equal(rawStoredTrip.destinations[0].boundaryRef, "liq:R123");
@@ -107,6 +108,8 @@ assert.equal(rawStoredTrip.activities[0].endDate, "2026-08-31");
 assert.equal(rawStoredTrip.activities[0].allDay, true);
 assert.equal(rawStoredTrip.activities[0].startTime, "");
 assert.equal(rawStoredTrip.activities[0].endTime, "");
+assert.deepEqual(rawStoredTrip.destinations[0].companions, ["id_alice", "__trip_superuser__"]);
+assert.deepEqual(rawStoredTrip.activities[0].companions, ["id_alice", "__trip_superuser__"]);
 assert.equal(rawStoredTrip.transport[0].toLocationRef, "local:airport:JFK");
 assert.equal(rawStoredTrip.accommodation[0].locationMethod, "manual");
 
@@ -152,6 +155,13 @@ const currentSave = await jsonCall(env, "/WayPoint/api/data", "POST", {
 }, ownerCookie);
 assert.equal(currentSave.status, 200);
 
+const ownerStateResponse = await call(env, "/WayPoint/api/data", { headers: { Cookie: ownerCookie } });
+assert.equal(ownerStateResponse.status, 200);
+const ownerTrip = (await ownerStateResponse.json()).trips[0];
+assert.equal(ownerTrip.superuserParticipant.participantId, "__trip_superuser__");
+assert.equal(ownerTrip.superuserParticipant.name, "owner");
+assert.equal(ownerTrip.superuserParticipant.avatar.type, "account");
+
 const createAlice = await jsonCall(env, "/WayPoint/api/users", "POST", { username: "alice", password: "password123" }, ownerCookie);
 assert.equal(createAlice.status, 200);
 const grant = await jsonCall(env, "/WayPoint/api/trip-grants", "POST", {
@@ -169,6 +179,8 @@ assert.deepEqual(scopedTrip.geocodeCache, {});
 assert.deepEqual(scopedTrip.contacts.map((contact) => contact.contactId), ["id_visible_contact"]);
 assert.equal(JSON.stringify(scopedTrip).includes("Hidden street"), false);
 assert.equal(JSON.stringify(scopedTrip).includes("Hidden contact"), false);
+assert.equal(scopedTrip.superuserParticipant.participantId, "__trip_superuser__");
+assert.equal(scopedTrip.superuserParticipant.name, "owner");
 
 // Resetting a password increments sessionVersion and revokes old cookies.
 const reset = await jsonCall(env, "/WayPoint/api/users", "POST", {
@@ -180,5 +192,7 @@ assert.equal(revoked.status, 401);
 
 const html = await readFile(new URL("./public/WayPoint/index.html", import.meta.url), "utf8");
 assert.match(html, /return esc\(currency \|\| ''\)/);
+assert.match(html, /inheritDestinationPeople: !existing/);
+assert.match(html, /applyDestinationPeopleDefaults\(form, cfg\.trip, e\.target\.value\)/);
 
 console.log("security regression tests passed");

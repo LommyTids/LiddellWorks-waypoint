@@ -251,9 +251,19 @@ own login) above, **Guests** (people without one) below — rather than
 one mixed list. Any destination, activity, accommodation booking or
 transport leg can be tagged with any number of them (a small row of
 checkboxes on that item's form), and the tags show up right on that
-item in the list. This is more than a label — it's also literally what
-a User/Viewer grant's visibility is scoped to (see above), so tagging
-accurately matters if you're planning to share a trip with anyone.
+item in the list. The trip owner also appears in those **People** pickers
+as an explicit **Superuser**, resolved directly from the owner account
+rather than duplicated in the Companions list. This is more than a
+label — it's also literally what a User/Viewer grant's visibility is
+scoped to (see above), so tagging accurately matters if you're planning
+to share a trip with anyone.
+
+People tagged on a destination are preselected whenever a new Activity
+is assigned to that destination. This also applies when Timeline quick-add
+can seed one unambiguous active destination. The defaults are copied into
+the new activity as visible, editable checkbox selections: changing them
+for that activity does not rewrite the destination, and later destination
+changes do not silently retag activities that have already been saved.
 
 "Guest" and "Companion" are the two kinds of person this list can hold
 — it's the same underlying record either way (just a name, an optional

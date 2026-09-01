@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-01 — Destination people defaults
+
+### What changed
+
+- Destination forms now use a **People** picker that includes the trip owner as an explicit **Superuser** tag alongside Guests and Companions.
+- New activities preselect the people tagged on their chosen destination. Timeline quick-add activities inherit the same defaults when the active destination is unambiguous.
+- Inherited people are ordinary checked selections: they are shown immediately and can be adjusted for the individual activity before saving.
+- The Superuser is represented by a reserved virtual participant id and resolved from server-owned account data, avoiding a duplicate Companion record or trust in client-supplied identity data.
+
+### Verification
+
+- `npm test` — passed, including Worker persistence, response-shape and scoped-response coverage for the Superuser participant.
+- `node test-map-route-arcs.js` — passed.
+- Worker, mock server, inline frontend JavaScript and new Playwright test syntax checks — passed.
+- The new end-to-end browser test could not run in this workspace because Chromium is not installed and its download timed out.
+
 ## 2026-08-31 — Map timeline UI
 
 ### What changed
