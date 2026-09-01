@@ -283,6 +283,10 @@ const loginAttempts = new Map();
 // you can't grant Superuser status to someone, it only ever comes from
 // having created the trip (trip.ownerId) — see permissionForTrip().
 const GRANT_ROLES = ["admin", "user", "viewer"];
+// Virtual participant id used when itinerary items explicitly tag the trip
+// owner. It is stored in the existing `companions` id arrays, but resolves
+// from server-owned account data rather than a duplicate companion record.
+const SUPERUSER_PARTICIPANT_ID = "__trip_superuser__";
 
 /* ============================================================================
  * COMPANIONS & AVATARS
@@ -385,6 +389,22 @@ function resolveAccountAvatar(account) {
   const color = (saved && isValidAvatarColor(saved.color)) ? saved.color : AVATAR_COLOR_TOKENS[deterministicIndex(account && account.id, AVATAR_COLOR_TOKENS.length)];
   const animal = (saved && isValidAvatarAnimal(saved.animal)) ? saved.animal : AVATAR_ANIMAL_TOKENS[deterministicIndex((account && account.id) + ":animal", AVATAR_ANIMAL_TOKENS.length)];
   return { color: color, animal: animal };
+}
+
+// The trip owner is a taggable person even though ownership lives in the
+// trip index rather than `content.companions`. Expose only the display name
+// and resolved avatar; the account id remains server-side. A legacy unowned
+// trip falls back to the site owner, who is the only account able to reach it.
+function resolveSuperuserParticipant(indexEntry, usersDoc) {
+  const account = usersDoc.users.find(function (u) { return u.id === indexEntry.ownerId; }) ||
+    usersDoc.users.find(function (u) { return u.isUberUser; });
+  if (!account) return null;
+  const avatar = resolveAccountAvatar(account);
+  return {
+    participantId: SUPERUSER_PARTICIPANT_ID,
+    name: account.username,
+    avatar: { type: "account", color: avatar.color, animal: avatar.animal },
+  };
 }
 
 // Resolves EVERY companion on a trip to what marker it should show, from
@@ -1146,6 +1166,7 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
   // above -- see resolveCompanionAccessLevels()'s own big comment for why
   // this is sent to every role, unlike `grants` below it.
   const companionAccessLevels = resolveCompanionAccessLevels(indexEntry, content, usersDoc);
+  const superuserParticipant = resolveSuperuserParticipant(indexEntry, usersDoc);
 
   if (perm.role === "superuser" || perm.role === "admin") {
     const ownerAccount = usersDoc.users.find(function (u) { return u.id === indexEntry.ownerId; });
@@ -1156,6 +1177,7 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
       grants: resolveGrants(indexEntry, usersDoc),
       companionAvatars: companionAvatars,
       companionAccessLevels: companionAccessLevels,
+      superuserParticipant: superuserParticipant,
       revision: revision,
       // A full-scope role already sees `grants` (who has access to this
       // trip and as whom), so the raw accountId on each companion isn't
@@ -1199,6 +1221,7 @@ function buildVisibleTrip(indexEntry, content, perm, usersDoc) {
     myGrant: perm,
     companionAvatars: companionAvatars,
     companionAccessLevels: companionAccessLevels,
+    superuserParticipant: superuserParticipant,
     revision: revision,
     // Unlike the full-scope branch above, a scoped "user"/"viewer" grant
     // is deliberately NOT sent the `grants` array (they must not learn

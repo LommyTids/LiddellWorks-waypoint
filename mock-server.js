@@ -153,6 +153,7 @@ function countUberUsers() { return users.filter(function (u) { return u.isUberUs
 
 const AVATAR_COLOR_TOKENS = ['red', 'orange', 'amber', 'green', 'teal', 'cyan', 'blue', 'indigo', 'purple', 'pink'];
 const AVATAR_ANIMAL_TOKENS = ['penguin', 'lion', 'fox', 'owl', 'panda', 'koala', 'tiger', 'elephant', 'giraffe', 'rabbit', 'bear', 'wolf', 'cat', 'dog', 'monkey', 'dolphin'];
+const SUPERUSER_PARTICIPANT_ID = '__trip_superuser__';
 
 function isValidAvatarColor(token) { return AVATAR_COLOR_TOKENS.indexOf(token) !== -1; }
 function isValidAvatarAnimal(token) { return AVATAR_ANIMAL_TOKENS.indexOf(token) !== -1; }
@@ -175,6 +176,18 @@ function resolveAccountAvatar(account) {
   const color = (saved && isValidAvatarColor(saved.color)) ? saved.color : AVATAR_COLOR_TOKENS[deterministicIndex(account && account.id, AVATAR_COLOR_TOKENS.length)];
   const animal = (saved && isValidAvatarAnimal(saved.animal)) ? saved.animal : AVATAR_ANIMAL_TOKENS[deterministicIndex((account && account.id) + ':animal', AVATAR_ANIMAL_TOKENS.length)];
   return { color: color, animal: animal };
+}
+
+function resolveSuperuserParticipant(indexEntry) {
+  const account = users.find(function (u) { return u.id === indexEntry.ownerId; }) ||
+    users.find(function (u) { return u.isUberUser; });
+  if (!account) return null;
+  const avatar = resolveAccountAvatar(account);
+  return {
+    participantId: SUPERUSER_PARTICIPANT_ID,
+    name: account.username,
+    avatar: { type: 'account', color: avatar.color, animal: avatar.animal },
+  };
 }
 
 function resolveCompanionAvatars(content) {
@@ -295,6 +308,7 @@ function buildVisibleTrip(indexEntry, content, perm) {
   // AVATARS comment above for why this is safe to hand to every role.
   const companionAvatars = resolveCompanionAvatars(content);
   const companionAccessLevels = resolveCompanionAccessLevels(indexEntry, content);
+  const superuserParticipant = resolveSuperuserParticipant(indexEntry);
 
   if (perm.role === 'superuser' || perm.role === 'admin') {
     const ownerAccount = users.find(function (u) { return u.id === indexEntry.ownerId; });
@@ -305,6 +319,7 @@ function buildVisibleTrip(indexEntry, content, perm) {
       grants: resolveGrants(indexEntry),
       companionAvatars: companionAvatars,
       companionAccessLevels: companionAccessLevels,
+      superuserParticipant: superuserParticipant,
     });
   }
 
@@ -320,6 +335,7 @@ function buildVisibleTrip(indexEntry, content, perm) {
     myGrant: perm,
     companionAvatars: companionAvatars,
     companionAccessLevels: companionAccessLevels,
+    superuserParticipant: superuserParticipant,
     // A scoped grant never sees raw accountId on a companion -- same
     // reason it never sees `grants` -- see buildVisibleTrip() in
     // src/worker.js. companionAccessLevels is different -- it's sent here
@@ -364,6 +380,7 @@ function stripClientOwnershipFields(trip) {
   delete copy.grants;
   delete copy.myGrant;
   delete copy.ownerUsername;
+  delete copy.superuserParticipant;
   return copy;
 }
 

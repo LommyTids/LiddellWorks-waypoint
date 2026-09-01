@@ -62,11 +62,13 @@ function waitForServer(url, tries) {
     const companionRows = await page.locator('.item-list .item-row').count();
     console.log('2. Both companions listed:', companionRows === 2, companionRows);
 
-    // ---- Destination form offers both as checkboxes; tag just Sarah. ----
+    // ---- Destination form offers the explicit Superuser plus both
+    // companions as People choices; tag just Sarah. ----
     await page.click('[data-action="switch-tab"][data-tab="destinations"]');
     await page.click('[data-action="new-destination"]');
     const pickerOptionCount = await page.locator('.tag-picker .tag-picker-item').count();
-    console.log('3. Destination form\'s Companions picker offers both:', pickerOptionCount === 2, pickerOptionCount);
+    const superuserChoiceText = await page.locator('.tag-picker-item', { hasText: 'admin' }).textContent();
+    console.log('3. Destination form\'s People picker offers the Superuser and both companions:', pickerOptionCount === 3 && /Superuser/.test(superuserChoiceText), { pickerOptionCount, superuserChoiceText });
     await page.fill('input[name="name"]', 'Chiang Mai');
     await page.fill('input[name="arriveDate"]', '2027-11-02');
     await page.fill('input[name="departDate"]', '2027-11-05');

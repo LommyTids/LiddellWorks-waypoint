@@ -306,15 +306,20 @@ textarea { resize: vertical; min-height: 60px; }
 .activity-timing-field.is-all-day .activity-time-field { display: none; }
 .activity-timing-field.is-all-day .activity-date-time-row { grid-template-columns: 1fr; }
 .activity-timing-field.is-all-day .activity-timing-duration { display: none; }
-/* The Companions "tag-picker" field (see fieldHtml()'s 'tag-picker' case)
-   — a row of small pill-shaped checkboxes, one per companion, that wraps
-   onto multiple lines once there are more than fit on one. */
+/* The People "tag-picker" field (see fieldHtml()'s 'tag-picker' case)
+   — a row of small pill-shaped checkboxes for the trip Superuser and each
+   companion, wrapping once there are more than fit on one line. */
 .tag-picker { display: flex; flex-wrap: wrap; gap: 8px; }
 .tag-picker-item {
   display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;
   padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2);
 }
 .tag-picker-item input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
+.tag-picker-role, .tag-role {
+  color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+}
+.tag-picker-role { margin-left: 2px; }
+.tag-role { margin-left: 3px; }
 .flight-lookup-row { display: flex; gap: 8px; }
 .flight-lookup-row input { flex: 1; }
 .flight-lookup-row .btn { flex-shrink: 0; white-space: nowrap; }
@@ -967,8 +972,32 @@ function avatarMarkerHtml(avatar, name, extraClass) {
 // dangling/removed companion id, same as everywhere else in this file,
 // degrades to "nothing shown" rather than an error).
 function companionAvatarHtml(trip, companionId, name) {
+  if (companionId === SUPERUSER_PARTICIPANT_ID) {
+    return avatarMarkerHtml(trip.superuserParticipant && trip.superuserParticipant.avatar, name);
+  }
   var avatar = trip.companionAvatars && trip.companionAvatars[companionId];
   return avatarMarkerHtml(avatar, name);
+}
+
+// The full list offered by a People picker. The trip owner is deliberately
+// virtual: it is supplied from server-owned account data, while ordinary
+// companions continue to use the existing per-trip records and ids.
+function taggablePeople(trip) {
+  var people = [];
+  if (trip && trip.superuserParticipant && trip.superuserParticipant.name) {
+    people.push({
+      companionId: SUPERUSER_PARTICIPANT_ID,
+      name: trip.superuserParticipant.name,
+      isSuperuser: true
+    });
+  }
+  return people.concat(((trip && trip.companions) || []).filter(function (c) {
+    return c.companionId !== SUPERUSER_PARTICIPANT_ID;
+  }));
+}
+
+function taggablePersonById(trip, id) {
+  return taggablePeople(trip).find(function (person) { return person.companionId === id; }) || null;
 }
 
 // Dashboard trip cards: "who's on this trip at a glance" (plan §5's last
@@ -1023,6 +1052,11 @@ var currentTab = 'timeline';
 // accounts — see the "undisclosed" explanation in src/worker.js. It's
 // used only to decide whether to show the "Manage accounts" button.
 var currentUser = null;
+// A reserved, server-recognised participant id used when the trip owner is
+// tagged directly. The owner is an account rather than a companion record,
+// so this virtual id lets destinations and itinerary items include them
+// explicitly without manufacturing a duplicate companion just for tagging.
+var SUPERUSER_PARTICIPANT_ID = '__trip_superuser__';
 // Set by checkAuth() from the whoami response: true only when NO
 // accounts exist yet anywhere, meaning the login screen should offer
 // first-run setup (create the site owner's own account) instead of an
@@ -1712,12 +1746,15 @@ function fieldHtml(field, value, trip, allValues) {
   // for why each checkbox gets its own unique name rather than sharing
   // `field.key` the way every other field's single <input> does.
   if (field.type === 'tag-picker') {
-    var companions = (trip && trip.companions) || [];
+    var companions = taggablePeople(trip);
     if (companions.length === 0) {
       return '<div class="field" ' + full + '><label>' + esc(field.label) + '</label>' +
         '<div class="field-hint">No companions added yet — add some on the Companions tab to tag them here.</div></div>';
     }
-    var pickerItems = companions.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
+    var pickerItems = companions.slice().sort(function (a, b) {
+      if (!!a.isSuperuser !== !!b.isSuperuser) return a.isSuperuser ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    }).map(function (c) {
       // Checked if this render came from the record's saved value (`val`
       // is the plain array of companion ids in that case), OR — on a
       // reactive re-render, where `val` itself is blank because there's
@@ -1730,10 +1767,10 @@ function fieldHtml(field, value, trip, allValues) {
       // checkbox — a disabled checkbox is left out of the submitted
       // FormData entirely, so readTagPicker() sees no change for this
       // item regardless, matching what the Worker enforces server-side.
-      return '<label class="tag-picker-item"><input type="checkbox" name="' + field.key + '__' + c.companionId + '"' + (checked ? ' checked' : '') + (field.locked ? ' disabled' : '') + '> ' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + '</label>';
+      return '<label class="tag-picker-item"><input type="checkbox" name="' + field.key + '__' + c.companionId + '" data-tag-picker-key="' + field.key + '" data-tag-person-id="' + c.companionId + '"' + (checked ? ' checked' : '') + (field.locked ? ' disabled' : '') + '> ' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + (c.isSuperuser ? '<span class="tag-picker-role">Superuser</span>' : '') + '</label>';
     }).join('');
     return '<div class="field" ' + full + '><label>' + esc(field.label) + '</label><div class="tag-picker">' + pickerItems + '</div>' +
-      (field.locked ? '<div class="field-hint">Who this is tagged to isn\'t something you can change.</div>' : '') +
+      (field.locked ? '<div class="field-hint">Who this is tagged to isn\'t something you can change.</div>' : (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '')) +
       '</div>';
   }
 
@@ -2034,7 +2071,8 @@ var DESTINATION_FIELDS = [
   { key: 'arriveDate', label: 'Arriving', type: 'date', required: true },
   { key: 'departDate', label: 'Leaving', type: 'date', required: true },
   { key: 'timezone', label: 'Local timezone', type: 'timezone', placeholder: 'e.g. Asia/Bangkok', hint: 'Used just as a reference — handy when a trip crosses several timezones.', wide: true },
-  { key: 'companions', label: 'Companions', type: 'tag-picker', wide: true },
+  { key: 'companions', label: 'People', type: 'tag-picker', wide: true,
+    hint: 'People tagged here are preselected when you add an activity in this destination.' },
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
@@ -2060,7 +2098,8 @@ var ACTIVITY_FORM_SECTIONS = [
     { key: 'receiptRef', label: 'Receipt reference', type: 'text', placeholder: 'e.g. email confirmation, photo filename', wide: true }
   ] },
   { title: 'People and notes', collapsible: true, fields: [
-    { key: 'companions', label: 'Companions', type: 'tag-picker', wide: true },
+    { key: 'companions', label: 'People', type: 'tag-picker', wide: true,
+      hint: 'Defaults from the selected destination. You can adjust the people on this activity.' },
     { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
   ] }
 ];
@@ -2464,7 +2503,15 @@ function openTripForm(existing) {
             // "Add" buttons, the Share panel) immediately, on this very
             // first render, rather than only after the next reload.
             ownerId: currentUser.id, ownerUsername: currentUser.username, grants: [],
-            myGrant: { role: 'superuser' }
+            myGrant: { role: 'superuser' },
+            // Server-computed on future loads; included optimistically so
+            // the owner is immediately available in People pickers before
+            // the just-created trip has been fetched back from the Worker.
+            superuserParticipant: {
+              participantId: SUPERUSER_PARTICIPANT_ID,
+              name: currentUser.username,
+              avatar: currentUser.avatar ? { type: 'account', color: currentUser.avatar.color, animal: currentUser.avatar.animal } : null
+            }
           });
           currentTripId = next.trips[next.trips.length - 1].tripId;
           currentView = 'trip'; currentTab = 'timeline';
@@ -2508,14 +2555,41 @@ function activityFormInitial(record) {
   return Object.assign({}, values, { startDate: startDate, endDate: endDate, allDay: allDay });
 }
 
+function destinationPeople(trip, destinationId) {
+  var destination = destinationId ? byId(trip.destinations, destinationId, 'destinationId') : null;
+  return destination && Array.isArray(destination.companions) ? destination.companions.slice() : [];
+}
+
+// Applies destination tags as a starting point in a new Activity form.
+// These are real checked boxes, not implicit inheritance, so the person
+// adding the activity can still adjust the selection before saving.
+function applyDestinationPeopleDefaults(form, trip, destinationId) {
+  var defaults = destinationPeople(trip, destinationId);
+  var checkboxes = form.querySelectorAll('input[data-tag-picker-key="companions"]');
+  Array.prototype.forEach.call(checkboxes, function (checkbox) {
+    checkbox.checked = defaults.indexOf(checkbox.dataset.tagPersonId) !== -1;
+  });
+  // Make the inherited choices visible instead of silently checking boxes
+  // inside the collapsed optional section.
+  if (defaults.length && checkboxes.length) {
+    var details = checkboxes[0].closest('details');
+    if (details) details.open = true;
+  }
+}
+
 function openActivityForm(trip, existing, seed) {
+  var seedValues = seed || {};
   var initial = existing
     ? Object.assign({ category: 'Other' }, activityFormInitial(existing), activityAddressPickerInitial(existing))
-    : Object.assign({ category: 'Other', allDay: true }, activityFormInitial(seed || {}));
+    : Object.assign({ category: 'Other', allDay: true }, activityFormInitial(seedValues));
+  if (!existing && seedValues.destinationId && !Array.isArray(seedValues.companions)) {
+    initial.companions = destinationPeople(trip, seedValues.destinationId);
+  }
   openForm({
     title: existing ? 'Edit activity' : 'Add activity',
     sections: sectionsWithTagPickerLock(ACTIVITY_FORM_SECTIONS, !!existing && !canFullyEditTrip(trip)),
     initial: initial, trip: trip, submitLabel: 'Save',
+    inheritDestinationPeople: !existing,
     onSubmit: function (v) {
       var startDate = v.startDate || '';
       var endDate = v.endDate || startDate;
@@ -4447,9 +4521,9 @@ function renderContactsTab(trip) {
 // to, that's what each tab's own item tags already show.
 function companionTags(trip, companionIds) {
   return (companionIds || [])
-    .map(function (id) { return byId(trip.companions, id, 'companionId'); })
+    .map(function (id) { return taggablePersonById(trip, id); })
     .filter(Boolean)
-    .map(function (c) { return '<span class="tag">' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + '</span>'; })
+    .map(function (c) { return '<span class="tag">' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + (c.isSuperuser ? '<span class="tag-role">Superuser</span>' : '') + '</span>'; })
     .join('');
 }
 
@@ -5775,6 +5849,9 @@ document.addEventListener('change', function (e) {
   }
 
   var cfg = window.__formConfig;
+  if (cfg && cfg.inheritDestinationPeople && form && e.target.name === 'destinationId') {
+    applyDestinationPeopleDefaults(form, cfg.trip, e.target.value);
+  }
   if (!cfg || !cfg.reactiveKey) return;
   var keys = Array.isArray(cfg.reactiveKey) ? cfg.reactiveKey : [cfg.reactiveKey];
   if (!form || keys.indexOf(e.target.name) === -1) return;
@@ -5901,4 +5978,3 @@ document.addEventListener('submit', function (e) {
 </script>
 </body>
 </html>
-
