@@ -751,7 +751,7 @@ const ACCOMMODATION_TYPE_VALUES = new Set(["Other", "Hotel / hostel", "Apartment
 
 const ITEM_FIELDS = {
   destinations: ["destinationId", "name", "country", "arriveDate", "departDate", "timezone", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel", "bbox", "boundaryRef", "boundaryQuality"],
-  activities: ["activityId", "title", "category", "destinationId", "date", "startTime", "endTime", "location", "address", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "addressLat", "addressLng", "addressLocationRef", "addressLocationMethod", "addressLocationGranularity", "addressLocationStale", "addressLocationKindLabel"],
+  activities: ["activityId", "title", "category", "destinationId", "date", "startDate", "endDate", "allDay", "startTime", "endTime", "location", "address", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "addressLat", "addressLng", "addressLocationRef", "addressLocationMethod", "addressLocationGranularity", "addressLocationStale", "addressLocationKindLabel"],
   transport: ["transportId", "mode", "carrier", "flightNumber", "licensePlate", "fromLocation", "toLocation", "departDateTime", "arriveDateTime", "paymentType", "costCurrency", "costAmount", "costRate", "pointsProgram", "pointsAmount", "bookingRef", "contactId", "receiptRef", "companions", "notes", "fromLat", "fromLng", "toLat", "toLng", "fromLocationRef", "toLocationRef", "fromLocationMethod", "toLocationMethod", "fromLocationGranularity", "toLocationGranularity", "fromLocationStale", "toLocationStale", "fromLocationKindLabel", "toLocationKindLabel"],
   accommodation: ["accommodationId", "name", "type", "destinationId", "address", "checkIn", "checkOut", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel"],
   contacts: ["contactId", "name", "role", "phone", "email", "address", "notes"],
@@ -870,6 +870,7 @@ function sanitizeItem(listKey, item) {
     else if (key === "boundaryQuality") output[key] = safeLocationValue(value, BOUNDARY_QUALITY_VALUES, "boundary quality");
     else if (key === "locationStale" || key === "fromLocationStale" || key === "toLocationStale" || key === "addressLocationStale") output[key] = value === true;
     else if (key === "bbox") output[key] = safeBbox(value, item);
+    else if (listKey === "activities" && key === "allDay") output[key] = value === true || value === "true" || value === "on";
     else if (listKey === "activities" && key === "category") {
       const category = safeText(value, 80);
       output.category = ACTIVITY_CATEGORY_VALUES.has(category) ? category : "Other";
@@ -903,6 +904,23 @@ function sanitizeItem(listKey, item) {
       output[key] = safeText(value, key === "notes" ? 5000 : 500);
     }
   });
+  if (listKey === "activities") {
+    const startDate = output.startDate || output.date || "";
+    const endDate = output.endDate || startDate;
+    if (startDate && endDate && endDate < startDate) throw new Error("Activity end date cannot be before its start date.");
+    // `date` was the pre-range activity field. Keep it in lockstep for
+    // clients that have not yet adopted startDate/endDate.
+    if (output.startDate) {
+      output.date = output.startDate;
+      output.endDate = endDate;
+    }
+    if (output.allDay) {
+      output.startTime = "";
+      output.endTime = "";
+    } else if (startDate && startDate === endDate && output.startTime && output.endTime && output.endTime < output.startTime) {
+      throw new Error("Activity end time must be after its start time.");
+    }
+  }
   return output;
 }
 
