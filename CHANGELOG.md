@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-02 — Condensed, collapsible Timeline
+
+### What changed
+
+- Reduced Timeline event cards to their time, icon, title, useful arrival/overnight context and record actions.
+- Removed addresses, destination references and all metadata tag pills from Timeline cards while retaining the full details in Plan lists and Map popovers.
+- Removed destination chips from Timeline day headings.
+- Converted each black date circle into an accessible disclosure button with an explicit expanded state and controlled day-content region.
+- Defaulted dates before the viewer's current local date to collapsed, while today and future dates remain open.
+- Preserved manual expand/collapse choices as local session state without modifying saved trip data.
+- Added regression coverage for compact cards, disclosure wiring, date defaults and manual overrides.
+
 ## 2026-09-02 — Populated trip render hotfix
 
 ### What changed

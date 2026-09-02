@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node test-security.mjs && node test-design-tokens.js && node test-icon-system.js && node test-accessibility.js && node test-responsive-shell.js && node test-ui-consolidation.js && node test-populated-trip-render.js",
+    "test": "node test-security.mjs && node test-design-tokens.js && node test-icon-system.js && node test-accessibility.js && node test-responsive-shell.js && node test-ui-consolidation.js && node test-populated-trip-render.js && node test-timeline-condensed.js",
     "test:security": "node test-security.mjs"
   },
   "devDependencies": {

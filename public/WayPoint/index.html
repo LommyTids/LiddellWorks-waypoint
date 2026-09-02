@@ -639,10 +639,14 @@ textarea { resize: vertical; min-height: 60px; }
 /* ---- 4e. Timeline ------------------------------------------------- */
 .day-card { display: flex; gap: 14px; margin-bottom: 22px; }
 .day-rail { display: flex; flex-direction: column; align-items: center; width: 46px; flex-shrink: 0; }
-.day-num { font: var(--wp-type-meta); font-weight: 600; background: var(--wp-action-primary); color: var(--wp-text-on-strong); width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.day-num { font: var(--wp-type-meta); font-weight: 600; background: var(--wp-action-primary); color: var(--wp-text-on-strong); width: 34px; height: 34px; border: 0; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+.day-num:hover { background: var(--wp-action-accent); }
 .day-line { flex: 1; width: 2px; background: var(--wp-border-default); margin-top: 4px; }
 .day-body { flex: 1; min-width: 0; padding-bottom: 4px; }
+.day-body.is-collapsed { padding-bottom: 0; }
+.day-body.is-collapsed .day-actions { display: none; }
 .day-heading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.day-body.is-collapsed .day-heading { margin-bottom: 0; }
 .day-heading h3 { font: var(--wp-type-heading); }
 .day-areas { display: flex; gap: 6px; flex-wrap: wrap; }
 .area-chip { font: var(--wp-type-micro); background: var(--wp-context-location-subtle); color: var(--wp-context-location); border-radius: 999px; padding: 2px 9px; display: inline-flex; align-items: center; gap: 4px; }
@@ -1225,6 +1229,24 @@ var currentTab = 'timeline';
 // Expenses or Settings was wanted.
 var mobileLastTab = { overview: 'timeline', plan: 'destinations', people: 'companions' };
 var accountMenuOpen = false;
+// Timeline disclosure is local viewing state, never trip data. Missing entries
+// use the date-sensitive default: earlier days closed, today/future days open.
+var timelineDayExpansion = {};
+
+function timelineLocalTodayStr(now) {
+  var date = now || new Date();
+  var month = String(date.getMonth() + 1).padStart(2, '0');
+  var day = String(date.getDate()).padStart(2, '0');
+  return date.getFullYear() + '-' + month + '-' + day;
+}
+
+function timelineDayKey(tripId, day) { return String(tripId || '') + '|' + day; }
+
+function timelineDayExpanded(tripId, day, today) {
+  var key = timelineDayKey(tripId, day);
+  if (Object.prototype.hasOwnProperty.call(timelineDayExpansion, key)) return timelineDayExpansion[key];
+  return day >= (today || timelineLocalTodayStr());
+}
 
 // ---- Accounts / login (see section 4b, "Auth", further down) ----------
 // `currentUser` is null until checkAuth() resolves at boot, and stays
@@ -5996,8 +6018,7 @@ async function initMap(trip) {
 }
 
 /* ---------- 20. Render: Timeline tab ---------------------------------------
-   One card per day: the date heading, chips for any destination whose
-   stay covers that day, every event that falls on it in time order,
+   One card per day: the date heading, every event in time order,
    and — when relevant — a note about where the night is spent (a
    booked stay, or travelling overnight through to the next day). */
 
@@ -6005,6 +6026,10 @@ function eventRowHtml(trip, ev) {
   var section = ev.kind === 'activity' ? 'activity' : ((ev.kind === 'checkin' || ev.kind === 'checkout') ? 'accommodation' : 'transport');
   var model = recordItemRowModel(trip, section, ev.data, 'timeline');
   model.leadingTime = ev.displayTime || ev.time;
+  // Timeline is the quick chronological scan. Full metadata remains on the
+  // Plan lists and Map popovers; omitting it here keeps each event to one clear
+  // headline without address, destination, companion or commerce tag pills.
+  model.metadata = {};
   if (ev.kind === 'activity' && ev.continues) { model.title = 'Continues: ' + ev.data.title; model.icon = 'continues'; }
   else if (ev.kind === 'checkin') { model.title = 'Check in: ' + ev.data.name; model.icon = 'checkIn'; }
   else if (ev.kind === 'checkout') { model.title = 'Check out: ' + ev.data.name; model.icon = 'checkOut'; }
@@ -6043,9 +6068,11 @@ function renderTimelineTab(trip) {
   }
   var cards = days.map(function (day, i) {
     var events = eventsForDay(trip, day);
-    var areas = areasForDay(trip, day);
     var stay = overnightStay(trip, day);
     var isLast = i === days.length - 1;
+    var expanded = timelineDayExpanded(trip.tripId, day);
+    var dayHeading = formatDateHeading(day);
+    var contentId = 'timeline-day-' + slug(trip.tripId) + '-' + day;
     var eventsHtml = events.length
       ? '<div class="day-events">' + events.map(function (ev) { return eventRowHtml(trip, ev); }).join('') + '</div>'
       : '<div class="no-day-events">Nothing logged for this day.</div>';
@@ -6055,13 +6082,12 @@ function renderTimelineTab(trip) {
       else if (stay && stay.kind === 'transit') overnightHtml = '<div class="overnight-note">' + icon('overnight') + 'Overnight ' + esc((stay.data.mode || 'travel').toLowerCase()) + ' to ' + esc(stay.data.toLocation) + '</div>';
       else overnightHtml = '<div class="overnight-note">' + icon('overnight') + 'No accommodation logged for tonight</div>';
     }
-    return '<div class="day-card"><div class="day-rail"><span class="day-num">' + day.slice(8, 10) + '</span>' + (isLast ? '' : '<span class="day-line"></span>') + '</div>' +
-      '<div class="day-body"><div class="day-heading"><h3>' + formatDateHeading(day) + '</h3>' +
-        (areas.length ? '<div class="day-areas">' + areas.map(function (a) {
-          var off = a.timezone ? tzOffsetLabel(a.timezone) : '';
-          return '<span class="area-chip">' + icon('destination') + esc(a.name) + (off ? ' · ' + esc(off) : '') + '</span>';
-        }).join('') + '</div>' : '') +
-        timelineDayActionsHtml(trip, day) + '</div>' + eventsHtml + overnightHtml + '</div></div>';
+    return '<div class="day-card' + (expanded ? '' : ' is-collapsed') + '" data-timeline-day="' + esc(day) + '"><div class="day-rail">' +
+      '<button class="day-num" data-action="toggle-timeline-day" data-day="' + esc(day) + '" aria-expanded="' + String(expanded) + '" aria-controls="' + contentId + '" aria-label="' + (expanded ? 'Collapse ' : 'Expand ') + esc(dayHeading) + '">' + day.slice(8, 10) + '</button>' +
+      (isLast ? '' : '<span class="day-line"></span>') + '</div>' +
+      '<div class="day-body' + (expanded ? '' : ' is-collapsed') + '"><div class="day-heading"><h3>' + dayHeading + '</h3>' +
+        timelineDayActionsHtml(trip, day) + '</div>' +
+        '<div id="' + contentId + '" class="day-content"' + (expanded ? '' : ' hidden') + '>' + eventsHtml + overnightHtml + '</div></div></div>';
   }).join('');
   return cards;
 }
@@ -6265,6 +6291,22 @@ document.addEventListener('click', function (e) {
   if (action === 'open-trip') { currentView = 'trip'; currentTripId = el.dataset.id; currentTab = 'timeline'; rememberMobileChild(currentTab); saveNavigationState(); pendingRenderFocus = '[data-page-heading]'; render(); return; }
   if (action === 'back-to-dashboard') { currentView = 'dashboard'; currentTripId = null; saveNavigationState(); pendingRenderFocus = '[data-page-heading]'; render(); return; }
   if (action === 'switch-tab') { currentTab = el.dataset.tab; rememberMobileChild(currentTab); saveNavigationState(); pendingRenderFocus = '#trip-panel'; render(); return; }
+  if (action === 'toggle-timeline-day' && trip) {
+    var timelineDay = el.dataset.day;
+    var nextExpanded = el.getAttribute('aria-expanded') !== 'true';
+    timelineDayExpansion[timelineDayKey(trip.tripId, timelineDay)] = nextExpanded;
+    el.setAttribute('aria-expanded', String(nextExpanded));
+    el.setAttribute('aria-label', (nextExpanded ? 'Collapse ' : 'Expand ') + formatDateHeading(timelineDay));
+    var timelineCard = el.closest('.day-card');
+    var timelineContent = document.getElementById(el.getAttribute('aria-controls'));
+    if (timelineCard) {
+      timelineCard.classList.toggle('is-collapsed', !nextExpanded);
+      var timelineBody = timelineCard.querySelector('.day-body');
+      if (timelineBody) timelineBody.classList.toggle('is-collapsed', !nextExpanded);
+    }
+    if (timelineContent) timelineContent.hidden = !nextExpanded;
+    return;
+  }
   if (action === 'switch-mobile-destination') {
     currentTab = mobileDestinationTarget(el.dataset.destination, trip);
     rememberMobileChild(currentTab);
