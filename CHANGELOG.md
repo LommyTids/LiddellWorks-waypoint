@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-02 — Journey, form and record consolidation
+
+### What changed
+
+- Replaced entity-specific timing layouts with one Journey component for destination, activity, transport and accommodation records while retaining their existing persisted field names.
+- Added separate date and time cards, a journey rail, live duration summary, segmented duration strip and destination-aware local-time labels.
+- Added same-day defaults, one-night accommodation defaults, overnight ranges and persistent inline chronology validation.
+- Standardised generated forms as Essentials followed by optional disclosure sections and a sticky action footer; transport booking and payment details now use progressive disclosure.
+- Preserved field values, expanded sections and keyboard focus when reactive transport fields re-render.
+- Added a shared ItemRow view model and renderer across Timeline, all Plan lists, route popovers and marker popovers with canonical metadata order and centralised row actions.
+- Added category, location, check-in, check-out, continuation, all-day and warning icons to the semantic SVG registry.
+- Added integrated regression coverage for the three shared UI systems.
+
+### Verification
+
+- `npm test` — passed, including security, tokens, icons, accessibility, responsive shell and UI-consolidation checks.
+- Map range and route-arc regression checks passed.
+- All inline and referenced JavaScript parsed successfully.
+
 ## 2026-09-02 — Responsive application shell
 
 ### What changed

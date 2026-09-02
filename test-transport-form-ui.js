@@ -1,9 +1,10 @@
-// Regression test for the Transport ("flight") form cleanup: seat
-// number removed entirely; From/To, each departure/arrival date+time
-// pair, and Booking reference/Contact each paired onto one row; and
+// Regression test for the consolidated Transport form: seat number
+// removed entirely; route endpoints are separate controls; each Journey
+// date/time pair is grouped visually; booking and payment progressively
+// disclose; and the "Paid with" selector (Cash / Points / Combo / Free)
 // the new "Paid with" selector (Cash / Points / Combo / Free) that
 // swaps in currency+amount+rate-override, or points program+count, or
-// both, or neither — see transportPaymentFields()/transportFieldsForMode()
+// both, or neither — see transportPaymentFields()/transportSectionsForMode()
 // and openTransportForm()'s onSubmit in index.html.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
@@ -40,6 +41,11 @@ function waitForServer(url, tries) {
       const row = inputA && inputA.closest('.field-row');
       return !!(row && row.querySelector('[name="' + b + '"]'));
     }, [nameA, nameB]);
+    const sameJourneyMoment = (nameA, nameB) => page.evaluate(([a, b]) => {
+      const inputA = document.querySelector('[name="' + a + '"]');
+      const moment = inputA && inputA.closest('.journey-date-time-row');
+      return !!(moment && moment.querySelector('[name="' + b + '"]'));
+    }, [nameA, nameB]);
 
     await page.goto('http://localhost:' + PORT + '/WayPoint');
     await loginAsAdmin(page);
@@ -67,10 +73,12 @@ function waitForServer(url, tries) {
     console.log('1. Seat field removed from every transport mode:', seatAbsentAllModes);
 
     // ---- Layout pairing. ----
-    console.log('2. From/To share one row:', await sameRow('fromLocation', 'toLocation'));
-    console.log('3. Depart date/time share one row:', await sameRow('departDate', 'departTime'));
-    console.log('4. Arrive date/time share one row:', await sameRow('arriveDate', 'arriveTime'));
+    console.log('2. From/To are separate full-width controls:', await page.locator('[name="fromLocation"]').evaluate((field) => !field.closest('.field-row')) && await page.locator('[name="toLocation"]').evaluate((field) => !field.closest('.field-row')));
+    console.log('3. Depart date/time share one Journey moment:', await sameJourneyMoment('departDate', 'departTime'));
+    console.log('4. Arrive date/time share one Journey moment:', await sameJourneyMoment('arriveDate', 'arriveTime'));
+    await page.locator('details', { hasText: 'Booking and contact' }).locator('summary').click();
     console.log('5. Booking reference/Contact share one row:', await sameRow('bookingRef', 'contactId'));
+    await page.locator('details', { hasText: 'Payment and receipt' }).locator('summary').click();
 
     // ---- "Paid with" defaults to Free on a brand-new leg, showing no
     // cost or points fields at all. ----

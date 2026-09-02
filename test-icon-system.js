@@ -15,6 +15,7 @@ const required = [
   'brand', 'destination', 'activity', 'route', 'flight', 'rail', 'bus', 'car', 'ferry',
   'stay', 'person', 'contacts', 'companions', 'expenses', 'booking', 'overnight',
   'overview', 'plan', 'people', 'more',
+  'category', 'location', 'checkIn', 'checkOut', 'continues', 'allDay', 'warning',
   'timeline', 'date', 'time', 'map', 'settings', 'add', 'edit', 'delete', 'close',
   'forward', 'back', 'logout', 'download', 'copy', 'expand', 'collapse', 'unknown'
 ];

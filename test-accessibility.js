@@ -32,7 +32,8 @@ requirePattern(/appendDescribedBy\(control,[\s\S]*?'wp-hint'/, 'Field hints are 
 requirePattern(/className = 'form-error-summary'/, 'Persistent form error summary is missing');
 requirePattern(/control\.setAttribute\('aria-invalid', 'true'\)/, 'Invalid fields are not exposed');
 requirePattern(/document\.addEventListener\('invalid'/, 'Native invalid events are not surfaced inline');
-requirePattern(/<fieldset class="field activity-timing-field/, 'Activity timing is not a semantic field group');
+requirePattern(/<fieldset class="field journey/, 'Journey timing is not a semantic field group');
+requirePattern(/data-journey-duration role="status" aria-live="polite"/, 'Journey duration is not announced');
 
 // Custom widgets and cards must expose native or ARIA keyboard contracts.
 requirePattern(/role="combobox" aria-autocomplete="list" aria-expanded="false"/, 'Suggestion input lacks combobox semantics');
