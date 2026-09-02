@@ -1,5 +1,100 @@
 # Changelog
 
+## 2026-09-02 — Journey, form and record consolidation
+
+### What changed
+
+- Replaced entity-specific timing layouts with one Journey component for destination, activity, transport and accommodation records while retaining their existing persisted field names.
+- Added separate date and time cards, a journey rail, live duration summary, segmented duration strip and destination-aware local-time labels.
+- Added same-day defaults, one-night accommodation defaults, overnight ranges and persistent inline chronology validation.
+- Standardised generated forms as Essentials followed by optional disclosure sections and a sticky action footer; transport booking and payment details now use progressive disclosure.
+- Preserved field values, expanded sections and keyboard focus when reactive transport fields re-render.
+- Added a shared ItemRow view model and renderer across Timeline, all Plan lists, route popovers and marker popovers with canonical metadata order and centralised row actions.
+- Added category, location, check-in, check-out, continuation, all-day and warning icons to the semantic SVG registry.
+- Added integrated regression coverage for the three shared UI systems.
+
+### Verification
+
+- `npm test` — passed, including security, tokens, icons, accessibility, responsive shell and UI-consolidation checks.
+- Map range and route-arc regression checks passed.
+- All inline and referenced JavaScript parsed successfully.
+
+## 2026-09-02 — Responsive application shell
+
+### What changed
+
+- Added a compact sticky mobile trip header containing Back, trip name and dates while leaving the richer desktop header unchanged.
+- Consolidated narrow-screen navigation into four persistent destinations: Overview, Plan, People and More.
+- Kept Timeline and Map prominent as an Overview segmented control; Plan and People expose contextual child navigation and remember the last child used.
+- Added a normal More directory page for Expenses and Settings, with Expenses still omitted for scoped roles that cannot access financial data.
+- Replaced narrow-screen account actions with an anchored avatar menu supporting outside-click dismissal, Escape, focus entry and explicit menu semantics.
+- Added semantic Overview, Plan, People, More and Logout icons to the local WayPoint asset registry.
+- Preserved the complete grouped desktop navigation and shared all panel rendering, permissions and actions between breakpoints.
+- Added responsive-shell regression coverage and updated the application navigation documentation.
+
+### Verification
+
+- `npm test` — passed, including security, design-token, icon-system, accessibility and responsive-shell regression checks.
+- Map range and route-arc regression checks passed.
+- All inline and referenced JavaScript parsed successfully.
+
+## 2026-09-02 — Critical accessibility consolidation
+
+### What changed
+
+- Added skip navigation and semantic header, main, navigation, section and table structure, with focus moved to the relevant heading or panel after in-app navigation.
+- Made every modal a named dialog with initial focus, contained Tab order, Escape support, an inert background and focus restoration to its trigger.
+- Associated generated form labels and hints with their controls, made required state visible, grouped activity timing in a fieldset, and replaced toast-only validation with persistent summaries and inline field errors.
+- Converted trip cards to native keyboard-operable buttons and added a consistent high-visibility focus ring without suppressing browser outlines.
+- Completed ARIA combobox behaviour for suggestion fields, including expanded state, active option tracking and polite result-count announcements.
+- Added live announcements for save state, lookups, location search and errors; icon-only controls retain explicit accessible names.
+- Strengthened muted text, accent-button and form-border contrast in both themes, raised small copy targets to 24px, kept touch controls at 44px and honoured reduced-motion preferences.
+- Added source-level accessibility regression coverage, including WCAG contrast calculations for the updated token pairs.
+
+### Verification
+
+- `npm test` — passed, including security, design-token, icon-system and accessibility regression checks.
+- `node test-map-route-arcs.js` — passed.
+- All inline and referenced JavaScript parsed successfully.
+- Automated browser interaction testing remains unavailable in this workspace because Chromium is not installed.
+
+## 2026-09-01 — Consolidated icon system
+
+### What changed
+
+- Added a local, dependency-free semantic SVG registry with a consistent 24×24 grid, 1.75px rounded stroke and visible diagnostic fallback for unsupported names.
+- Introduced five icon-size tokens and migrated navigation, lists, tags, timelines, map markers, actions and empty states away from one-off dimensions.
+- Replaced the activity form's text-character date/time symbols and disclosure plus/minus characters with accessible SVG artwork.
+- Gave activities and booking references distinct symbols, added a dedicated generic-route icon, and replaced the map's arrow with an expand symbol.
+- Kept rotated map-pin containers while correcting their internal glyphs to remain upright.
+- Fixed the reversed Back icon and moved the WayPoint compass mark into the shared registry.
+- Added accessible names to modal close, edit, delete, copy, companion-management and map icon buttons, with 44px targets on touch pointers.
+- Added inline comments documenting the icon architecture, semantic aliases, security restrictions, map rotation and sizing decisions.
+
+### Verification
+
+- `npm test` — passed, including security, design-token and icon-system regression checks.
+- `node test-map-route-arcs.js` — passed.
+- All application script blocks and the new icon asset parsed successfully.
+
+## 2026-09-01 — Global design tokens and typography
+
+### What changed
+
+- Replaced ambiguous legacy colour variables with a two-layer primitive and semantic token system used throughout the application.
+- Preserved WayPoint's approved light and dark palettes while giving canvas, surface, text, border, action, location and state colours explicit roles.
+- Tokenised destination, transport, accommodation and activity map colours, including softer chip treatments, and routed JavaScript-owned Leaflet styling through the same CSS source of truth.
+- Consolidated user-facing typography into six roles: Display, Heading, Body, Label, Meta and Micro. Body text and editable fields now use a 16px baseline, with a 32px mobile Display variant.
+- Replaced the remaining settings heading one-offs and assigned avatar/control glyphs to named asset-size tokens.
+- Added a design-token regression test to prevent legacy variables and arbitrary text sizes from returning.
+
+### Verification
+
+- `npm test` — passed, including security and design-token regression checks.
+- `node test-map-route-arcs.js` — passed.
+- All inline and referenced script blocks parsed successfully; all referenced CSS custom properties are defined.
+- Browser interaction tests could not start in this workspace because the configured Chromium executables are not installed.
+
 ## 2026-09-01 — Destination people defaults
 
 ### What changed

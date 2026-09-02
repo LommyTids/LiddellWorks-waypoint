@@ -7,11 +7,19 @@ there the next time you visit.
 
 ## Trip navigation and timeline
 
-Each trip is organised around four jobs: **View** (Timeline and Map),
-**Plan** (Destinations, Transport, Accommodation and Activities),
-**People** (Companions and Contacts), and **Manage** (Expenses and
-Settings). The groups remain fully visible and wrap on narrow screens;
-none are hidden behind an overflow menu.
+Each trip is organised around four jobs. On desktop these remain fully
+visible as **View** (Timeline and Map), **Plan** (Destinations, Transport,
+Accommodation and Activities), **People** (Companions and Contacts), and
+**Manage** (Expenses and Settings). On narrow screens the same views are
+consolidated into four persistent destinations: **Overview**, **Plan**,
+**People** and **More**. Overview keeps Timeline and Map in a prominent
+segmented control, while More opens a normal directory page for Expenses
+and Settings. A compact sticky header retains Back, trip name and dates.
+
+The mobile account area is similarly consolidated: the avatar opens an
+anchored, keyboard-accessible menu for changing the avatar, managing
+accounts when permitted, and logging out. Desktop account actions remain
+visible directly in the top bar.
 
 The Timeline is the primary itinerary editing view. Every existing
 activity, transport leg and accommodation event can be edited there
