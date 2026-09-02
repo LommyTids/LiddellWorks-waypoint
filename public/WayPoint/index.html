@@ -5005,7 +5005,9 @@ function itemMetadataHtml(trip, metadata) {
     var html = entries.map(itemMetaDescriptorHtml).join('');
     return html ? '<div class="item-meta-group" data-item-meta="' + slot + '">' + html + '</div>' : '';
   }).join('');
-  return html ? '<div class="item-metadata">' + groups + '</div>' : '';
+  // `html` above is scoped to the map callback. Test the joined result here;
+  // otherwise populated trips throw before their first ItemRow can render.
+  return groups ? '<div class="item-metadata">' + groups + '</div>' : '';
 }
 
 function itemRowHtml(trip, model) {

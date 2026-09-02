@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-02 — Populated trip render hotfix
+
+### What changed
+
+- Fixed the shared ItemRow metadata renderer referencing a callback-local variable after the callback had finished.
+- Restored Timeline rendering for trips containing destinations, activities, transport or accommodation records; empty trips were unaffected.
+- Added an executable populated-trip regression test so this data-dependent failure cannot be hidden by source-pattern checks.
+
+### Verification
+
+- Reproduced the production exception against a populated trip before applying the fix.
+- `npm test` — passed, including the new executable populated-trip renderer test.
+
 ## 2026-09-02 — Journey, form and record consolidation
 
 ### What changed
