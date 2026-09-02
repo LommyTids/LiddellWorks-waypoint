@@ -6,7 +6,8 @@ const style = (html.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
 const requiredTokens = [
   '--wp-bg-canvas', '--wp-bg-surface', '--wp-bg-subdued',
   '--wp-text-primary', '--wp-text-secondary', '--wp-text-muted',
-  '--wp-action-primary', '--wp-action-accent', '--wp-context-location',
+  '--wp-action-primary', '--wp-action-accent', '--wp-action-accent-strong', '--wp-context-location',
+  '--wp-focus-ring',
   '--wp-state-danger', '--wp-state-success',
   '--wp-map-destination', '--wp-map-transport', '--wp-map-accommodation', '--wp-map-activity',
   '--wp-type-display', '--wp-type-heading', '--wp-type-body',

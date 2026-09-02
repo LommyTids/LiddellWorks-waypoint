@@ -36,9 +36,11 @@
   --wp-color-mist-200: #e3e6dd;
   --wp-color-ink-900: #1a2233;
   --wp-color-ink-600: #56607a;
+  --wp-color-ink-500: #5c6676;
   --wp-color-ink-400: #838d9e;
   --wp-color-line-300: #d5d9cd;
   --wp-color-brass-600: #a6752b;
+  --wp-color-brass-700: #966820;
   --wp-color-brass-100: #f3e6d2;
   --wp-color-teal-700: #1f6f63;
   --wp-color-teal-100: #dcefe9;
@@ -52,6 +54,7 @@
   --wp-color-night-line: #2c3542;
   --wp-color-paper-50: #edefea;
   --wp-color-slate-300: #a2acbe;
+  --wp-color-slate-400: #8c97aa;
   --wp-color-slate-500: #6e788c;
   --wp-color-brass-400: #d9a24b;
   --wp-color-brass-900: #3a2d15;
@@ -71,13 +74,15 @@
   --wp-bg-subdued: var(--wp-color-mist-200);
   --wp-text-primary: var(--wp-color-ink-900);
   --wp-text-secondary: var(--wp-color-ink-600);
-  --wp-text-muted: var(--wp-color-ink-400);
+  --wp-text-muted: var(--wp-color-ink-500);
   --wp-text-on-strong: var(--wp-color-paper-0);
   --wp-border-default: var(--wp-color-line-300);
   --wp-border-strong: var(--wp-color-ink-400);
   --wp-action-primary: var(--wp-color-ink-900);
   --wp-action-accent: var(--wp-color-brass-600);
+  --wp-action-accent-strong: var(--wp-color-brass-700);
   --wp-action-accent-subtle: var(--wp-color-brass-100);
+  --wp-focus-ring: var(--wp-color-teal-700);
   --wp-context-location: var(--wp-color-teal-700);
   --wp-context-location-subtle: var(--wp-color-teal-100);
   --wp-state-danger: var(--wp-color-red-700);
@@ -141,13 +146,15 @@
     --wp-bg-subdued: var(--wp-color-night-800);
     --wp-text-primary: var(--wp-color-paper-50);
     --wp-text-secondary: var(--wp-color-slate-300);
-    --wp-text-muted: var(--wp-color-slate-500);
+    --wp-text-muted: var(--wp-color-slate-400);
     --wp-text-on-strong: var(--wp-color-night-950);
     --wp-border-default: var(--wp-color-night-line);
     --wp-border-strong: var(--wp-color-slate-500);
     --wp-action-primary: var(--wp-color-paper-50);
     --wp-action-accent: var(--wp-color-brass-400);
+    --wp-action-accent-strong: var(--wp-color-brass-400);
     --wp-action-accent-subtle: var(--wp-color-brass-900);
+    --wp-focus-ring: var(--wp-color-brass-400);
     --wp-context-location: var(--wp-color-teal-400);
     --wp-context-location-subtle: var(--wp-color-teal-900);
     --wp-state-danger: var(--wp-color-red-400);
@@ -163,13 +170,15 @@
   --wp-bg-subdued: var(--wp-color-night-800);
   --wp-text-primary: var(--wp-color-paper-50);
   --wp-text-secondary: var(--wp-color-slate-300);
-  --wp-text-muted: var(--wp-color-slate-500);
+  --wp-text-muted: var(--wp-color-slate-400);
   --wp-text-on-strong: var(--wp-color-night-950);
   --wp-border-default: var(--wp-color-night-line);
   --wp-border-strong: var(--wp-color-slate-500);
   --wp-action-primary: var(--wp-color-paper-50);
   --wp-action-accent: var(--wp-color-brass-400);
+  --wp-action-accent-strong: var(--wp-color-brass-400);
   --wp-action-accent-subtle: var(--wp-color-brass-900);
+  --wp-focus-ring: var(--wp-color-brass-400);
   --wp-context-location: var(--wp-color-teal-400);
   --wp-context-location-subtle: var(--wp-color-teal-900);
   --wp-state-danger: var(--wp-color-red-400);
@@ -197,6 +206,10 @@ button { font-family: inherit; }
 input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-size); line-height: var(--wp-type-body-leading); }
 .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); display: inline-block; vertical-align: -0.15em; flex: 0 0 auto; }
 ::selection { background: var(--wp-action-accent-subtle); }
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
+:focus-visible { outline: 3px solid var(--wp-focus-ring); outline-offset: 2px; }
+.skip-link { position: fixed; z-index: 1000; top: 8px; left: 8px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--wp-action-primary); color: var(--wp-text-on-strong); transform: translateY(-160%); }
+.skip-link:focus { transform: translateY(0); }
 
 /* ---- 3. Layout shell -------------------------------------------- */
 .topbar {
@@ -330,7 +343,7 @@ input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-si
 .btn:hover { border-color: var(--wp-text-muted); }
 .btn-primary { background: var(--wp-action-primary); color: var(--wp-text-on-strong); border-color: var(--wp-action-primary); }
 .btn-primary:hover { opacity: .9; border-color: var(--wp-action-primary); }
-.btn-accent { background: var(--wp-action-accent); color: var(--wp-text-on-strong); border-color: var(--wp-action-accent); }
+.btn-accent { background: var(--wp-action-accent-strong); color: var(--wp-text-on-strong); border-color: var(--wp-action-accent-strong); }
 .btn-danger { background: transparent; color: var(--wp-state-danger); border-color: var(--wp-state-danger-subtle); }
 .btn-danger:hover { background: var(--wp-state-danger-subtle); }
 .btn-icon { width: 38px; height: 38px; padding: 0; justify-content: center; border-radius: 8px; }
@@ -340,9 +353,12 @@ input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-si
 
 label { display: block; font: var(--wp-type-label); color: var(--wp-text-secondary); margin-bottom: 4px; }
 input[type="text"], input[type="number"], input[type="date"], input[type="time"], input[type="password"], select, textarea {
-  width: 100%; padding: 9px 10px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm);
+  width: 100%; padding: 9px 10px; border: 1px solid var(--wp-border-strong); border-radius: var(--radius-sm);
   background: var(--wp-bg-surface); color: var(--wp-text-primary);
 }
+.field-error { margin-top: 4px; color: var(--wp-state-danger); font: var(--wp-type-label); }
+.form-error-summary { margin-bottom: 14px; padding: 10px 12px; border-left: 4px solid var(--wp-state-danger); border-radius: var(--radius-sm); background: var(--wp-state-danger-subtle); color: var(--wp-state-danger); font: var(--wp-type-label); }
+.required-marker { color: var(--wp-state-danger); font-weight: 500; }
 textarea { resize: vertical; min-height: 60px; }
 .field { margin-bottom: 14px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -360,8 +376,8 @@ textarea { resize: vertical; min-height: 60px; }
 .form-details-body .field:last-child { margin-bottom: 12px; }
 .checkbox-field { display: flex; align-items: center; gap: 8px; cursor: pointer; font: var(--wp-type-label); }
 .checkbox-field input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--wp-action-accent); }
-.activity-timing-field { display: flex; flex-direction: column; gap: 10px; }
-.activity-timing-field > label { margin-bottom: 0; }
+.activity-timing-field { display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.activity-timing-field > legend { margin-bottom: 0; font: var(--wp-type-label); }
 .activity-timing-grid { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 10px; }
 .activity-timing-rail { position: relative; display: flex; flex-direction: column; align-items: center; padding: 25px 0; }
 .activity-timing-rail::before { content: ''; position: absolute; top: 31px; bottom: 31px; width: 2px; background: var(--wp-border-default); }
@@ -416,7 +432,7 @@ textarea { resize: vertical; min-height: 60px; }
 .location-results { max-height: 288px; margin-top: 8px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--wp-bg-surface); }
 .location-result { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--wp-border-default); background: transparent; padding: 9px 10px; color: var(--wp-text-primary); cursor: pointer; }
 .location-result:last-child { border-bottom: 0; }
-.location-result:hover, .location-result:focus { background: var(--wp-bg-subdued); outline: none; }
+.location-result:hover, .location-result:focus { background: var(--wp-bg-subdued); }
 .location-result-title { display: flex; justify-content: space-between; gap: 10px; font: var(--wp-type-label); }
 .location-result-kind { font: var(--wp-type-micro); color: var(--wp-text-secondary); white-space: nowrap; }
 .location-result-address { margin-top: 2px; color: var(--wp-text-secondary); font: var(--wp-type-micro); }
@@ -462,8 +478,10 @@ textarea { resize: vertical; min-height: 60px; }
   transition: transform .12s;
 }
 .trip-card:hover { transform: translateY(-2px); }
+.trip-card:focus-within { border-color: var(--wp-focus-ring); }
+.trip-card-open { width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 10px; }
+.trip-card-title { display: block; font: var(--wp-type-heading); }
 .trip-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.trip-card h3 { font: var(--wp-type-heading); }
 .trip-dates { font: var(--wp-type-meta); color: var(--wp-text-secondary); }
 .pill { display: inline-flex; align-items: center; gap: 4px; font: var(--wp-type-micro); padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
 .pill-upcoming { background: var(--wp-context-location-subtle); color: var(--wp-context-location); }
@@ -562,7 +580,7 @@ textarea { resize: vertical; min-height: 60px; }
    not something you need to specifically notice. */
 .tag-role-superuser, .tag-role-admin { color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); }
 .item-actions { display: flex; gap: 2px; flex-shrink: 0; }
-.copy-btn { background: none; border: none; color: var(--wp-text-muted); cursor: pointer; padding: 2px; display: inline-flex; }
+.copy-btn { min-width: 24px; min-height: 24px; align-items: center; justify-content: center; background: none; border: none; color: var(--wp-text-muted); cursor: pointer; padding: 2px; display: inline-flex; }
 .copy-btn:hover { color: var(--wp-text-primary); }
 .copy-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
 
@@ -621,6 +639,7 @@ tr:last-child td { border-bottom: none; }
 
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--wp-action-primary); color: var(--wp-text-on-strong); padding: 10px 18px; border-radius: 999px; font: var(--wp-type-label); box-shadow: var(--wp-shadow-surface); z-index: 200; opacity: 0; transition: opacity .2s; }
 .toast.show { opacity: 1; }
+.toast.toast-error { background: var(--wp-state-danger); color: var(--wp-color-paper-0); border-radius: var(--radius-sm); }
 
 @media (max-width: 640px) {
   .field-row { grid-template-columns: 1fr; }
@@ -713,21 +732,27 @@ tr:last-child td { border-bottom: none; }
 }
 @media (pointer: coarse) {
   .btn-icon { width: 44px; height: 44px; }
+  input, select, textarea, .btn { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  .trip-card:hover, .hero-btn:hover { transform: none; }
 }
 </style>
 </head>
 <body>
-<div class="topbar">
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<header class="topbar">
   <div class="brand">
     <span id="brand-icon" aria-hidden="true"></span>
     Waypoint
   </div>
-  <span id="save-indicator" class="save-indicator"></span>
+  <span id="save-indicator" class="save-indicator" role="status" aria-live="polite" aria-atomic="true"></span>
   <div id="account-bar" class="account-bar"></div>
-</div>
-<div class="page">
+</header>
+<main id="main-content" class="page" tabindex="-1">
   <div id="app"></div>
-</div>
+</main>
 <div id="modal-root"></div>
 <div id="toast-root"></div>
 
@@ -1087,7 +1112,7 @@ function tripCardAvatarsHtml(trip) {
     var remainingNames = companions.slice(MAX_CARD_AVATARS).map(function (c) { return c.name; }).join(', ');
     html += '<span class="avatar-marker avatar-marker-overflow" title="' + esc(remainingNames) + '">+' + overflow + '</span>';
   }
-  return '<div class="avatar-row trip-card-avatars">' + html + '</div>';
+  return '<span class="avatar-row trip-card-avatars">' + html + '</span>';
 }
 
 /* ---------- 4. Application state & persistence --------------------
@@ -1188,6 +1213,8 @@ function setSaveStatus(kind, message) {
   var el = document.getElementById('save-indicator');
   if (!el) return;
   el.dataset.kind = kind;
+  el.setAttribute('role', kind === 'error' || kind === 'unsaved' ? 'alert' : 'status');
+  el.setAttribute('aria-live', kind === 'error' || kind === 'unsaved' ? 'assertive' : 'polite');
   var labels = { saving: 'Saving…', saved: 'Saved', error: message || 'Save failed', readonly: 'Read-only', unsaved: message || 'Not saved' };
   el.textContent = labels[kind] || '';
 }
@@ -1373,7 +1400,7 @@ function applyAuthUI() {
 // given, is shown above the form — e.g. "Incorrect username or password."
 // after a failed attempt.
 function renderAuthScreen(errorMessage) {
-  var errorHtml = errorMessage ? '<p class="auth-error">' + esc(errorMessage) + '</p>' : '';
+  var errorHtml = errorMessage ? '<p class="auth-error" role="alert" tabindex="-1">' + esc(errorMessage) + '</p>' : '';
   if (setupNeeded) {
     return '<div class="auth-screen"><div class="auth-card">' +
       '<h1>Set up Waypoint</h1>' +
@@ -1413,14 +1440,22 @@ async function submitAuthForm(url, payload) {
     });
     var body = await res.json().catch(function () { return {}; });
     if (!res.ok) {
-      document.getElementById('app').innerHTML = renderAuthScreen(body.error || 'Something went wrong — try again.');
+      var errorApp = document.getElementById('app');
+      errorApp.innerHTML = renderAuthScreen(body.error || 'Something went wrong — try again.');
+      enhanceAccessibility(errorApp);
+      var authError = errorApp.querySelector('.auth-error');
+      if (authError) authError.focus();
       return;
     }
     currentUser = { id: body.id, username: body.username, isUberUser: !!body.isUberUser, avatar: body.avatar || null };
     clearSavedNav();
     await renderBoot();
   } catch (err) {
-    document.getElementById('app').innerHTML = renderAuthScreen('Could not reach the server — check your connection and try again.');
+    var offlineApp = document.getElementById('app');
+    offlineApp.innerHTML = renderAuthScreen('Could not reach the server — check your connection and try again.');
+    enhanceAccessibility(offlineApp);
+    var offlineError = offlineApp.querySelector('.auth-error');
+    if (offlineError) offlineError.focus();
   }
 }
 
@@ -1467,7 +1502,9 @@ async function doLogout() {
 async function renderBoot() {
   applyAuthUI();
   if (!currentUser) {
-    document.getElementById('app').innerHTML = renderAuthScreen();
+    var authApp = document.getElementById('app');
+    authApp.innerHTML = renderAuthScreen();
+    enhanceAccessibility(authApp);
     return;
   }
   state = await loadInitialState();
@@ -1505,6 +1542,7 @@ async function loadAndRenderManageUsers() {
     managedUsers = [];
     showToastSafe('Could not load accounts.');
   }
+  pendingRenderFocus = '[data-page-heading]';
   render();
 }
 
@@ -1518,7 +1556,7 @@ function renderManageUsersView() {
       '</div></div>';
   }).join('');
   return '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + ' All trips</button>' +
-    '<div class="tab-panel-head"><h2>Manage accounts</h2>' +
+    '<div class="tab-panel-head"><h1 data-page-heading tabindex="-1">Manage accounts</h1>' +
       '<button class="btn btn-accent" data-action="new-user">' + icon('add') + ' Add account</button></div>' +
     '<p class="field-hint" style="margin-bottom:16px">You set every account\'s username and password yourself and share it with them directly — there\'s no self-signup or "forgot password" flow. Creating an account here just gives someone a login; it doesn\'t give them access to any trip. Whoever creates a trip becomes that trip\'s owner, and can then share it with any of these accounts from that trip\'s own Settings tab.</p>' +
     (managedUsers.length ? '<div class="item-list">' + rows + '</div>' : '<p class="field-hint">No accounts yet.</p>');
@@ -1599,15 +1637,202 @@ function deleteUserAccount(id) {
 function showToast(message) {
   var root = document.getElementById('toast-root');
   var div = document.createElement('div');
-  div.className = 'toast';
+  var isError = /could not|cannot|failed|not saved|invalid|error|enter |must |at least|before the start|after the start/i.test(message);
+  div.className = 'toast' + (isError ? ' toast-error' : '');
+  div.setAttribute('role', isError ? 'alert' : 'status');
+  div.setAttribute('aria-live', isError ? 'assertive' : 'polite');
+  div.setAttribute('aria-atomic', 'true');
   div.textContent = message;
   root.appendChild(div);
   requestAnimationFrame(function () { div.classList.add('show'); });
   setTimeout(function () {
     div.classList.remove('show');
     setTimeout(function () { div.remove(); }, 250);
-  }, 3200);
+  }, isError ? 8000 : 3200);
 }
+
+/* ---------- 5a. Shared accessibility infrastructure -----------------
+   WayPoint renders its UI from HTML strings, so these helpers apply the
+   repeated behavioural guarantees in one place: field labelling, dialog
+   focus containment and restoration, and stable descriptions for hints. */
+
+var accessibilityId = 0;
+var modalReturnFocus = null;
+
+function ensureElementId(el, prefix) {
+  if (!el.id) el.id = (prefix || 'wp-a11y') + '-' + (++accessibilityId);
+  return el.id;
+}
+
+function appendDescribedBy(control, id) {
+  var values = (control.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+  if (values.indexOf(id) === -1) values.push(id);
+  control.setAttribute('aria-describedby', values.join(' '));
+}
+
+function enhanceAccessibility(scope) {
+  if (!scope || !scope.querySelectorAll) return;
+  Array.prototype.forEach.call(scope.querySelectorAll('.field'), function (field) {
+    var controls = Array.prototype.filter.call(field.querySelectorAll('input:not([type="hidden"]), select, textarea'), function (control) {
+      return control.closest('.field') === field && !control.closest('label');
+    });
+    var label = Array.prototype.find.call(field.children, function (child) { return child.tagName === 'LABEL'; });
+    var control = controls[0];
+    if (label && control) {
+      var controlId = ensureElementId(control, 'wp-field');
+      label.htmlFor = controlId;
+      if (control.required && !label.querySelector('.required-marker')) {
+        var marker = document.createElement('span');
+        marker.className = 'required-marker';
+        marker.textContent = ' (required)';
+        label.appendChild(marker);
+      }
+      Array.prototype.forEach.call(field.querySelectorAll('.field-hint'), function (hint) {
+        if (hint.closest('.field') !== field) return;
+        appendDescribedBy(control, ensureElementId(hint, 'wp-hint'));
+      });
+    }
+    var picker = field.querySelector('.tag-picker');
+    if (picker && label) {
+      picker.setAttribute('role', 'group');
+      picker.setAttribute('aria-labelledby', ensureElementId(label, 'wp-group-label'));
+    }
+  });
+
+  Array.prototype.forEach.call(scope.querySelectorAll('.avatar-picker-section'), function (section) {
+    var heading = section.querySelector('h4');
+    var grid = section.querySelector('.avatar-swatch-grid');
+    if (heading && grid) {
+      grid.setAttribute('role', 'group');
+      grid.setAttribute('aria-labelledby', ensureElementId(heading, 'wp-avatar-group'));
+    }
+  });
+  Array.prototype.forEach.call(scope.querySelectorAll('button.avatar-swatch-btn'), function (button) {
+    button.setAttribute('aria-pressed', String(button.classList.contains('is-selected')));
+  });
+}
+
+function modalFocusableElements(dialog) {
+  return Array.prototype.filter.call(dialog.querySelectorAll('button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'), function (el) {
+    return !el.hidden && el.getAttribute('aria-hidden') !== 'true';
+  });
+}
+
+function setModalBackgroundInert(inert) {
+  ['.topbar', '#main-content'].forEach(function (selector) {
+    var el = document.querySelector(selector);
+    if (!el) return;
+    el.inert = inert;
+    if (inert) el.setAttribute('aria-hidden', 'true');
+    else el.removeAttribute('aria-hidden');
+  });
+}
+
+function activateModal() {
+  var root = document.getElementById('modal-root');
+  var dialog = root && root.querySelector('.modal');
+  if (!dialog) return;
+  enhanceAccessibility(dialog);
+  if (dialog.dataset.accessibilityReady === 'true') return;
+  dialog.dataset.accessibilityReady = 'true';
+  modalReturnFocus = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  dialog.setAttribute('tabindex', '-1');
+  var heading = dialog.querySelector('.modal-head h2');
+  if (heading) dialog.setAttribute('aria-labelledby', ensureElementId(heading, 'wp-dialog-title'));
+  setModalBackgroundInert(true);
+  document.body.classList.add('has-modal');
+  requestAnimationFrame(function () {
+    var initial = dialog.querySelector('[data-modal-initial]') || modalFocusableElements(dialog)[0] || dialog;
+    initial.focus();
+  });
+}
+
+function showFormError(form, message, control) {
+  if (!form) { showToast(message); return; }
+  var body = form.querySelector('.modal-body') || form;
+  var summary = form.querySelector('.form-error-summary');
+  if (!summary) {
+    summary = document.createElement('div');
+    summary.className = 'form-error-summary';
+    summary.setAttribute('role', 'alert');
+    summary.setAttribute('tabindex', '-1');
+    body.insertBefore(summary, body.firstChild);
+  }
+  summary.textContent = message;
+  if (control) {
+    control.setAttribute('aria-invalid', 'true');
+    var error = control.parentElement && control.parentElement.querySelector('.field-error');
+    if (!error) {
+      error = document.createElement('div');
+      error.className = 'field-error';
+      if (control.parentElement) control.parentElement.appendChild(error);
+    }
+    error.textContent = message;
+    appendDescribedBy(control, ensureElementId(error, 'wp-error'));
+    control.focus();
+  } else {
+    summary.focus();
+  }
+}
+
+document.addEventListener('input', function (event) {
+  var control = event.target;
+  if (!control || !control.removeAttribute) return;
+  if (control.getAttribute('aria-invalid') === 'true') {
+    control.removeAttribute('aria-invalid');
+    var error = control.parentElement && control.parentElement.querySelector('.field-error');
+    if (error) {
+      var errorId = error.id;
+      error.remove();
+      var descriptions = (control.getAttribute('aria-describedby') || '').split(/\s+/).filter(function (id) { return id && id !== errorId; });
+      if (descriptions.length) control.setAttribute('aria-describedby', descriptions.join(' '));
+      else control.removeAttribute('aria-describedby');
+    }
+    var form = control.form;
+    if (form && !form.querySelector('[aria-invalid="true"]')) {
+      var summary = form.querySelector('.form-error-summary');
+      if (summary) summary.remove();
+    }
+  }
+});
+
+// Native constraint validation is still the source of truth, but presenting
+// its message inside the dialog makes the failure persistent, programmatically
+// associated with the field, and reachable by screen-reader and keyboard users.
+var invalidFormResetTimer = null;
+document.addEventListener('invalid', function (event) {
+  var control = event.target;
+  var form = control && control.form;
+  event.preventDefault();
+  if (!form || form.dataset.invalidMessageShown === 'true') return;
+  form.dataset.invalidMessageShown = 'true';
+  showFormError(form, control.validationMessage || 'Check the highlighted field and try again.', control);
+  clearTimeout(invalidFormResetTimer);
+  invalidFormResetTimer = setTimeout(function () { delete form.dataset.invalidMessageShown; }, 0);
+}, true);
+
+document.addEventListener('keydown', function (event) {
+  var dialog = document.querySelector('#modal-root .modal');
+  if (!dialog) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeModal();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  var focusable = modalFocusableElements(dialog);
+  if (!focusable.length) { event.preventDefault(); dialog.focus(); return; }
+  var first = focusable[0], last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
+
+new MutationObserver(function () {
+  var root = document.getElementById('modal-root');
+  if (root && root.querySelector('.modal')) activateModal();
+}).observe(document.getElementById('modal-root'), { childList: true, subtree: true });
 
 var pendingConfirm = null;
 
@@ -1621,7 +1846,7 @@ function openConfirm(opts) {
           '<button class="btn btn-icon btn-ghost" data-action="close-modal" aria-label="Close dialog" title="Close">' + icon('close') + '</button></div>' +
         '<div class="modal-body"><p class="confirm-text">' + esc(opts.message) + '</p></div>' +
         '<div class="modal-foot">' +
-          '<button class="btn" data-action="close-modal">Cancel</button>' +
+          '<button class="btn" data-action="close-modal" data-modal-initial>Cancel</button>' +
           '<button class="btn btn-danger" data-action="confirm-yes">' + esc(opts.confirmLabel || 'Delete') + '</button>' +
         '</div>' +
       '</div>' +
@@ -1630,8 +1855,13 @@ function openConfirm(opts) {
 
 function closeModal() {
   document.getElementById('modal-root').innerHTML = '';
+  setModalBackgroundInert(false);
+  document.body.classList.remove('has-modal');
   window.__formConfig = null;
   pendingConfirm = null;
+  var restore = modalReturnFocus;
+  modalReturnFocus = null;
+  if (restore && restore.isConnected) requestAnimationFrame(function () { restore.focus(); });
 }
 
 /* ---------- 6. Generic form-field schemas & modal builder ----------
@@ -1698,11 +1928,13 @@ function sectionsWithTagPickerLock(sections, locked) {
 
 function suggestInputHtml(field, val, req, suggestType, extraAttrs, placeholderFallback) {
   var placeholder = field.placeholder || placeholderFallback || '';
+  var listId = field.key + '-suggest';
   return '<div class="suggest-input-wrap">' +
-    '<input type="text" autocomplete="off" data-suggest-type="' + suggestType + '" ' + (extraAttrs || '') +
+    '<input type="text" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="' + listId + '" data-suggest-type="' + suggestType + '" ' + (extraAttrs || '') +
     ' name="' + field.key + '" value="' + esc(val) + '" ' + req +
     ' placeholder="' + esc(placeholder) + '">' +
-    '<div class="suggest-list" id="' + field.key + '-suggest"></div>' +
+    '<div class="suggest-list" id="' + listId + '" role="listbox"></div>' +
+    '<span class="sr-only" id="' + listId + '-status" role="status" aria-live="polite"></span>' +
     '</div>';
 }
 
@@ -1743,11 +1975,11 @@ function locationPickerHtml(field, val, req, trip, allValues) {
     (field.boundaryPrefix ? ' data-boundary-prefix="' + esc(field.boundaryPrefix) + '"' : '') + '>' +
     '<div class="location-picker-row"><input type="text" autocomplete="off" name="' + field.key + '" value="' + esc(val) + '" ' + req + ' placeholder="' + esc(field.placeholder || '') + '" data-location-query>' +
     '<button type="button" class="btn" data-action="search-location">Find location</button></div>' +
-    hiddenHtml + '<div class="location-results" data-location-results hidden role="listbox"></div>' + summary +
+    hiddenHtml + '<div class="location-results" data-location-results hidden role="region" aria-label="Location search results" aria-live="polite" aria-atomic="true"></div>' + summary +
     '<div class="location-picker-actions"><button type="button" class="btn btn-ghost" data-action="use-typed-location">Use typed location</button>' +
     '<button type="button" class="btn btn-ghost" data-action="set-location-pin">Set pin manually</button>' +
     (mapped ? '<button type="button" class="btn btn-ghost" data-action="preview-location">View on map</button>' : '') + '</div>' +
-    '<div class="location-pin-map" data-location-pin-map></div><div class="field-hint" data-location-hint></div></div>';
+    '<div class="location-pin-map" data-location-pin-map></div><div class="field-hint" data-location-hint role="status" aria-live="polite" aria-atomic="true"></div></div>';
 }
 
 // The activity's timing is one coherent concept, so it deliberately uses a
@@ -1761,8 +1993,8 @@ function activityTimingHtml(values) {
   // A deliberate edit flips this marker in the change handler below, after
   // which changing the start never tramples the person's chosen end date.
   var autoEndDate = !endDate || endDate === startDate;
-  return '<div class="field activity-timing-field' + (allDay ? ' is-all-day' : '') + '" style="grid-column:1/-1" data-activity-timing>' +
-    '<label>When</label>' +
+  return '<fieldset class="field activity-timing-field' + (allDay ? ' is-all-day' : '') + '" style="grid-column:1/-1" data-activity-timing>' +
+    '<legend>When</legend>' +
     '<label class="checkbox-field activity-timing-toggle"><input type="checkbox" name="allDay"' + (allDay ? ' checked' : '') + '> All day</label>' +
     '<div class="activity-timing-grid">' +
       '<div class="activity-timing-rail" aria-hidden="true"><span class="activity-timing-dot"></span><span class="activity-timing-dot"></span></div>' +
@@ -1778,7 +2010,7 @@ function activityTimingHtml(values) {
       '</div>' +
       '</div></div>' +
     '</div>' +
-  '</div>';
+  '</fieldset>';
 }
 
 function fieldHtml(field, value, trip, allValues) {
@@ -1933,11 +2165,11 @@ function fieldHtml(field, value, trip, allValues) {
         '<input type="text" maxlength="10" style="text-transform:uppercase" ' +
         'name="' + field.key + '" value="' + esc(val) + '" ' + req +
         ' placeholder="' + esc(field.placeholder || '') + '">' +
-        '<input type="date" id="flight-lookup-date" style="flex:0 0 150px" value="' + esc(lookupDateDefault) + '">' +
+        '<input type="date" id="flight-lookup-date" aria-label="Flight lookup date" style="flex:0 0 150px" value="' + esc(lookupDateDefault) + '">' +
         '<button type="button" class="btn" data-action="lookup-flight">Look up</button>' +
         '</div>' +
         '<div class="field-hint">Pick the date to look up right here — defaults to "Depart date" below once that\'s filled in, and fills it back in for you either way.</div>' +
-        '<div class="flight-lookup-status" id="flight-lookup-status"></div>';
+        '<div class="flight-lookup-status" id="flight-lookup-status" role="status" aria-live="polite" aria-atomic="true"></div>';
       break;
     case 'timezone':
       inputHtml = suggestInputHtml(field, val, req, 'timezone', 'maxlength="40"') +
@@ -2658,16 +2890,17 @@ function openActivityForm(trip, existing, seed) {
       var startDate = v.startDate || '';
       var endDate = v.endDate || startDate;
       var allDay = !!v.allDay;
+      var form = document.getElementById('entity-form');
       if (!startDate || !endDate) {
-        showToast('Add a start and end date for this activity.');
+        showFormError(form, 'Add a start and end date for this activity.', form && form.elements.startDate);
         return false;
       }
       if (endDate < startDate) {
-        showToast('The end date cannot be before the start date.');
+        showFormError(form, 'The end date cannot be before the start date.', form && form.elements.endDate);
         return false;
       }
       if (!allDay && startDate === endDate && v.startTime && v.endTime && v.endTime < v.startTime) {
-        showToast('For a same-day activity, the end time must be after the start time.');
+        showFormError(form, 'For a same-day activity, the end time must be after the start time.', form && form.elements.endTime);
         return false;
       }
       updateState(function (next) {
@@ -3211,6 +3444,10 @@ function isSuggestInput(el) {
 function closeSuggestions(input) {
   var el = suggestListEl(input);
   if (el) { el.classList.remove('is-open'); el.innerHTML = ''; }
+  if (input) {
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+  }
   if (suggestDropdownState.input === input) suggestDropdownState = { input: null, items: [], activeIndex: -1, source: null };
 }
 
@@ -3219,19 +3456,27 @@ function renderSuggestList(input) {
   if (!el) return;
   var items = suggestDropdownState.items;
   var display = suggestDropdownState.source.display;
+  var status = document.getElementById(input.name + '-suggest-status');
+  input.setAttribute('aria-expanded', 'true');
   if (!items.length) {
     el.innerHTML = '<div class="suggest-empty">No matches yet</div>';
     el.classList.add('is-open');
+    input.removeAttribute('aria-activedescendant');
+    if (status) status.textContent = 'No suggestions available.';
     return;
   }
   el.innerHTML = items.map(function (item, i) {
     return '<div class="suggest-item' + (i === suggestDropdownState.activeIndex ? ' is-active' : '') +
-      '" data-index="' + i + '">' + esc(display(item)) + '</div>';
+      '" id="' + input.name + '-suggest-option-' + i + '" role="option" aria-selected="' + (i === suggestDropdownState.activeIndex) + '" data-index="' + i + '">' + esc(display(item)) + '</div>';
   }).join('');
   el.classList.add('is-open');
+  if (status) status.textContent = items.length + ' suggestion' + (items.length === 1 ? '' : 's') + ' available. Use the arrow keys to review them.';
   if (suggestDropdownState.activeIndex >= 0) {
     var active = el.querySelector('.suggest-item.is-active');
+    if (active) input.setAttribute('aria-activedescendant', active.id);
     if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
+  } else {
+    input.removeAttribute('aria-activedescendant');
   }
 }
 
@@ -3381,11 +3626,12 @@ function renderLocationResults(wrapper, results) {
     el.innerHTML = '<div class="suggest-empty">No matching places found. You can keep the text or set a pin manually.</div>';
   } else {
     el.innerHTML = results.map(function (result, i) {
-      return '<button type="button" class="location-result" role="option" data-action="select-location-result" data-location-index="' + i + '">' +
+      return '<button type="button" class="location-result" data-action="select-location-result" data-location-index="' + i + '">' +
         '<span class="location-result-title"><span>' + esc(result.name) + '</span><span class="location-result-kind">' + esc(result.kindLabel || 'Place') + '</span></span>' +
         '<span class="location-result-address">' + esc(result.formattedAddress || '') + '</span></button>';
     }).join('');
   }
+  el.setAttribute('aria-busy', 'false');
   el.hidden = false;
 }
 
@@ -3401,6 +3647,8 @@ async function searchLocationPicker(wrapper) {
   abortLocationSearch(wrapper);
   var controller = new AbortController();
   wrapper._locationSearchController = controller;
+  var resultsRegion = wrapper.querySelector('[data-location-results]');
+  if (resultsRegion) resultsRegion.setAttribute('aria-busy', 'true');
   var searchButton = wrapper.querySelector('[data-action="search-location"]');
   if (searchButton) searchButton.disabled = true;
   var params = new URLSearchParams({ q: text, context: context, kind: kind });
@@ -3433,6 +3681,7 @@ async function searchLocationPicker(wrapper) {
     if (wrapper._locationSearchController === controller) {
       wrapper._locationSearchController = null;
       if (searchButton) searchButton.disabled = false;
+      if (resultsRegion) resultsRegion.setAttribute('aria-busy', 'false');
     }
   }
 }
@@ -3741,10 +3990,10 @@ function openCompanionLinkForm(trip, companion) {
           '<button class="btn btn-icon btn-ghost" data-action="close-modal" aria-label="Close dialog" title="Close">' + icon('close') + '</button></div>' +
         '<form id="companion-link-form" data-trip-id="' + esc(trip.tripId) + '" data-companion-id="' + esc(companion.companionId) + '" data-prior-account-id="' + esc(companion.accountId || '') + '">' +
           '<div class="modal-body">' +
-            '<div class="field"><label>Username</label><input type="text" name="username" placeholder="an existing account" value="' + esc(currentUsername) + '"></div>' +
+            '<div class="field"><label>Username</label><input type="text" name="username" placeholder="an existing account" value="' + esc(currentUsername) + '">' +
             '<div class="field-hint">' + (isLinked && !currentUsername
               ? 'Already linked to an account, but its username isn\'t shown here (no access has been granted) — retype it if you want to change their access level below.'
-              : 'Leave blank and save to remove the current link.') + '</div>' +
+              : 'Leave blank and save to remove the current link.') + '</div></div>' +
             '<div class="field"><label>Privilege level</label>' + roleSelectHtml + '</div>' +
           '</div>' +
           '<div class="modal-foot">' +
@@ -3782,7 +4031,11 @@ function openCompanionLinkForm(trip, companion) {
 //                         atomically replace when the username changes.
 async function submitCompanionAccess(payload) {
   var username = (payload.username || '').trim();
-  if (payload.role && !username) { showToast('Enter the username to grant them access.'); return; }
+  if (payload.role && !username) {
+    var form = document.getElementById('companion-link-form');
+    showFormError(form, 'Enter the username to grant them access.', form && form.elements.username);
+    return;
+  }
   try {
     // Step 1: reconcile the account link.
     var linkRes = await fetch('/WayPoint/api/companions/link', {
@@ -3914,8 +4167,9 @@ async function submitAddLinkedCompanion(payload) {
   var name = (payload.name || '').trim();
   var username = (payload.username || '').trim();
   var role = payload.role || 'user';
-  if (!name) { showToast('Enter a name.'); return; }
-  if (!username) { showToast('Enter the username to link.'); return; }
+  var form = document.getElementById('add-linked-companion-form');
+  if (!name) { showFormError(form, 'Enter a name.', form && form.elements.name); return; }
+  if (!username) { showFormError(form, 'Enter the username to link.', form && form.elements.username); return; }
 
   var newCompanionId = newId();
   // Step 1: add them as an ordinary Guest first, through the SAME
@@ -4240,7 +4494,7 @@ function renderDashboard() {
   // Superuser automatically — see openTripForm()).
   if (state.trips.length === 0) {
     return (
-      '<div class="section-head"><h1>Your trips</h1>' +
+      '<div class="section-head"><h1 data-page-heading tabindex="-1">Your trips</h1>' +
         '<button class="btn btn-accent" data-action="new-trip">' + icon('add') + ' New trip</button></div>' +
       '<div class="empty-state">' + icon('brand') +
         '<h3>No trips yet</h3>' +
@@ -4264,25 +4518,27 @@ function renderDashboard() {
         '</div>'
       : '';
     return (
-      '<div class="trip-card" data-action="open-trip" data-id="' + trip.tripId + '">' +
-        '<div class="trip-card-top">' +
-          '<div><h3>' + esc(trip.name) + '</h3><div class="trip-dates">' +
+      '<article class="trip-card">' +
+        '<button type="button" class="trip-card-open" data-action="open-trip" data-id="' + trip.tripId + '" aria-label="Open trip ' + esc(trip.name) + '">' +
+        '<span class="trip-card-top">' +
+          '<span><span class="trip-card-title">' + esc(trip.name) + '</span><span class="trip-dates">' +
             (trip.startDate ? formatDateShort(trip.startDate) : 'No dates set') +
-            (trip.endDate ? ' – ' + formatDateShort(trip.endDate) : '') + '</div></div>' +
+            (trip.endDate ? ' – ' + formatDateShort(trip.endDate) : '') + '</span></span>' +
           '<span class="pill pill-' + status + '">' + statusLabel + '</span>' +
-        '</div>' +
-        '<div class="trip-stats">' +
+        '</span>' +
+        '<span class="trip-stats">' +
           '<span>' + icon('destination') + ' <b>' + trip.destinations.length + '</b> areas</span>' +
           '<span>' + icon('expenses') + ' <b>' + money(spend.known, trip.homeCurrency) + '</b>' + (spend.unknownCount ? ' <span class="rate-missing">+' + spend.unknownCount + ' need rate</span>' : '') + '</span>' +
-        '</div>' +
+        '</span>' +
         tripCardAvatarsHtml(trip) +
+        '</button>' +
         cardActions +
-      '</div>'
+      '</article>'
     );
   }).join('');
   return (
     '<div class="intro-note"><strong>Waypoint</strong> keeps every trip\'s destinations, activities, transport and accommodation in one place, with a day-by-day timeline that shows overnight travel and multi-area days clearly, plus expenses tracked across currencies.</div>' +
-    '<div class="section-head"><h1>Your trips</h1>' +
+    '<div class="section-head"><h1 data-page-heading tabindex="-1">Your trips</h1>' +
       '<button class="btn btn-accent" data-action="new-trip">' + icon('add') + ' New trip</button></div>' +
     '<div class="trip-grid">' + cards + '</div>'
   );
@@ -4344,12 +4600,12 @@ function renderTripView() {
   var spend = tripSpend(trip);
   var status = tripStatus(trip);
   var heroHtml = HERO_TABS.map(function (t) {
-    return '<button class="hero-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '">' +
+    return '<button id="trip-nav-' + t.key + '" class="hero-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '" aria-controls="trip-panel"' + (currentTab === t.key ? ' aria-current="page"' : '') + '>' +
       icon(t.icon) + t.label + '</button>';
   }).join('');
   var tabsHtml = tabGroupsForTrip(trip).map(function (group) {
     var buttons = group.tabs.map(function (t) {
-      return '<button class="tab-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '">' +
+      return '<button id="trip-nav-' + t.key + '" class="tab-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '" aria-controls="trip-panel"' + (currentTab === t.key ? ' aria-current="page"' : '') + '>' +
         icon(t.icon) + t.label + '</button>';
     }).join('');
     return '<div class="tab-group"><div class="tab-group-label">' + esc(group.label) + '</div><div class="tab-group-tabs">' + buttons + '</div></div>';
@@ -4377,7 +4633,7 @@ function renderTripView() {
     '<div class="trip-header">' +
       '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + ' All trips</button>' +
       '<div class="trip-title-row">' +
-        '<div><h1>' + esc(trip.name) + '</h1>' +
+        '<div><h1 data-page-heading tabindex="-1">' + esc(trip.name) + '</h1>' +
           '<div class="trip-meta">' +
             '<span>' + (trip.startDate ? formatDateShort(trip.startDate) : '?') + ' – ' + (trip.endDate ? formatDateShort(trip.endDate) : '?') + '</span>' +
             (canFullyEditTrip(trip) ? '<span><b>' + money(spend.known, trip.homeCurrency) + '</b> spent so far' +
@@ -4388,9 +4644,9 @@ function renderTripView() {
         headerActions +
       '</div>' +
     '</div>' +
-      '<div class="nav-group-label">View</div><div class="hero-row">' + heroHtml + '</div>' +
-    '<div class="tabbar">' + tabsHtml + '</div>' +
-    '<div>' + panel + '</div>'
+      '<nav aria-label="Trip sections"><div class="nav-group-label">View</div><div class="hero-row">' + heroHtml + '</div>' +
+    '<div class="tabbar">' + tabsHtml + '</div></nav>' +
+    '<section id="trip-panel" class="trip-panel" tabindex="-1" aria-labelledby="trip-nav-' + currentTab + '">' + panel + '</section>'
   );
 }
 
@@ -5553,7 +5809,7 @@ function renderExpensesTab(trip) {
   return head +
     '<div class="stat-row"><div class="stat-tile"><div class="stat-label">Total (' + trip.homeCurrency + ')</div><div class="stat-value">' + money(spend.known, trip.homeCurrency) + '</div></div>' + catTiles + '</div>' +
     (spend.unknownCount ? '<div class="intro-note" style="border-color:var(--wp-state-danger-subtle)"><strong>' + spend.unknownCount + ' item(s)</strong> are in a currency with no exchange rate set — <button class="warn-link" data-action="switch-tab" data-tab="settings">set one in Settings</button> to include them in the total.</div>' : '') +
-    '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount</th><th class="num">' + esc(trip.homeCurrency) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    '<div class="table-wrap"><table><caption class="sr-only">Expenses for ' + esc(trip.name) + '</caption><thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Description</th><th scope="col" class="num">Amount</th><th scope="col" class="num">' + esc(trip.homeCurrency) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 /* ---------- 21b. (formerly) the "Share this trip" panel ----------------
@@ -5633,12 +5889,24 @@ function renderSettingsTab(trip) {
 
 /* ---------- 23. Top-level render dispatcher ------------------------------------ */
 
+var pendingRenderFocus = null;
+
 function render() {
   var app = document.getElementById('app');
   if (currentView === 'manage-users') {
     app.innerHTML = renderManageUsersView();
   } else {
     app.innerHTML = (currentView === 'trip' && currentTripId) ? renderTripView() : renderDashboard();
+  }
+  enhanceAccessibility(app);
+
+  if (pendingRenderFocus) {
+    var focusSelector = pendingRenderFocus;
+    pendingRenderFocus = null;
+    requestAnimationFrame(function () {
+      var target = document.querySelector(focusSelector) || document.getElementById('main-content');
+      if (target) target.focus();
+    });
   }
 
   if (currentView === 'trip' && currentTab === 'map') {
@@ -5692,9 +5960,9 @@ document.addEventListener('click', function (e) {
     }
     return;
   }
-  if (action === 'open-trip') { currentView = 'trip'; currentTripId = el.dataset.id; currentTab = 'timeline'; render(); return; }
-  if (action === 'back-to-dashboard') { currentView = 'dashboard'; currentTripId = null; render(); return; }
-  if (action === 'switch-tab') { currentTab = el.dataset.tab; render(); return; }
+  if (action === 'open-trip') { currentView = 'trip'; currentTripId = el.dataset.id; currentTab = 'timeline'; pendingRenderFocus = '[data-page-heading]'; render(); return; }
+  if (action === 'back-to-dashboard') { currentView = 'dashboard'; currentTripId = null; pendingRenderFocus = '[data-page-heading]'; render(); return; }
+  if (action === 'switch-tab') { currentTab = el.dataset.tab; pendingRenderFocus = '#trip-panel'; render(); return; }
   if (action === 'toggle-map-layer') {
     var layerKey = el.dataset.layer;
     if (!Object.prototype.hasOwnProperty.call(mapState.visibility, layerKey)) return;
@@ -5736,9 +6004,10 @@ document.addEventListener('click', function (e) {
     if (hiddenInput) hiddenInput.value = el.dataset.value;
     var swatchGrid = el.closest('.avatar-swatch-grid');
     if (swatchGrid) {
-      Array.prototype.forEach.call(swatchGrid.querySelectorAll('.avatar-swatch-btn'), function (btn) { btn.classList.remove('is-selected'); });
+      Array.prototype.forEach.call(swatchGrid.querySelectorAll('.avatar-swatch-btn'), function (btn) { btn.classList.remove('is-selected'); btn.setAttribute('aria-pressed', 'false'); });
     }
     el.classList.add('is-selected');
+    el.setAttribute('aria-pressed', 'true');
     updateAvatarPickerPreview(swatchForm);
     return;
   }

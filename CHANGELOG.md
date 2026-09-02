@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-09-02 — Critical accessibility consolidation
+
+### What changed
+
+- Added skip navigation and semantic header, main, navigation, section and table structure, with focus moved to the relevant heading or panel after in-app navigation.
+- Made every modal a named dialog with initial focus, contained Tab order, Escape support, an inert background and focus restoration to its trigger.
+- Associated generated form labels and hints with their controls, made required state visible, grouped activity timing in a fieldset, and replaced toast-only validation with persistent summaries and inline field errors.
+- Converted trip cards to native keyboard-operable buttons and added a consistent high-visibility focus ring without suppressing browser outlines.
+- Completed ARIA combobox behaviour for suggestion fields, including expanded state, active option tracking and polite result-count announcements.
+- Added live announcements for save state, lookups, location search and errors; icon-only controls retain explicit accessible names.
+- Strengthened muted text, accent-button and form-border contrast in both themes, raised small copy targets to 24px, kept touch controls at 44px and honoured reduced-motion preferences.
+- Added source-level accessibility regression coverage, including WCAG contrast calculations for the updated token pairs.
+
+### Verification
+
+- `npm test` — passed, including security, design-token, icon-system and accessibility regression checks.
+- `node test-map-route-arcs.js` — passed.
+- All inline and referenced JavaScript parsed successfully.
+- Automated browser interaction testing remains unavailable in this workspace because Chromium is not installed.
+
 ## 2026-09-01 — Consolidated icon system
 
 ### What changed
