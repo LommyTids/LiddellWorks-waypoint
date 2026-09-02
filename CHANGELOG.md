@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-02 — Responsive application shell
+
+### What changed
+
+- Added a compact sticky mobile trip header containing Back, trip name and dates while leaving the richer desktop header unchanged.
+- Consolidated narrow-screen navigation into four persistent destinations: Overview, Plan, People and More.
+- Kept Timeline and Map prominent as an Overview segmented control; Plan and People expose contextual child navigation and remember the last child used.
+- Added a normal More directory page for Expenses and Settings, with Expenses still omitted for scoped roles that cannot access financial data.
+- Replaced narrow-screen account actions with an anchored avatar menu supporting outside-click dismissal, Escape, focus entry and explicit menu semantics.
+- Added semantic Overview, Plan, People, More and Logout icons to the local WayPoint asset registry.
+- Preserved the complete grouped desktop navigation and shared all panel rendering, permissions and actions between breakpoints.
+- Added responsive-shell regression coverage and updated the application navigation documentation.
+
+### Verification
+
+- `npm test` — passed, including security, design-token, icon-system, accessibility and responsive-shell regression checks.
+- Map range and route-arc regression checks passed.
+- All inline and referenced JavaScript parsed successfully.
+
 ## 2026-09-02 — Critical accessibility consolidation
 
 ### What changed

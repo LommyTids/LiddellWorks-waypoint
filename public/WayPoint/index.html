@@ -231,6 +231,18 @@ input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-si
    applyAuthUI(). */
 .account-bar { display: flex; align-items: center; gap: 8px; }
 .account-label { font: var(--wp-type-label); color: var(--wp-text-secondary); margin-right: 2px; white-space: nowrap; }
+.account-desktop-actions { display: flex; align-items: center; gap: 8px; }
+.account-menu { display: none; position: relative; }
+.account-menu-toggle { padding: 3px; min-width: 38px; min-height: 38px; justify-content: center; }
+.account-popover {
+  position: absolute; z-index: 40; top: calc(100% + 8px); right: 0; width: min(260px, calc(100vw - 24px));
+  padding: 6px; border: 1px solid var(--wp-border-default); border-radius: var(--radius);
+  background: var(--wp-bg-surface); box-shadow: var(--wp-shadow-surface);
+}
+.account-popover-name { padding: 9px 10px 8px; border-bottom: 1px solid var(--wp-border-default); font: var(--wp-type-label); color: var(--wp-text-secondary); overflow: hidden; text-overflow: ellipsis; }
+.account-menu-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-primary); font: var(--wp-type-label); text-align: left; cursor: pointer; }
+.account-menu-item:hover { background: var(--wp-bg-subdued); }
+.account-menu-item .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); color: var(--wp-text-secondary); }
 
 /* ---- Avatars (Companions/Avatars feature) ---------------------------
    One small circle marker, used in three slightly different contexts:
@@ -501,6 +513,7 @@ textarea { resize: vertical; min-height: 60px; }
 .trip-header { margin-bottom: 22px; }
 .back-link { display: inline-flex; align-items: center; gap: 4px; font: var(--wp-type-label); color: var(--wp-text-secondary); background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 10px; }
 .back-link .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+.back-label-compact { display: none; }
 .trip-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .trip-title-row h1 { font: var(--wp-type-display); }
 .trip-meta { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-secondary); }
@@ -544,6 +557,26 @@ textarea { resize: vertical; min-height: 60px; }
 .tab-btn.active { color: var(--wp-text-primary); border-bottom-color: var(--wp-action-accent); font-weight: 600; }
 .tab-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
 .tab-panel-head h2 { font: var(--wp-type-heading); }
+
+/* The mobile shell exists alongside, rather than replacing, the complete
+   desktop navigation. CSS chooses one representation at the breakpoint;
+   both call the same switch-tab action and therefore share permissions and
+   panel rendering rather than creating a second navigation state machine. */
+.mobile-trip-shell, .mobile-destination-nav { display: none; }
+.mobile-child-nav { display: flex; gap: 4px; margin: 0 0 18px; padding: 4px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-subdued); overflow-x: auto; scrollbar-width: none; }
+.mobile-child-nav::-webkit-scrollbar { display: none; }
+.mobile-child-btn { flex: 1 0 auto; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 11px; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; color: var(--wp-text-secondary); font: var(--wp-type-label); cursor: pointer; white-space: nowrap; }
+.mobile-child-btn.active { background: var(--wp-bg-surface); color: var(--wp-text-primary); box-shadow: 0 1px 3px rgba(26,34,51,.12); font-weight: 650; }
+.mobile-child-btn .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+.mobile-overview-switch .mobile-child-btn.active .icon { color: var(--wp-action-accent); }
+.mobile-more-list { display: grid; gap: 10px; }
+.mobile-more-card { width: 100%; display: flex; align-items: center; gap: 14px; padding: 16px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); color: var(--wp-text-primary); text-align: left; cursor: pointer; box-shadow: var(--wp-shadow-surface); }
+.mobile-more-card > .icon { width: var(--wp-icon-lg); height: var(--wp-icon-lg); color: var(--wp-action-accent); }
+.mobile-more-card-copy { flex: 1; min-width: 0; }
+.mobile-more-card-title { display: block; font: var(--wp-type-label); font-weight: 650; }
+.mobile-more-card-description { display: block; margin-top: 2px; color: var(--wp-text-secondary); font: var(--wp-type-meta); }
+.mobile-more-card .icon:last-child { width: var(--wp-icon-sm); height: var(--wp-icon-sm); color: var(--wp-text-muted); }
+.mobile-more-return { display: none; }
 
 /* ---- 4d. Item list rows (destinations/activities/transport/etc) ------ */
 .item-list { display: flex; flex-direction: column; gap: 10px; }
@@ -644,6 +677,41 @@ tr:last-child td { border-bottom: none; }
 @media (max-width: 640px) {
   .field-row { grid-template-columns: 1fr; }
   :root { --wp-type-display-size: 32px; --wp-type-display-leading: 38px; }
+}
+
+@media (max-width: 768px) {
+  .topbar { min-height: 56px; padding: 8px 12px; gap: 8px; }
+  .brand { font-size: var(--wp-type-body-size); }
+  .brand .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); }
+  .save-indicator { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account-desktop-actions { display: none; }
+  .account-menu { display: block; }
+  .account-menu-toggle .avatar-marker { width: 28px; height: 28px; }
+
+  body.is-trip-view .page { padding: 0 16px calc(92px + env(safe-area-inset-bottom)); }
+  .trip-header {
+    position: sticky; z-index: 16; top: 56px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px;
+    margin: 0 -16px 16px; padding: 9px 16px; border-bottom: 1px solid var(--wp-border-default); background: color-mix(in srgb, var(--wp-bg-canvas) 94%, transparent); backdrop-filter: blur(12px);
+  }
+  .back-link { margin: 0; min-height: 40px; padding: 7px 8px 7px 0; }
+  .back-label-wide { display: none; }
+  .back-label-compact { display: inline; }
+  .trip-title-row { display: block; min-width: 0; }
+  .trip-title-row h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--wp-type-heading); }
+  .trip-meta { margin-top: 1px; font: var(--wp-type-meta); }
+  .trip-spend-meta, .trip-header .card-actions { display: none; }
+  .desktop-trip-nav { display: none; }
+  .mobile-trip-shell { display: block; }
+  .mobile-more-return { display: inline-flex; margin-bottom: 12px; }
+
+  .mobile-destination-nav {
+    position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 5px 6px calc(5px + env(safe-area-inset-bottom)); border-top: 1px solid var(--wp-border-default); background: color-mix(in srgb, var(--wp-bg-surface) 96%, transparent); box-shadow: 0 -4px 16px rgba(26,34,51,.08); backdrop-filter: blur(14px);
+  }
+  .mobile-destination-btn { min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px 2px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-muted); font: var(--wp-type-micro); cursor: pointer; }
+  .mobile-destination-btn .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); }
+  .mobile-destination-btn.active { color: var(--wp-text-primary); background: var(--wp-action-accent-subtle); }
+  .mobile-destination-btn.active .icon { color: var(--wp-action-accent); }
 }
 
 /* ---- 4h. Map tab -----------------------------------------------------
@@ -1126,6 +1194,12 @@ var state = { trips: [] };
 var currentView = 'dashboard';
 var currentTripId = null;
 var currentTab = 'timeline';
+// Mobile remembers the last child used inside the three multi-view
+// destinations. More intentionally opens its own directory page every time,
+// matching the agreed information architecture rather than guessing whether
+// Expenses or Settings was wanted.
+var mobileLastTab = { overview: 'timeline', plan: 'destinations', people: 'companions' };
+var accountMenuOpen = false;
 
 // ---- Accounts / login (see section 4b, "Auth", further down) ----------
 // `currentUser` is null until checkAuth() resolves at boot, and stays
@@ -1259,11 +1333,20 @@ function waitMs(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
 }
 
+function saveNavigationState() {
+  try {
+    sessionStorage.setItem('waypoint-nav', JSON.stringify({
+      view: currentView,
+      tripId: currentTripId,
+      tab: currentTab,
+      mobileLastTab: mobileLastTab
+    }));
+  } catch (e) { /* Navigation persistence is an enhancement; rendering still works without storage. */ }
+}
+
 async function persist(newState) {
   state = newState;
-  try {
-    sessionStorage.setItem('waypoint-nav', JSON.stringify({ view: currentView, tripId: currentTripId, tab: currentTab }));
-  } catch (e) { /* sessionStorage may be unavailable in some browsers/private modes; nav just won't be restored */ }
+  saveNavigationState();
 
   render();
 
@@ -1385,13 +1468,25 @@ function applyAuthUI() {
   // on the server never sends back nothing, even before you've picked one
   // yourself (see that function's own comment in src/worker.js) -- so
   // there's no "avatar not set yet" case to special-case here.
+  var marker = avatarMarkerHtml(currentUser.avatar ? { type: 'account', color: currentUser.avatar.color, animal: currentUser.avatar.animal } : null, currentUser.username);
+  var manageDesktop = currentUser.isUberUser ? '<button class="btn btn-ghost" data-action="open-manage-users">Manage accounts</button>' : '';
+  var manageMobile = currentUser.isUberUser ? '<button class="account-menu-item" role="menuitem" data-action="open-manage-users">' + icon('settings') + ' Manage accounts</button>' : '';
   el.innerHTML =
-    '<button class="account-avatar-btn" data-action="open-avatar-picker" title="Change your avatar">' +
-      avatarMarkerHtml(currentUser.avatar ? { type: 'account', color: currentUser.avatar.color, animal: currentUser.avatar.animal } : null, currentUser.username) +
-      '<span class="account-label" style="margin-right:0">' + esc(currentUser.username) + '</span>' +
-    '</button>' +
-    (currentUser.isUberUser ? '<button class="btn btn-ghost" data-action="open-manage-users">Manage accounts</button>' : '') +
-    '<button class="btn btn-ghost" data-action="logout">Log out</button>';
+    '<div class="account-desktop-actions">' +
+      '<button class="account-avatar-btn" data-action="open-avatar-picker" aria-label="Change your avatar" title="Change your avatar">' + marker +
+        '<span class="account-label" style="margin-right:0">' + esc(currentUser.username) + '</span>' +
+      '</button>' + manageDesktop +
+      '<button class="btn btn-ghost" data-action="logout">Log out</button>' +
+    '</div>' +
+    '<div class="account-menu">' +
+      '<button class="account-avatar-btn account-menu-toggle" data-action="toggle-account-menu" aria-label="Open account menu" aria-haspopup="menu" aria-expanded="' + String(accountMenuOpen) + '">' + marker + '</button>' +
+      (accountMenuOpen ? '<div class="account-popover" role="menu" aria-label="Account">' +
+        '<div class="account-popover-name">Signed in as ' + esc(currentUser.username) + '</div>' +
+        '<button class="account-menu-item" role="menuitem" data-action="open-avatar-picker">' + icon('edit') + ' Change avatar</button>' +
+        manageMobile +
+        '<button class="account-menu-item" role="menuitem" data-action="logout">' + icon('logout') + ' Log out</button>' +
+      '</div>' : '') +
+    '</div>';
 }
 
 // Builds the login screen (or, if no account exists anywhere yet, the
@@ -1502,6 +1597,7 @@ async function doLogout() {
 async function renderBoot() {
   applyAuthUI();
   if (!currentUser) {
+    document.body.classList.remove('is-trip-view');
     var authApp = document.getElementById('app');
     authApp.innerHTML = renderAuthScreen();
     enhanceAccessibility(authApp);
@@ -1512,6 +1608,11 @@ async function renderBoot() {
     var nav = JSON.parse(sessionStorage.getItem('waypoint-nav') || 'null');
     if (nav && nav.view === 'trip' && byId(state.trips, nav.tripId, 'tripId')) {
       currentView = 'trip'; currentTripId = nav.tripId; currentTab = nav.tab || 'timeline';
+      if (nav.mobileLastTab && typeof nav.mobileLastTab === 'object') {
+        ['overview', 'plan', 'people'].forEach(function (destination) {
+          if (typeof nav.mobileLastTab[destination] === 'string') mobileLastTab[destination] = nav.mobileLastTab[destination];
+        });
+      }
     }
   } catch (e) { /* ignore malformed/unavailable sessionStorage */ }
   render();
@@ -1814,6 +1915,27 @@ document.addEventListener('invalid', function (event) {
 }, true);
 
 document.addEventListener('keydown', function (event) {
+  if (event.key === 'Escape' && accountMenuOpen) {
+    event.preventDefault();
+    accountMenuOpen = false;
+    applyAuthUI();
+    var accountToggle = document.querySelector('.account-menu-toggle');
+    if (accountToggle) accountToggle.focus();
+    return;
+  }
+  if (accountMenuOpen && event.target.closest && event.target.closest('.account-popover') && ['ArrowDown', 'ArrowUp', 'Home', 'End'].indexOf(event.key) !== -1) {
+    var menuItems = Array.prototype.slice.call(document.querySelectorAll('.account-popover [role="menuitem"]'));
+    if (menuItems.length) {
+      event.preventDefault();
+      var menuIndex = menuItems.indexOf(document.activeElement);
+      if (event.key === 'Home') menuIndex = 0;
+      else if (event.key === 'End') menuIndex = menuItems.length - 1;
+      else if (event.key === 'ArrowDown') menuIndex = (menuIndex + 1) % menuItems.length;
+      else menuIndex = (menuIndex <= 0 ? menuItems.length : menuIndex) - 1;
+      menuItems[menuIndex].focus();
+    }
+    return;
+  }
   var dialog = document.querySelector('#modal-root .modal');
   if (!dialog) return;
   if (event.key === 'Escape') {
@@ -4589,6 +4711,68 @@ function tabGroupsForTrip(trip) {
   }).filter(function (group) { return group.tabs.length > 0; });
 }
 
+var MOBILE_DESTINATIONS = [
+  { key: 'overview', label: 'Overview', icon: 'overview' },
+  { key: 'plan', label: 'Plan', icon: 'plan' },
+  { key: 'people', label: 'People', icon: 'people' },
+  { key: 'more', label: 'More', icon: 'more' }
+];
+
+function mobileDestinationForTab(tab) {
+  if (tab === 'timeline' || tab === 'map') return 'overview';
+  if (['destinations', 'transport', 'accommodation', 'activities'].indexOf(tab) !== -1) return 'plan';
+  if (tab === 'companions' || tab === 'contacts') return 'people';
+  return 'more';
+}
+
+function tabsForMobileDestination(destination, trip) {
+  if (destination === 'overview') return HERO_TABS;
+  var groupLabel = destination === 'plan' ? 'Plan' : destination === 'people' ? 'People' : 'Manage';
+  var group = tabGroupsForTrip(trip).find(function (item) { return item.label === groupLabel; });
+  return group ? group.tabs : [];
+}
+
+function rememberMobileChild(tab) {
+  var destination = mobileDestinationForTab(tab);
+  if (destination !== 'more') mobileLastTab[destination] = tab;
+}
+
+function mobileDestinationTarget(destination, trip) {
+  if (destination === 'more') return 'more';
+  var tabs = tabsForMobileDestination(destination, trip);
+  var remembered = mobileLastTab[destination];
+  return tabs.some(function (tab) { return tab.key === remembered; }) ? remembered : (tabs[0] ? tabs[0].key : 'timeline');
+}
+
+function renderMobileChildNav(trip, destination) {
+  if (destination === 'more') return '';
+  var tabs = tabsForMobileDestination(destination, trip);
+  return '<nav class="mobile-child-nav' + (destination === 'overview' ? ' mobile-overview-switch' : '') + '" aria-label="' + esc(destination === 'overview' ? 'Overview view' : destination + ' sections') + '">' +
+    tabs.map(function (tab) {
+      return '<button id="mobile-tab-' + tab.key + '" class="mobile-child-btn ' + (currentTab === tab.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + tab.key + '" aria-controls="trip-panel"' + (currentTab === tab.key ? ' aria-current="page"' : '') + '>' + icon(tab.icon) + esc(tab.label) + '</button>';
+    }).join('') +
+  '</nav>';
+}
+
+function renderMobileDestinationNav(trip) {
+  var activeDestination = mobileDestinationForTab(currentTab);
+  return '<nav class="mobile-destination-nav" aria-label="Trip destinations">' + MOBILE_DESTINATIONS.map(function (destination) {
+    var active = activeDestination === destination.key;
+    return '<button id="mobile-destination-' + destination.key + '" class="mobile-destination-btn ' + (active ? 'active' : '') + '" data-action="switch-mobile-destination" data-destination="' + destination.key + '"' + (active ? ' aria-current="page"' : '') + '>' + icon(destination.icon) + '<span>' + destination.label + '</span></button>';
+  }).join('') + '</nav>';
+}
+
+function renderMobileMoreTab(trip) {
+  var items = [];
+  if (canFullyEditTrip(trip)) {
+    items.push({ key: 'expenses', icon: 'expenses', label: 'Expenses', description: 'Review trip spending and currencies' });
+  }
+  items.push({ key: 'settings', icon: 'settings', label: 'Settings', description: 'Trip details, export and access information' });
+  return '<div class="tab-panel-head"><h2>More</h2></div><div class="mobile-more-list">' + items.map(function (item) {
+    return '<button class="mobile-more-card" data-action="switch-tab" data-tab="' + item.key + '">' + icon(item.icon) + '<span class="mobile-more-card-copy"><span class="mobile-more-card-title">' + item.label + '</span><span class="mobile-more-card-description">' + item.description + '</span></span>' + icon('forward') + '</button>';
+  }).join('') + '</div>';
+}
+
 function renderTripView() {
   var trip = currentTrip();
   if (!trip) { currentView = 'dashboard'; return renderDashboard(); }
@@ -4621,6 +4805,7 @@ function renderTripView() {
     case 'companions': panel = renderCompanionsTab(trip); break;
     case 'expenses': panel = renderExpensesTab(trip); break;
     case 'settings': panel = renderSettingsTab(trip); break;
+    case 'more': panel = renderMobileMoreTab(trip); break;
     default: panel = renderTimelineTab(trip);
   }
   var headerActions = canFullyEditTrip(trip)
@@ -4631,12 +4816,12 @@ function renderTripView() {
     : '';
   return (
     '<div class="trip-header">' +
-      '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + ' All trips</button>' +
+      '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + '<span class="back-label-wide">All trips</span><span class="back-label-compact">Back</span></button>' +
       '<div class="trip-title-row">' +
         '<div><h1 data-page-heading tabindex="-1">' + esc(trip.name) + '</h1>' +
           '<div class="trip-meta">' +
-            '<span>' + (trip.startDate ? formatDateShort(trip.startDate) : '?') + ' – ' + (trip.endDate ? formatDateShort(trip.endDate) : '?') + '</span>' +
-            (canFullyEditTrip(trip) ? '<span><b>' + money(spend.known, trip.homeCurrency) + '</b> spent so far' +
+            '<span class="trip-date-range">' + (trip.startDate ? formatDateShort(trip.startDate) : '?') + ' – ' + (trip.endDate ? formatDateShort(trip.endDate) : '?') + '</span>' +
+            (canFullyEditTrip(trip) ? '<span class="trip-spend-meta"><b>' + money(spend.known, trip.homeCurrency) + '</b> spent so far' +
               (spend.unknownCount ? ' · <button class="warn-link" data-action="switch-tab" data-tab="settings">' + spend.unknownCount + ' need an exchange rate</button>' : '') +
             '</span>' : '') +
           '</div>' +
@@ -4644,9 +4829,13 @@ function renderTripView() {
         headerActions +
       '</div>' +
     '</div>' +
-      '<nav aria-label="Trip sections"><div class="nav-group-label">View</div><div class="hero-row">' + heroHtml + '</div>' +
+      '<nav class="desktop-trip-nav" aria-label="Trip sections"><div class="nav-group-label">View</div><div class="hero-row">' + heroHtml + '</div>' +
     '<div class="tabbar">' + tabsHtml + '</div></nav>' +
-    '<section id="trip-panel" class="trip-panel" tabindex="-1" aria-labelledby="trip-nav-' + currentTab + '">' + panel + '</section>'
+    '<div class="mobile-trip-shell">' + renderMobileChildNav(trip, mobileDestinationForTab(currentTab)) +
+      (mobileDestinationForTab(currentTab) === 'more' && currentTab !== 'more' ? '<button class="back-link mobile-more-return" data-action="switch-mobile-destination" data-destination="more">' + icon('back') + ' More</button>' : '') +
+    '</div>' +
+    '<section id="trip-panel" class="trip-panel" tabindex="-1" ' + (currentTab === 'more' ? 'aria-label="More"' : 'aria-labelledby="trip-nav-' + currentTab + '"') + '>' + panel + '</section>' +
+    renderMobileDestinationNav(trip)
   );
 }
 
@@ -5893,6 +6082,7 @@ var pendingRenderFocus = null;
 
 function render() {
   var app = document.getElementById('app');
+  document.body.classList.toggle('is-trip-view', currentView === 'trip' && !!currentTripId);
   if (currentView === 'manage-users') {
     app.innerHTML = renderManageUsersView();
   } else {
@@ -5932,6 +6122,12 @@ function render() {
    have to re-attach listeners after re-rendering a panel's HTML. */
 
 document.addEventListener('click', function (e) {
+  // The anchored account menu behaves like a transient popover: clicking
+  // anywhere outside closes it without consuming the underlying action.
+  if (accountMenuOpen && !e.target.closest('.account-menu')) {
+    accountMenuOpen = false;
+    applyAuthUI();
+  }
   var el = e.target.closest('[data-action]');
   if (!el) return;
   var action = el.dataset.action;
@@ -5960,9 +6156,17 @@ document.addEventListener('click', function (e) {
     }
     return;
   }
-  if (action === 'open-trip') { currentView = 'trip'; currentTripId = el.dataset.id; currentTab = 'timeline'; pendingRenderFocus = '[data-page-heading]'; render(); return; }
-  if (action === 'back-to-dashboard') { currentView = 'dashboard'; currentTripId = null; pendingRenderFocus = '[data-page-heading]'; render(); return; }
-  if (action === 'switch-tab') { currentTab = el.dataset.tab; pendingRenderFocus = '#trip-panel'; render(); return; }
+  if (action === 'open-trip') { currentView = 'trip'; currentTripId = el.dataset.id; currentTab = 'timeline'; rememberMobileChild(currentTab); saveNavigationState(); pendingRenderFocus = '[data-page-heading]'; render(); return; }
+  if (action === 'back-to-dashboard') { currentView = 'dashboard'; currentTripId = null; saveNavigationState(); pendingRenderFocus = '[data-page-heading]'; render(); return; }
+  if (action === 'switch-tab') { currentTab = el.dataset.tab; rememberMobileChild(currentTab); saveNavigationState(); pendingRenderFocus = '#trip-panel'; render(); return; }
+  if (action === 'switch-mobile-destination') {
+    currentTab = mobileDestinationTarget(el.dataset.destination, trip);
+    rememberMobileChild(currentTab);
+    saveNavigationState();
+    pendingRenderFocus = '#trip-panel';
+    render();
+    return;
+  }
   if (action === 'toggle-map-layer') {
     var layerKey = el.dataset.layer;
     if (!Object.prototype.hasOwnProperty.call(mapState.visibility, layerKey)) return;
@@ -5991,8 +6195,28 @@ document.addEventListener('click', function (e) {
     return;
   }
   if (action === 'lookup-flight') { performFlightLookup(el); return; }
-  if (action === 'logout') { doLogout(); return; }
-  if (action === 'open-avatar-picker') { openAvatarPicker(); return; }
+  if (action === 'toggle-account-menu') {
+    accountMenuOpen = !accountMenuOpen;
+    applyAuthUI();
+    if (accountMenuOpen) {
+      requestAnimationFrame(function () {
+        var firstItem = document.querySelector('.account-popover [role="menuitem"]');
+        if (firstItem) firstItem.focus();
+      });
+    }
+    return;
+  }
+  if (action === 'logout') { accountMenuOpen = false; doLogout(); return; }
+  if (action === 'open-avatar-picker') {
+    accountMenuOpen = false;
+    applyAuthUI();
+    // When opened from the mobile menu, keep the durable avatar toggle as
+    // the modal's return-focus target rather than the menu item just removed.
+    var avatarToggle = document.querySelector('.account-menu-toggle');
+    if (avatarToggle && window.matchMedia('(max-width: 768px)').matches) avatarToggle.focus();
+    openAvatarPicker();
+    return;
+  }
   if (action === 'pick-avatar-swatch') {
     // Client-side only until Save -- swap which swatch has .is-selected
     // within THIS kind's grid (colour and animal each track their own
@@ -6011,7 +6235,7 @@ document.addEventListener('click', function (e) {
     updateAvatarPickerPreview(swatchForm);
     return;
   }
-  if (action === 'open-manage-users') { loadAndRenderManageUsers(); return; }
+  if (action === 'open-manage-users') { accountMenuOpen = false; applyAuthUI(); loadAndRenderManageUsers(); return; }
   if (action === 'new-user') { openUserForm(); return; }
   if (action === 'edit-user') { openUserForm(managedUsers.find(function (u) { return u.id === el.dataset.id; })); return; }
   if (action === 'delete-user') { deleteUserAccount(el.dataset.id); return; }

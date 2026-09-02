@@ -14,8 +14,9 @@ if (!system || typeof system.render !== 'function') throw new Error('Icon regist
 const required = [
   'brand', 'destination', 'activity', 'route', 'flight', 'rail', 'bus', 'car', 'ferry',
   'stay', 'person', 'contacts', 'companions', 'expenses', 'booking', 'overnight',
+  'overview', 'plan', 'people', 'more',
   'timeline', 'date', 'time', 'map', 'settings', 'add', 'edit', 'delete', 'close',
-  'forward', 'back', 'download', 'copy', 'expand', 'collapse', 'unknown'
+  'forward', 'back', 'logout', 'download', 'copy', 'expand', 'collapse', 'unknown'
 ];
 for (const name of required) {
   if (!system.names.includes(name)) throw new Error('Missing semantic icon: ' + name);
