@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node test-security.mjs && node test-design-tokens.js && node test-icon-system.js && node test-accessibility.js && node test-responsive-shell.js && node test-ui-consolidation.js && node test-populated-trip-render.js && node test-timeline-condensed.js",
+    "test": "node test-security.mjs && node test-design-tokens.js && node test-icon-system.js && node test-accessibility.js && node test-responsive-shell.js && node test-ui-consolidation.js && node test-populated-trip-render.js && node test-timeline-condensed.js && node test-ui-part2.js",
+    "test:ui-browser": "node test-ui-part2-browser.js",
+    "test:merge-gate": "npm test && node test-map-route-arcs.js && npm run test:ui-browser",
     "test:security": "node test-security.mjs"
   },
   "devDependencies": {
+    "playwright": "^1.62.1",
     "wrangler": "^4.0.0"
   }
 }

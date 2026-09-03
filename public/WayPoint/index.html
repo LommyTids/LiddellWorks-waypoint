@@ -67,6 +67,9 @@
   --wp-color-map-blue: #1e88ff;
   --wp-color-map-pink: #ff2d78;
   --wp-color-map-orange: #ff8c1a;
+  --wp-color-map-blue-dark: #63adff;
+  --wp-color-map-pink-dark: #ff6aa0;
+  --wp-color-map-orange-dark: #ffad5c;
 
   /* Semantic colour roles used by application components. */
   --wp-bg-canvas: var(--wp-color-mist-100);
@@ -161,6 +164,9 @@
     --wp-state-danger-subtle: var(--wp-color-red-900);
     --wp-state-success: var(--wp-color-green-400);
     --wp-state-success-subtle: var(--wp-color-green-900);
+    --wp-map-transport: var(--wp-color-map-blue-dark);
+    --wp-map-accommodation: var(--wp-color-map-pink-dark);
+    --wp-map-activity: var(--wp-color-map-orange-dark);
     --wp-shadow-surface: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
   }
 }
@@ -185,6 +191,9 @@
   --wp-state-danger-subtle: var(--wp-color-red-900);
   --wp-state-success: var(--wp-color-green-400);
   --wp-state-success-subtle: var(--wp-color-green-900);
+  --wp-map-transport: var(--wp-color-map-blue-dark);
+  --wp-map-accommodation: var(--wp-color-map-pink-dark);
+  --wp-map-activity: var(--wp-color-map-orange-dark);
   --wp-shadow-surface: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
 }
 
@@ -225,12 +234,23 @@ input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-si
 .save-indicator[data-kind="error"] { color: var(--wp-state-danger); }
 .save-indicator[data-kind="readonly"] { color: var(--wp-state-danger); }
 .save-indicator[data-kind="saved"] { color: var(--wp-state-success); }
+.system-banner { display: none; position: sticky; top: 61px; z-index: 19; align-items: center; justify-content: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--wp-border-default); background: var(--wp-action-accent-subtle); color: var(--wp-text-primary); font: var(--wp-type-label); }
+.system-banner.is-visible { display: flex; }
+.system-banner[data-kind="offline"], .system-banner[data-kind="error"] { background: var(--wp-state-danger-subtle); }
+.system-banner .icon { color: var(--wp-state-danger); }
+.system-banner-message { min-width: 0; }
+.system-banner .btn { min-height: 32px; padding: 4px 10px; }
+.status-badge { display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 3px 8px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-subdued); color: var(--wp-text-secondary); font: var(--wp-type-meta); white-space: nowrap; }
+.status-badge .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+.status-badge.is-readonly { border-color: var(--wp-border-strong); }
+.status-badge.is-limited { border-color: var(--wp-context-location); background: var(--wp-context-location-subtle); color: var(--wp-text-primary); }
 
 /* Accounts/login: who's signed in, "Manage accounts" (site owner only),
    Log out — lives in the topbar next to the save indicator. See
    applyAuthUI(). */
 .account-bar { display: flex; align-items: center; gap: 8px; }
 .account-label { font: var(--wp-type-label); color: var(--wp-text-secondary); margin-right: 2px; white-space: nowrap; }
+.account-label-inline { margin-right: 0; }
 .account-desktop-actions { display: flex; align-items: center; gap: 8px; }
 .account-menu { display: none; position: relative; }
 .account-menu-toggle { padding: 3px; min-width: 38px; min-height: 38px; justify-content: center; }
@@ -373,6 +393,7 @@ input[type="text"], input[type="number"], input[type="date"], input[type="time"]
 .required-marker { color: var(--wp-state-danger); font-weight: 500; }
 textarea { resize: vertical; min-height: 60px; }
 .field { margin-bottom: 14px; }
+.field-wide { grid-column: 1 / -1; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-hint { font: var(--wp-type-micro); color: var(--wp-text-muted); margin-top: 3px; }
 .form-section + .form-section { border-top: 1px solid var(--wp-border-default); margin-top: 22px; padding-top: 20px; }
@@ -427,6 +448,8 @@ textarea { resize: vertical; min-height: 60px; }
 .tag-role { margin-left: 3px; }
 .flight-lookup-row { display: flex; gap: 8px; }
 .flight-lookup-row input { flex: 1; }
+.flight-lookup-code { text-transform: uppercase; }
+.flight-lookup-date { flex: 0 0 150px !important; }
 .flight-lookup-row .btn { flex-shrink: 0; white-space: nowrap; }
 .flight-lookup-status { font: var(--wp-type-micro); color: var(--wp-text-muted); margin-top: 6px; min-height: var(--wp-type-micro-leading); }
 .flight-lookup-status.is-error { color: var(--wp-state-danger); }
@@ -498,12 +521,39 @@ textarea { resize: vertical; min-height: 60px; }
 .trip-stats { display: flex; gap: 14px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-secondary); flex-wrap: wrap; }
 .trip-stats b { color: var(--wp-text-primary); font: var(--wp-type-meta); font-weight: 600; }
 .card-actions { display: flex; gap: 4px; }
-.empty-state { text-align: center; padding: 60px 20px; color: var(--wp-text-secondary); border: 1px dashed var(--wp-border-default); border-radius: var(--radius); }
-.empty-state .icon { width: var(--wp-icon-xl); height: var(--wp-icon-xl); color: var(--wp-text-muted); margin-bottom: 10px; }
+.empty-state { text-align: center; padding: 52px 20px; color: var(--wp-text-secondary); border: 1px dashed var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); }
+.empty-state-mark { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 62px; height: 62px; margin-bottom: 12px; border: 1px solid var(--wp-border-default); border-radius: 50%; color: var(--wp-text-muted); transform: rotate(-2deg); }
+.empty-state-mark::after { content: ""; position: absolute; width: 80px; height: 22px; left: 36px; top: 37px; border-top: 2px dotted var(--wp-border-default); border-radius: 50%; transform: rotate(14deg); pointer-events: none; }
+.empty-state-mark .icon { width: var(--wp-icon-xl); height: var(--wp-icon-xl); }
 .empty-state h3 { margin-bottom: 6px; color: var(--wp-text-primary); }
 .empty-state p { max-width: 440px; margin: 0 auto; font: var(--wp-type-body); }
+.empty-state-actions { display: flex; justify-content: center; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.empty-state.is-error .empty-state-mark, .empty-state.is-offline .empty-state-mark { color: var(--wp-state-danger); border-color: var(--wp-state-danger-subtle); }
+.empty-state.is-permission .empty-state-mark { color: var(--wp-text-secondary); }
+.empty-state.is-compact { padding: 28px 18px; }
+.auth-primary { width: 100%; }
+.auth-footer { margin-top: 14px; }
+.manage-users-intro { margin-bottom: 16px; }
+.form-details-hint { margin: 0 0 12px; }
+.companion-form-intro { margin-bottom: 14px; }
+.item-notes { margin-top: 6px; }
 .intro-note { background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; font: var(--wp-type-label); color: var(--wp-text-secondary); }
 .intro-note strong { color: var(--wp-text-primary); }
+.settings-stack { display: grid; gap: 16px; }
+.settings-section { padding: 20px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); }
+.settings-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.settings-section-head p { margin-top: 4px; color: var(--wp-text-secondary); font: var(--wp-type-label); }
+.settings-section .field:last-child { margin-bottom: 0; }
+.settings-section-danger { border-color: var(--wp-state-danger-subtle); }
+.settings-inline-hint { margin-top: 11px; }
+.settings-currency-input { max-width: 140px; }
+.settings-uppercase { text-transform: uppercase; }
+.settings-rate-intro { margin-bottom: 10px; }
+.integration-list { display: grid; gap: 10px; }
+.integration-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid var(--wp-border-default); }
+.integration-row:first-child { border-top: 0; padding-top: 0; }
+.integration-copy strong { display: block; }
+.integration-copy span { color: var(--wp-text-secondary); font: var(--wp-type-label); }
 
 /* ---- 4c. Trip header & tabs ---------------------------------------- */
 .trip-header { margin-bottom: 22px; }
@@ -511,6 +561,7 @@ textarea { resize: vertical; min-height: 60px; }
 .back-link .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
 .back-label-compact { display: none; }
 .trip-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.trip-heading-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .trip-title-row h1 { font: var(--wp-type-display); }
 .trip-meta { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-secondary); }
 .trip-meta b { font: var(--wp-type-meta); color: var(--wp-text-primary); }
@@ -648,23 +699,11 @@ textarea { resize: vertical; min-height: 60px; }
 .day-heading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
 .day-body.is-collapsed .day-heading { margin-bottom: 0; }
 .day-heading h3 { font: var(--wp-type-heading); }
-.day-areas { display: flex; gap: 6px; flex-wrap: wrap; }
-.area-chip { font: var(--wp-type-micro); background: var(--wp-context-location-subtle); color: var(--wp-context-location); border-radius: 999px; padding: 2px 9px; display: inline-flex; align-items: center; gap: 4px; }
 .day-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-left: auto; }
 .timeline-add-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-micro); cursor: pointer; }
 .timeline-add-btn:hover { color: var(--wp-text-primary); border-color: var(--wp-text-muted); }
 .timeline-add-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
 .day-events { display: flex; flex-direction: column; gap: 8px; }
-.event-row { display: flex; gap: 10px; align-items: flex-start; background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); padding: 10px 12px; }
-.event-time { font: var(--wp-type-meta); color: var(--wp-text-secondary); width: 44px; flex-shrink: 0; padding-top: 1px; }
-.event-icon { width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.event-icon .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
-.event-icon.k-activity { background: var(--wp-action-accent-subtle); color: var(--wp-action-accent); }
-.event-icon.k-transport { background: var(--wp-context-location-subtle); color: var(--wp-context-location); }
-.event-icon.k-stay { background: var(--wp-bg-subdued); color: var(--wp-text-secondary); }
-.event-main { flex: 1; min-width: 0; }
-.event-title { font: var(--wp-type-label); }
-.event-sub { font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); color: var(--wp-text-secondary); margin-top: 1px; }
 .overnight-note { display: flex; align-items: center; gap: 7px; font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); color: var(--wp-text-muted); margin-top: 8px; padding-left: 2px; }
 .overnight-note .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
 .no-day-events { font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-muted); font-style: italic; padding: 4px 0; }
@@ -683,6 +722,21 @@ tr:last-child td { border-bottom: none; }
 .rate-missing { color: var(--wp-state-danger); font: var(--wp-type-micro); }
 .rate-table label { margin: 0; }
 .rate-table .field-row { grid-template-columns: 1fr 1fr; align-items: end; }
+.expenses-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.expense-rate-warning { border-color: var(--wp-state-danger-subtle); }
+.expense-ledger { display: none; }
+.expense-ledger-day { margin-bottom: 18px; }
+.expense-ledger-date { margin-bottom: 7px; color: var(--wp-text-secondary); font: var(--wp-type-meta); }
+.expense-ledger-list { display: grid; gap: 8px; }
+.expense-ledger-row { padding: 12px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-surface); }
+.expense-ledger-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.expense-ledger-title { min-width: 0; font: var(--wp-type-label); overflow-wrap: anywhere; }
+.expense-ledger-type { flex: 0 0 auto; color: var(--wp-text-muted); font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .04em; }
+.expense-ledger-reference { margin-top: 2px; color: var(--wp-text-secondary); font: var(--wp-type-meta); overflow-wrap: anywhere; }
+.expense-ledger-amounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.expense-ledger-amount { min-width: 0; padding-top: 8px; border-top: 1px solid var(--wp-border-default); }
+.expense-ledger-amount-label { display: block; color: var(--wp-text-muted); font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .04em; }
+.expense-ledger-amount-value { display: block; margin-top: 2px; color: var(--wp-text-primary); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
 /* ---- 4g. Modal & toast --------------------------------------------- */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(15,18,24,.5); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 100; }
@@ -750,10 +804,12 @@ tr:last-child td { border-bottom: none; }
 .map-workspace { width: min(1240px, calc(100vw - 32px)); margin-left: 50%; transform: translateX(-50%); }
 .map-toolbar { display: flex; flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 12px; }
 .map-range-controls { width: 100%; }
-.map-range-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--wp-text-secondary); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+.map-range-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--wp-text-secondary); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
 .map-range-summary strong { color: var(--wp-text-primary); font: var(--wp-type-label); }
+.map-range-summary-actions { display: flex; align-items: center; gap: 10px; }
+.map-reset { min-height: 32px; padding: 4px 9px; }
 .map-range-days { font: var(--wp-type-meta); white-space: nowrap; }
-.map-range-slider { --range-start: 0%; --range-end: 100%; position: relative; height: 44px; margin: 0 8px; }
+.map-range-slider { --range-start: 0%; --range-end: 100%; position: relative; height: 54px; margin: 0 8px; }
 .map-range-rail, .map-range-fill { position: absolute; top: 21px; height: 6px; border-radius: 999px; }
 .map-range-rail { left: 0; right: 0; background: var(--wp-border-default); }
 .map-range-fill { left: var(--range-start); right: calc(100% - var(--range-end)); background: var(--wp-action-accent); }
@@ -765,9 +821,10 @@ tr:last-child td { border-bottom: none; }
 .map-range-input::-moz-range-thumb { width: 16px; height: 16px; pointer-events: auto; cursor: grab; border: 3px solid var(--wp-bg-surface); border-radius: 50%; background: var(--wp-action-accent); box-shadow: 0 1px 3px rgba(26,34,51,.28); }
 .map-range-input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--wp-text-primary); outline-offset: 2px; }
 .map-range-input:focus-visible::-moz-range-thumb { outline: 2px solid var(--wp-text-primary); outline-offset: 2px; }
-.map-range-handle-label { position: absolute; top: 0; z-index: 3; transform: translateX(-50%); padding: 1px 5px; border-radius: 4px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-meta); pointer-events: none; white-space: nowrap; }
-.map-range-handle-label.is-start { left: var(--range-start); }
-.map-range-handle-label.is-end { left: var(--range-end); }
+.map-range-handle-label { position: absolute; top: 0; z-index: 3; transform: translateX(-50%); padding: 1px 5px; border: 1px solid var(--wp-border-default); border-radius: 4px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-meta); pointer-events: none; white-space: nowrap; }
+.map-range-handle-label.is-start { left: clamp(34px, var(--range-start), calc(100% - 34px)); }
+.map-range-handle-label.is-end { left: clamp(34px, var(--range-end), calc(100% - 34px)); }
+.map-range-slider.labels-overlap .map-range-handle-label.is-end { top: 24px; }
 .map-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .map-filter-bar { display: flex; gap: 6px; flex-wrap: wrap; }
 .map-filter-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-label); cursor: pointer; }
@@ -793,6 +850,15 @@ tr:last-child td { border-bottom: none; }
 .map-marker-popup-sub { color: var(--wp-text-secondary); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
 .map-route-popup { display: flex; flex-direction: column; gap: 3px; }
 .map-route-popup .map-route-meta { color: var(--wp-text-secondary); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+.map-unmapped { margin-top: 18px; padding: 16px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); }
+.map-unmapped-head { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 12px; }
+.map-unmapped-head .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); color: var(--wp-action-accent); margin-top: 2px; }
+.map-unmapped-head p { color: var(--wp-text-secondary); font: var(--wp-type-label); }
+.map-unmapped-list { display: grid; gap: 8px; }
+.map-unmapped-row { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid var(--wp-border-default); }
+.map-unmapped-copy { flex: 1; min-width: 0; }
+.map-unmapped-title { display: block; font: var(--wp-type-label); }
+.map-unmapped-reason { display: block; color: var(--wp-text-secondary); font: var(--wp-type-meta); }
 .map-shell:fullscreen { width: 100%; height: 100%; padding: 16px; background: var(--wp-bg-canvas); }
 .map-shell:fullscreen .map-canvas { height: 100%; border-radius: 0; }
 .map-shell:fullscreen .map-status { left: 28px; bottom: 28px; }
@@ -818,12 +884,20 @@ tr:last-child td { border-bottom: none; }
 .leaflet-popup-content { font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); }
 
 @media (max-width: 640px) {
+  .expense-table { display: none; }
+  .expense-ledger { display: block; }
+  .expenses-actions { width: 100%; }
+  .expenses-actions .btn { flex: 1 1 auto; }
   .map-workspace { width: 100%; margin-left: 0; transform: none; }
   .map-toolbar { align-items: stretch; }
   .map-actions { justify-content: space-between; }
-  .map-filter-bar { flex: 1; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
-  .map-filter-bar::-webkit-scrollbar { display: none; }
-  .map-filter-chip { flex: 0 0 auto; }
+  .map-filter-bar { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .map-filter-chip { width: 100%; justify-content: flex-start; }
+  .map-filter-count { margin-left: auto; }
+  .map-range-summary { align-items: flex-start; }
+  .map-range-summary-actions { align-items: flex-end; flex-direction: column; gap: 3px; }
+  .map-unmapped-row { align-items: flex-start; flex-wrap: wrap; }
+  .map-unmapped-row .btn { width: 100%; }
   .map-canvas { height: min(62dvh, 560px); min-height: 400px; border-radius: var(--radius-sm); }
   .map-status { max-width: calc(100% - 20px); left: 10px; bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
@@ -847,11 +921,13 @@ tr:last-child td { border-bottom: none; }
   <span id="save-indicator" class="save-indicator" role="status" aria-live="polite" aria-atomic="true"></span>
   <div id="account-bar" class="account-bar"></div>
 </header>
+<div id="system-banner" class="system-banner" role="status" aria-live="polite" aria-atomic="true"></div>
 <main id="main-content" class="page" tabindex="-1">
   <div id="app"></div>
 </main>
 <div id="modal-root"></div>
 <div id="toast-root"></div>
+<div id="polite-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="/WayPoint/vendor/leaflet/leaflet.js"></script>
 <script src="/WayPoint/data/currencies.js"></script>
@@ -1232,6 +1308,12 @@ var accountMenuOpen = false;
 // Timeline disclosure is local viewing state, never trip data. Missing entries
 // use the date-sensitive default: earlier days closed, today/future days open.
 var timelineDayExpansion = {};
+// Connection, loading and save feedback are separate axes. Keeping them
+// separate prevents a successful historic load from being mistaken for an
+// editable online session after the browser later loses its connection.
+var appLoadState = 'loading';
+var connectionState = typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'online';
+var reconnectInFlight = false;
 
 function timelineLocalTodayStr(now) {
   var date = now || new Date();
@@ -1276,6 +1358,7 @@ var setupNeeded = false;
 // (site owner / uber-user only) — see
 // loadAndRenderManageUsers()/renderManageUsersView().
 var managedUsers = [];
+var siteStatus = null;
 
 // Self-hosted version: state no longer lives inside the page's own HTML
 // (that was the Claude Artifact "publish" trick). Instead, the very
@@ -1304,6 +1387,8 @@ var managedUsers = [];
 var stateIsTrustworthy = false;
 
 async function loadInitialState() {
+  appLoadState = 'loading';
+  updateSystemFeedback();
   try {
     var res = await fetch('/WayPoint/api/data', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error('Server responded with status ' + res.status);
@@ -1311,11 +1396,17 @@ async function loadInitialState() {
     if (!parsed || typeof parsed !== 'object') parsed = {};
     if (!parsed.trips) parsed.trips = [];
     stateIsTrustworthy = true;
+    connectionState = 'online';
+    appLoadState = 'ready';
+    updateSystemFeedback();
     return parsed;
   } catch (e) {
     console.error('Waypoint: could not load saved data from the server', e);
     stateIsTrustworthy = false;
-    showToastSafe('Could not load your trips. Your data is safe on the server, but this page can\'t show it — refresh to try again. Editing is turned off until then, so nothing here can overwrite it.');
+    appLoadState = 'error';
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) connectionState = 'offline';
+    updateSystemFeedback();
+    showToastSafe('Could not load your trips. Your data is safe on the server; editing is locked until Waypoint reconnects.');
     return { trips: [] };
   }
 }
@@ -1326,7 +1417,7 @@ async function loadInitialState() {
 // sure a failed load never throws a *second*, more confusing error on
 // top of the first one.
 function showToastSafe(message) {
-  try { showToast(message); } catch (e) { console.error(message); }
+  try { showToast(message, 'error'); } catch (e) { console.error(message); }
 }
 
 
@@ -1340,6 +1431,58 @@ function setSaveStatus(kind, message) {
   el.textContent = labels[kind] || '';
 }
 
+function editingAvailable() {
+  return appLoadState === 'ready' && connectionState === 'online' && stateIsTrustworthy;
+}
+
+function updateSystemFeedback() {
+  var banner = document.getElementById('system-banner');
+  if (!banner) return;
+  var kind = '';
+  var message = '';
+  if (connectionState === 'offline') {
+    kind = 'offline';
+    message = 'You are offline. Trip data remains visible, but editing is locked until Waypoint reconnects.';
+  } else if (appLoadState === 'loading') {
+    kind = 'loading';
+    message = 'Loading your trips…';
+  } else if (appLoadState === 'error' || !stateIsTrustworthy) {
+    kind = 'error';
+    message = 'Waypoint could not refresh your trips. Editing remains locked to protect your saved data.';
+  }
+  banner.className = 'system-banner' + (kind ? ' is-visible' : '');
+  banner.dataset.kind = kind;
+  banner.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+  banner.innerHTML = kind
+    ? icon(kind === 'loading' ? 'loading' : (kind === 'offline' ? 'offline' : 'warning')) + '<span class="system-banner-message">' + esc(message) + '</span>' +
+      ((kind === 'offline' || kind === 'error') ? '<button type="button" class="btn btn-ghost" data-action="retry-connection"' + (reconnectInFlight ? ' disabled' : '') + '>' + (reconnectInFlight ? 'Retrying…' : 'Retry now') + '</button>' : '')
+    : '';
+  document.body.classList.toggle('editing-locked', !editingAvailable());
+  Array.prototype.forEach.call(document.querySelectorAll('[data-action]'), function (control) {
+    if (isMutationAction(control.dataset.action)) control.disabled = !editingAvailable();
+  });
+}
+
+async function retryConnection(options) {
+  if (reconnectInFlight || !currentUser) return;
+  reconnectInFlight = true;
+  if (typeof navigator === 'undefined' || navigator.onLine !== false) connectionState = 'online';
+  updateSystemFeedback();
+  try {
+    var fresh = await loadInitialState();
+    if (!stateIsTrustworthy) return;
+    state = fresh;
+    // A reconnect deliberately trusts the server copy. A failed optimistic
+    // save is never replayed without the person seeing and choosing it again.
+    pendingSaveState = null;
+    render();
+    if (!(options && options.silent)) showToast('Connection restored. Your trips are up to date.', 'status');
+  } finally {
+    reconnectInFlight = false;
+    updateSystemFeedback();
+  }
+}
+
 // Every mutation in the app goes through here: `mutator` receives a
 // deep clone of the current state and edits it in place (push into an
 // array, change a field, etc). We then hand that clone to persist(),
@@ -1347,9 +1490,15 @@ function setSaveStatus(kind, message) {
 // that fails partway through never leaves the on-screen state
 // half-changed.
 function updateState(mutator) {
+  if (!editingAvailable()) {
+    setSaveStatus('readonly', connectionState === 'offline' ? 'Offline' : 'Editing locked');
+    updateSystemFeedback();
+    return false;
+  }
   var next = cloneState(state);
   mutator(next);
   persist(next);
+  return true;
 }
 
 // Every mutation in the app goes through updateState() -> persist():
@@ -1392,20 +1541,19 @@ function saveNavigationState() {
 }
 
 async function persist(newState) {
-  state = newState;
-  saveNavigationState();
-
-  render();
-
   // See stateIsTrustworthy's comment above: refuse to save at all rather
   // than risk writing a state we never successfully loaded over real
   // data. The edit stays on screen so nothing typed is lost visually,
   // but it is NOT saved, and the indicator says so plainly.
   if (!stateIsTrustworthy) {
-    setSaveStatus('unsaved', 'Not saved — refresh');
-    showToast('This change was NOT saved. This page couldn\'t load your trips from the server, so it won\'t write anything back over them. Refresh the page, then make the change again.');
+    setSaveStatus('readonly', 'Editing locked');
+    updateSystemFeedback();
     return;
   }
+
+  state = newState;
+  saveNavigationState();
+  render();
 
   if (saveInFlight) { pendingSaveState = state; return; }
   sendSave(state);
@@ -1457,10 +1605,15 @@ async function sendSave(toSave) {
   } catch (err) {
     console.error('Waypoint: save failed', err);
     setSaveStatus('error', 'Could not save');
-    showToast('Could not save your change: ' + (err && err.message ? err.message : 'unknown error'));
+    if ((typeof navigator !== 'undefined' && navigator.onLine === false) || err instanceof TypeError) connectionState = 'offline';
+    stateIsTrustworthy = false;
+    appLoadState = 'error';
+    pendingSaveState = null;
+    updateSystemFeedback();
+    showToast('Could not save your change: ' + (err && err.message ? err.message : 'unknown error'), 'error');
   } finally {
     saveInFlight = false;
-    if (pendingSaveState) {
+    if (pendingSaveState && editingAvailable()) {
       var queued = pendingSaveState;
       pendingSaveState = null;
       sendSave(queued);
@@ -1516,12 +1669,12 @@ function applyAuthUI() {
   // yourself (see that function's own comment in src/worker.js) -- so
   // there's no "avatar not set yet" case to special-case here.
   var marker = avatarMarkerHtml(currentUser.avatar ? { type: 'account', color: currentUser.avatar.color, animal: currentUser.avatar.animal } : null, currentUser.username);
-  var manageDesktop = currentUser.isUberUser ? '<button class="btn btn-ghost" data-action="open-manage-users">Manage accounts</button>' : '';
-  var manageMobile = currentUser.isUberUser ? '<button class="account-menu-item" role="menuitem" data-action="open-manage-users">' + icon('settings') + ' Manage accounts</button>' : '';
+  var manageDesktop = currentUser.isUberUser ? '<button class="btn btn-ghost" data-action="open-site-settings">Site settings</button><button class="btn btn-ghost" data-action="open-manage-users">Manage accounts</button>' : '';
+  var manageMobile = currentUser.isUberUser ? '<button class="account-menu-item" role="menuitem" data-action="open-site-settings">' + icon('settings') + ' Site settings</button><button class="account-menu-item" role="menuitem" data-action="open-manage-users">' + icon('people') + ' Manage accounts</button>' : '';
   el.innerHTML =
     '<div class="account-desktop-actions">' +
       '<button class="account-avatar-btn" data-action="open-avatar-picker" aria-label="Change your avatar" title="Change your avatar">' + marker +
-        '<span class="account-label" style="margin-right:0">' + esc(currentUser.username) + '</span>' +
+        '<span class="account-label account-label-inline">' + esc(currentUser.username) + '</span>' +
       '</button>' + manageDesktop +
       '<button class="btn btn-ghost" data-action="logout">Log out</button>' +
     '</div>' +
@@ -1552,7 +1705,7 @@ function renderAuthScreen(errorMessage) {
         '<div class="field"><label>Setup key</label><input type="password" name="setupKey" required autocomplete="off"></div>' +
         '<div class="field"><label>Choose a username</label><input type="text" name="username" required autocomplete="username"></div>' +
         '<div class="field"><label>Choose a password</label><input type="password" name="password" required autocomplete="new-password"><div class="field-hint">At least 8 characters.</div></div>' +
-        '<button type="submit" class="btn btn-primary" style="width:100%">Create account</button>' +
+        '<button type="submit" class="btn btn-primary auth-primary">Create account</button>' +
       '</form>' +
     '</div></div>';
   }
@@ -1562,9 +1715,9 @@ function renderAuthScreen(errorMessage) {
     '<form id="login-form">' +
       '<div class="field"><label>Username</label><input type="text" name="username" required autocomplete="username"></div>' +
       '<div class="field"><label>Password</label><input type="password" name="password" required autocomplete="current-password"></div>' +
-      '<button type="submit" class="btn btn-primary" style="width:100%">Log in</button>' +
+      '<button type="submit" class="btn btn-primary auth-primary">Log in</button>' +
     '</form>' +
-    '<p class="field-hint" style="margin-top:14px">Don\'t have an account? Ask the site owner to set one up for you.</p>' +
+    '<p class="field-hint auth-footer">Don\'t have an account? Ask the site owner to set one up for you.</p>' +
   '</div></div>';
 }
 
@@ -1706,8 +1859,46 @@ function renderManageUsersView() {
   return '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + ' All trips</button>' +
     '<div class="tab-panel-head"><h1 data-page-heading tabindex="-1">Manage accounts</h1>' +
       '<button class="btn btn-accent" data-action="new-user">' + icon('add') + ' Add account</button></div>' +
-    '<p class="field-hint" style="margin-bottom:16px">You set every account\'s username and password yourself and share it with them directly — there\'s no self-signup or "forgot password" flow. Creating an account here just gives someone a login; it doesn\'t give them access to any trip. Whoever creates a trip becomes that trip\'s owner, and can then share it with any of these accounts from that trip\'s own Settings tab.</p>' +
+    '<p class="field-hint manage-users-intro">You set every account\'s username and password yourself and share it with them directly — there\'s no self-signup or "forgot password" flow. Creating an account here just gives someone a login; it doesn\'t give them access to any trip. Whoever creates a trip becomes that trip\'s owner, and can then share it with any of these accounts from that trip\'s own Settings tab.</p>' +
     (managedUsers.length ? '<div class="item-list">' + rows + '</div>' : '<p class="field-hint">No accounts yet.</p>');
+}
+
+async function loadAndRenderSiteSettings() {
+  currentView = 'site-settings';
+  siteStatus = null;
+  pendingRenderFocus = '[data-page-heading]';
+  render();
+  try {
+    var res = await fetch('/WayPoint/api/site-status', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error('Status ' + res.status);
+    siteStatus = await res.json();
+  } catch (err) {
+    siteStatus = { error: true };
+  }
+  render();
+}
+
+function integrationStatusBadge(configured) {
+  return configured
+    ? '<span class="status-badge is-limited">' + icon('saved') + ' Configured</span>'
+    : '<span class="status-badge is-readonly">' + icon('warning') + ' Not configured</span>';
+}
+
+function renderSiteSettingsView() {
+  if (!currentUser || !currentUser.isUberUser) return emptyStateHtml('permission', 'readonly', 'Site settings restricted', 'Only the site owner can view site-wide integrations and service status.');
+  var content;
+  if (!siteStatus) {
+    content = emptyStateHtml('loading', 'loading', 'Checking integrations', 'Waypoint is checking which site services are configured.', '', true);
+  } else if (siteStatus.error) {
+    content = emptyStateHtml('error', 'warning', 'Site status unavailable', 'The integration status could not be loaded. No secret values were exposed or changed.', '<button type="button" class="btn" data-action="open-site-settings">Retry</button>', true);
+  } else {
+    var integrations = siteStatus.integrations || {};
+    content = '<div class="settings-stack"><section class="settings-section"><div class="settings-section-head"><div><h2>Integrations</h2><p>Site-wide services used by every trip. Secret values remain editable only in Cloudflare.</p></div></div><div class="integration-list">' +
+      '<div class="integration-row"><div class="integration-copy"><strong>Flight lookup</strong><span>AeroDataBox through RapidAPI · AERODATABOX_API_KEY</span></div>' + integrationStatusBadge(!!integrations.flightLookup) + '</div>' +
+      '<div class="integration-row"><div class="integration-copy"><strong>Location search</strong><span>LocationIQ search and boundaries · LOCATIONIQ_API_KEY</span></div>' + integrationStatusBadge(!!integrations.locationSearch) + '</div>' +
+      '</div></section></div>';
+  }
+  return '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + ' All trips</button><div class="section-head"><h1 data-page-heading tabindex="-1">Site settings</h1></div>' + content;
 }
 
 // Opens the Add/Edit account modal. Built directly (rather than through
@@ -1741,6 +1932,7 @@ function openUserForm(existing) {
 }
 
 async function saveUserAccount(payload) {
+  var form = document.getElementById('user-form');
   try {
     var res = await fetch('/WayPoint/api/users', {
       method: 'POST', credentials: 'same-origin',
@@ -1748,12 +1940,12 @@ async function saveUserAccount(payload) {
       body: JSON.stringify(payload)
     });
     var body = await res.json().catch(function () { return {}; });
-    if (!res.ok) { showToast(body.error || 'Could not save that account.'); return; }
+    if (!res.ok) { showFormError(form, body.error || 'Could not save that account.', form && form.elements.username); return; }
     closeModal();
-    showToast('Account saved');
+    setSaveStatus('saved');
     await loadAndRenderManageUsers();
   } catch (err) {
-    showToast('Could not save that account — check your connection and try again.');
+    showToast('Could not save that account — check your connection and try again.', 'error');
   }
 }
 
@@ -1771,10 +1963,10 @@ function deleteUserAccount(id) {
         });
         var body = await res.json().catch(function () { return {}; });
         if (!res.ok) { showToast(body.error || 'Could not delete that account.'); return; }
-        showToast('Account deleted');
+        setSaveStatus('saved');
         await loadAndRenderManageUsers();
       } catch (err) {
-        showToast('Could not delete that account — check your connection and try again.');
+        showToast('Could not delete that account — check your connection and try again.', 'error');
       }
     }
   });
@@ -1782,10 +1974,13 @@ function deleteUserAccount(id) {
 
 /* ---------- 5. Toast & confirm dialog ------------------------------ */
 
-function showToast(message) {
+// Toasts are deliberately reserved for global connection, save-failure and
+// system events. Field validation belongs beside its field (showFormError),
+// while successful record saves use the persistent top-bar save indicator.
+function showToast(message, explicitKind) {
   var root = document.getElementById('toast-root');
   var div = document.createElement('div');
-  var isError = /could not|cannot|failed|not saved|invalid|error|enter |must |at least|before the start|after the start/i.test(message);
+  var isError = explicitKind === 'error' || (!explicitKind && /could not|cannot|failed|not saved|invalid|error|enter |must |at least|before the start|after the start/i.test(message));
   div.className = 'toast' + (isError ? ' toast-error' : '');
   div.setAttribute('role', isError ? 'alert' : 'status');
   div.setAttribute('aria-live', isError ? 'assertive' : 'polite');
@@ -1797,6 +1992,13 @@ function showToast(message) {
     div.classList.remove('show');
     setTimeout(function () { div.remove(); }, 250);
   }, isError ? 8000 : 3200);
+}
+
+function announceStatus(message) {
+  var region = document.getElementById('polite-status');
+  if (!region) return;
+  region.textContent = '';
+  requestAnimationFrame(function () { region.textContent = message; });
 }
 
 /* ---------- 5a. Shared accessibility infrastructure -----------------
@@ -1857,6 +2059,12 @@ function enhanceAccessibility(scope) {
   });
   Array.prototype.forEach.call(scope.querySelectorAll('button.avatar-swatch-btn'), function (button) {
     button.setAttribute('aria-pressed', String(button.classList.contains('is-selected')));
+  });
+  // If connectivity changes while a modal or screen is already open, disable
+  // every state-changing control in that rendered subtree. Navigation and
+  // local view controls remain available, so saved data can still be read.
+  Array.prototype.forEach.call(scope.querySelectorAll('[data-action]'), function (control) {
+    if (isMutationAction(control.dataset.action)) control.disabled = !editingAvailable();
   });
 }
 
@@ -1923,6 +2131,12 @@ function showFormError(form, message, control) {
   } else {
     summary.focus();
   }
+}
+
+function isMutationAction(action) {
+  if (!action) return false;
+  return /^(new-|edit-|delete-|timeline-add-|link-companion$)/.test(action) ||
+    ['confirm-yes', 'open-avatar-picker', 'set-location-pin', 'use-typed-location', 'review-map-location'].indexOf(action) !== -1;
 }
 
 document.addEventListener('input', function (event) {
@@ -2250,7 +2464,7 @@ function fieldHtml(field, value, trip, allValues) {
   // uses this today (to default its date input from "Depart date").
   var val = (value === undefined || value === null) ? '' : value;
   var req = field.required ? 'required' : '';
-  var full = field.wide ? 'style="grid-column:1/-1"' : '';
+  var fullClass = field.wide ? ' field-wide' : '';
 
   // Rendered separately from every other type below: a checkbox reads
   // naturally with its label right next to it on one line ("[x] Use a
@@ -2259,7 +2473,7 @@ function fieldHtml(field, value, trip, allValues) {
   // callers, which mark every checkbox field `wide: true`) so it never
   // gets paired into a two-column row next to an unrelated field.
   if (field.type === 'checkbox') {
-    return '<div class="field" ' + full + '><label class="checkbox-field">' +
+    return '<div class="field' + fullClass + '"><label class="checkbox-field">' +
       '<input type="checkbox" name="' + field.key + '"' + (val ? ' checked' : '') + '> ' + esc(field.label) + '</label>' +
       (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '') + '</div>';
   }
@@ -2328,7 +2542,7 @@ function fieldHtml(field, value, trip, allValues) {
       }).join('') + '</select>';
       break;
     case 'currency':
-      inputHtml = suggestInputHtml(field, val, req, 'currency', 'maxlength="6" style="text-transform:uppercase"', 'GBP');
+      inputHtml = suggestInputHtml(field, val, req, 'currency', 'maxlength="6" class="settings-uppercase"', 'GBP');
       break;
     case 'country':
       inputHtml = suggestInputHtml(field, val, req, 'country', 'maxlength="60"');
@@ -2391,10 +2605,10 @@ function fieldHtml(field, value, trip, allValues) {
       // nowhere else in a modal form to show that feedback.
       var lookupDateDefault = (allValues && allValues.departDate) || '';
       inputHtml = '<div class="flight-lookup-row">' +
-        '<input type="text" maxlength="10" style="text-transform:uppercase" ' +
+        '<input class="flight-lookup-code" type="text" maxlength="10" ' +
         'name="' + field.key + '" value="' + esc(val) + '" ' + req +
         ' placeholder="' + esc(field.placeholder || '') + '">' +
-        '<input type="date" id="flight-lookup-date" aria-label="Flight lookup date" style="flex:0 0 150px" value="' + esc(lookupDateDefault) + '">' +
+        '<input class="flight-lookup-date" type="date" id="flight-lookup-date" aria-label="Flight lookup date" value="' + esc(lookupDateDefault) + '">' +
         '<button type="button" class="btn" data-action="lookup-flight">Look up</button>' +
         '</div>' +
         '<div class="field-hint">Pick the date to look up right here — defaults to "Depart date" below once that\'s filled in, and fills it back in for you either way.</div>' +
@@ -2439,7 +2653,7 @@ function fieldHtml(field, value, trip, allValues) {
     default:
       inputHtml = '';
   }
-  return '<div class="field" ' + full + '><label>' + esc(field.label) + '</label>' + inputHtml +
+  return '<div class="field' + fullClass + '"><label>' + esc(field.label) + '</label>' + inputHtml +
     (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '') + '</div>';
 }
 
@@ -2496,7 +2710,7 @@ function formSectionsHtml(sections, initial, trip) {
     if (section.collapsible) {
       var open = section.open || sectionHasSavedValues(section, initial);
       return '<details class="form-details"' + (open ? ' open' : '') + '><summary>' + esc(section.title) + icon('collapse', 'form-details-chevron') + '</summary>' +
-        '<div class="form-details-body">' + (section.hint ? '<p class="field-hint" style="margin:0 0 12px">' + esc(section.hint) + '</p>' : '') + fields + '</div></details>';
+        '<div class="form-details-body">' + (section.hint ? '<p class="field-hint form-details-hint">' + esc(section.hint) + '</p>' : '') + fields + '</div></details>';
     }
     return '<section class="form-section">' + heading + fields + '</section>';
   }).join('');
@@ -2974,6 +3188,13 @@ function canEditItem(trip, item) {
   var g = trip && trip.myGrant;
   if (!g || g.role !== 'user') return false;
   return !!(item && item.companions && item.companions.indexOf(g.companionId) !== -1);
+}
+
+function tripAccessBadgeHtml(trip) {
+  var role = trip && trip.myGrant && trip.myGrant.role;
+  if (role === 'viewer') return '<span class="status-badge is-readonly">' + icon('readonly') + ' Read-only</span>';
+  if (role === 'user') return '<span class="status-badge is-limited">' + icon('person') + ' Limited access</span>';
+  return '';
 }
 
 function defaultHomeCurrency() {
@@ -4273,6 +4494,7 @@ function openCompanionLinkForm(trip, companion) {
 //                         atomically replace when the username changes.
 async function submitCompanionAccess(payload) {
   var username = (payload.username || '').trim();
+  var accessForm = document.getElementById('companion-link-form') || document.getElementById('add-linked-companion-form');
   if (payload.role && !username) {
     var form = document.getElementById('companion-link-form');
     showFormError(form, 'Enter the username to grant them access.', form && form.elements.username);
@@ -4286,7 +4508,7 @@ async function submitCompanionAccess(payload) {
       body: JSON.stringify({ tripId: payload.tripId, companionId: payload.companionId, username: username })
     });
     var linkBody = await linkRes.json().catch(function () { return {}; });
-    if (!linkRes.ok) { showToast(linkBody.error || 'Could not update that link.'); return; }
+    if (!linkRes.ok) { showFormError(accessForm, linkBody.error || 'Could not update that link.', accessForm && accessForm.elements.username); return; }
 
     // Step 2: reconcile the access grant to match whatever privilege
     // level was actually submitted (see this function's own comment
@@ -4308,8 +4530,7 @@ async function submitCompanionAccess(payload) {
         // Linked successfully, but sharing failed (e.g. only the trip's
         // real owner may grant Admin) -- still refresh so the successful
         // link shows up, but say clearly the access level didn't stick.
-        showToast(grantBody.error || 'Linked, but could not set their access level.');
-        closeModal();
+        showFormError(accessForm, grantBody.error || 'Linked, but could not set their access level.', accessForm && accessForm.elements.role);
         state = await loadInitialState();
         render();
         return;
@@ -4326,8 +4547,7 @@ async function submitCompanionAccess(payload) {
       });
       var revokeBody = await revokeRes.json().catch(function () { return {}; });
       if (!revokeRes.ok) {
-        showToast(revokeBody.error || 'Linked, but could not remove the previous access grant.');
-        closeModal();
+        showFormError(accessForm, revokeBody.error || 'Linked, but could not remove the previous access grant.', accessForm && accessForm.elements.role);
         state = await loadInitialState();
         render();
         return;
@@ -4335,7 +4555,7 @@ async function submitCompanionAccess(payload) {
     }
 
     closeModal();
-    showToast(!username ? 'Link removed' : (payload.role ? 'Shared with ' + username : 'Linked to ' + username));
+    setSaveStatus('saved');
     // Reloads rather than patching `state` in place -- simplest way to
     // pick up the server's freshly-recomputed `companionAvatars`/
     // `companionAccessLevels` (and, for a full-scope role, the
@@ -4344,7 +4564,7 @@ async function submitCompanionAccess(payload) {
     state = await loadInitialState();
     render();
   } catch (err) {
-    showToast('Could not update that companion\'s access — check your connection and try again.');
+    showToast('Could not update that companion\'s access — check your connection and try again.', 'error');
   }
 }
 
@@ -4367,7 +4587,7 @@ function openAddLinkedCompanionForm(trip) {
           '<button class="btn btn-icon btn-ghost" data-action="close-modal" aria-label="Close dialog" title="Close">' + icon('close') + '</button></div>' +
         '<form id="add-linked-companion-form" data-trip-id="' + esc(trip.tripId) + '">' +
           '<div class="modal-body">' +
-            '<p class="field-hint" style="margin-bottom:14px">A companion is someone with their own Waypoint login — their marker uses their own account\'s colour + animal instead of a smiley, and this shares the trip with them right away at whatever privilege level you pick below.</p>' +
+            '<p class="field-hint companion-form-intro">A companion is someone with their own Waypoint login — their marker uses their own account\'s colour + animal instead of a smiley, and this shares the trip with them right away at whatever privilege level you pick below.</p>' +
             '<div class="field"><label>Name</label><input type="text" name="name" required placeholder="e.g. Sarah"></div>' +
             '<div class="field"><label>Username</label><input type="text" name="username" required placeholder="an existing account"></div>' +
             '<div class="field"><label>Privilege level</label><select name="role" required>' +
@@ -4506,6 +4726,7 @@ function updateAvatarPickerPreview(form) {
 }
 
 async function submitAvatarPick(payload) {
+  var form = document.getElementById('avatar-pick-form');
   try {
     var res = await fetch('/WayPoint/api/account/avatar', {
       method: 'POST', credentials: 'same-origin',
@@ -4513,7 +4734,7 @@ async function submitAvatarPick(payload) {
       body: JSON.stringify(payload)
     });
     var body = await res.json().catch(function () { return {}; });
-    if (!res.ok) { showToast(body.error || 'Could not save your avatar.'); return; }
+    if (!res.ok) { showFormError(form, body.error || 'Could not save your avatar.'); return; }
     // Trust the server's own (re-resolved) avatar back rather than just
     // echoing what we sent -- same defensive habit as everywhere else in
     // this file that a save's response is the source of truth, not the
@@ -4521,7 +4742,7 @@ async function submitAvatarPick(payload) {
     currentUser.avatar = body.avatar || payload;
     applyAuthUI();
     closeModal();
-    showToast('Avatar saved');
+    setSaveStatus('saved');
     // Any companion linked to this account needs its resolved
     // companionAvatars entry (on every trip it's shared on) to pick up
     // the change too -- simplest correct way is the same "reload state"
@@ -4530,7 +4751,7 @@ async function submitAvatarPick(payload) {
     state = await loadInitialState();
     render();
   } catch (err) {
-    showToast('Could not save your avatar — check your connection and try again.');
+    showToast('Could not save your avatar — check your connection and try again.', 'error');
   }
 }
 
@@ -4727,6 +4948,15 @@ function tripSpend(trip) {
   return { known: known, unknownCount: unknownCount };
 }
 
+// One exceptional-state component serves empty data, recoverable failures and
+// permission limits. The semantic icon changes by context; the quiet dotted
+// route and tilted journal stamp keep every instance recognisably Waypoint.
+function emptyStateHtml(kind, iconName, title, body, actionsHtml, compact) {
+  return '<div class="empty-state is-' + esc(kind || 'empty') + (compact ? ' is-compact' : '') + '">' +
+    '<span class="empty-state-mark">' + icon(iconName) + '</span><h3>' + esc(title) + '</h3><p>' + esc(body) + '</p>' +
+    (actionsHtml ? '<div class="empty-state-actions">' + actionsHtml + '</div>' : '') + '</div>';
+}
+
 /* ---------- 12. Render: Dashboard ------------------------------------ */
 
 function renderDashboard() {
@@ -4735,13 +4965,14 @@ function renderDashboard() {
   // check permission against yet; whoever creates it becomes its
   // Superuser automatically — see openTripForm()).
   if (state.trips.length === 0) {
+    if (!stateIsTrustworthy) {
+      return '<div class="section-head"><h1 data-page-heading tabindex="-1">Your trips</h1></div>' +
+        emptyStateHtml(connectionState === 'offline' ? 'offline' : 'error', connectionState === 'offline' ? 'offline' : 'warning', connectionState === 'offline' ? 'You are offline' : 'Trips could not be loaded', 'Your saved data has not been changed. Reconnect and retry before editing.', '<button type="button" class="btn btn-primary" data-action="retry-connection">Retry now</button>');
+    }
     return (
       '<div class="section-head"><h1 data-page-heading tabindex="-1">Your trips</h1>' +
         '<button class="btn btn-accent" data-action="new-trip">' + icon('add') + ' New trip</button></div>' +
-      '<div class="empty-state">' + icon('brand') +
-        '<h3>No trips yet</h3>' +
-        '<p>Add a trip to start planning destinations, activities, transport and accommodation — with expenses tracked across currencies as you go.</p>' +
-      '</div>'
+      emptyStateHtml('empty', 'brand', 'No trips yet', 'Add a trip to start planning destinations, activities, transport and accommodation — with expenses tracked across currencies as you go.')
     );
   }
   var sorted = state.trips.slice().sort(function (a, b) { return (a.startDate || '9999') < (b.startDate || '9999') ? -1 : 1; });
@@ -4938,7 +5169,7 @@ function renderTripView() {
     '<div class="trip-header">' +
       '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + '<span class="back-label-wide">All trips</span><span class="back-label-compact">Back</span></button>' +
       '<div class="trip-title-row">' +
-        '<div><h1 data-page-heading tabindex="-1">' + esc(trip.name) + '</h1>' +
+        '<div><div class="trip-heading-line"><h1 data-page-heading tabindex="-1">' + esc(trip.name) + '</h1>' + tripAccessBadgeHtml(trip) + '</div>' +
           '<div class="trip-meta">' +
             '<span class="trip-date-range">' + (trip.startDate ? formatDateShort(trip.startDate) : '?') + ' – ' + (trip.endDate ? formatDateShort(trip.endDate) : '?') + '</span>' +
             (canFullyEditTrip(trip) ? '<span class="trip-spend-meta"><b>' + money(spend.known, trip.homeCurrency) + '</b> spent so far' +
@@ -5118,9 +5349,8 @@ function recordItemRowModel(trip, section, item, context) {
 // a new item of any kind, only edit ones already tagged to them (see
 // canEditItem()'s comment).
 function emptyTab(trip, iconName, title, body, addAction, addLabel) {
-  return '<div class="empty-state">' + icon(iconName) + '<h3>' + esc(title) + '</h3><p>' + esc(body) + '</p>' +
-    (canFullyEditTrip(trip) ? '<div style="margin-top:14px"><button class="btn btn-accent" data-action="' + addAction + '">' + icon('add') + ' ' + esc(addLabel) + '</button></div>' : '') +
-    '</div>';
+  var action = canFullyEditTrip(trip) ? '<button class="btn btn-accent" data-action="' + addAction + '">' + icon('add') + ' ' + esc(addLabel) + '</button>' : '';
+  return emptyStateHtml('empty', iconName, title, body, action);
 }
 
 function tabHead(trip, title, addAction, addLabel) {
@@ -5177,7 +5407,7 @@ function renderContactsTab(trip) {
       '<div class="item-title-row"><span class="item-title">' + esc(c.name) + '</span>' + (c.role ? '<span class="item-sub">' + esc(c.role) + '</span>' : '') + '</div>' +
       (c.address ? '<div class="item-sub">' + esc(c.address) + ' ' + mapsLink(c.address) + '</div>' : '') +
       '<div class="item-tags">' + tags.join('') + '</div>' +
-      (c.notes ? '<div class="item-sub" style="margin-top:6px">' + esc(c.notes) + '</div>' : '') +
+      (c.notes ? '<div class="item-sub item-notes">' + esc(c.notes) + '</div>' : '') +
       '</div>' + rowActions(trip, 'contact', c) + '</div>';
   }).join('');
   return tabHead(trip, 'Contacts', 'new-contact', 'Add contact') + '<div class="item-list">' + rows + '</div>';
@@ -5292,10 +5522,7 @@ function renderCompanionsTab(trip) {
   var head = '<div class="tab-panel-head"><h2>Companions</h2>' + addButtonsRow + '</div>';
 
   if (trip.companions.length === 0) {
-    return head + '<div class="empty-state">' + icon('companions') + '<h3>No one added yet</h3>' +
-      '<p>Add the people traveling with you as companions if they already have their own Waypoint login (this shares the trip with them too), or as guests if they don\'t, then tag them to destinations, activities, accommodation and transport to track who\'s on what.</p>' +
-      (addButtonsRow ? '<div style="margin-top:14px">' + addButtonsRow + '</div>' : '') +
-      '</div>';
+    return head + emptyStateHtml('empty', 'companions', 'No one added yet', 'Add people as companions when they have a Waypoint login, or as guests when they do not, then tag who is joining each part of the trip.', addButtonsRow);
   }
 
   // One row-renderer shared by both sections below -- a Companion row
@@ -5509,6 +5736,13 @@ function mapRangeDayCount(trip) {
   return start >= 0 && end >= start ? end - start + 1 : days.length;
 }
 
+function mapViewIsDefault(trip) {
+  var days = ensureMapRange(trip);
+  var fullRange = !days.length || (mapState.rangeStart === days[0] && mapState.rangeEnd === days[days.length - 1]);
+  var allLayers = MAP_LAYER_META.every(function (meta) { return mapState.visibility[meta.key]; });
+  return fullRange && allLayers;
+}
+
 function mapVisibleCounts(trip) {
   var counts = { destinations: 0, activities: 0, transport: 0, accommodation: 0 };
   mapPointsForTrip(trip).forEach(function (point) { counts[point.category]++; });
@@ -5534,9 +5768,10 @@ function mapRangeControlsHtml(trip) {
   return '<div class="map-range-controls">' +
     '<div class="map-range-summary">' +
       '<strong data-map-range-summary>' + esc(mapRangeDateLabel(mapState.rangeStart)) + ' — ' + esc(mapRangeDateLabel(mapState.rangeEnd)) + '</strong>' +
-      '<span class="map-range-days" data-map-range-days>' + mapRangeDayCount(trip) + ' day' + (mapRangeDayCount(trip) === 1 ? '' : 's') + '</span>' +
+      '<span class="map-range-summary-actions"><span class="map-range-days" data-map-range-days>' + mapRangeDayCount(trip) + ' day' + (mapRangeDayCount(trip) === 1 ? '' : 's') + '</span>' +
+      '<button type="button" class="btn btn-ghost map-reset" data-action="reset-map-view"' + (mapViewIsDefault(trip) ? ' disabled' : '') + '>' + icon('reset') + ' Reset</button></span>' +
     '</div>' +
-    '<div class="map-range-slider" data-map-range-slider style="--range-start:' + startPercent + '%;--range-end:' + endPercent + '%" aria-label="Map date range">' +
+    '<div class="map-range-slider' + (endPercent - startPercent < 20 ? ' labels-overlap' : '') + '" data-map-range-slider style="--range-start:' + startPercent + '%;--range-end:' + endPercent + '%" aria-label="Map date range">' +
       '<div class="map-range-rail"></div><div class="map-range-fill"></div>' +
       '<input class="map-range-input" data-map-range-handle="start" type="range" min="0" max="' + max + '" step="1" value="' + startIndex + '" aria-label="Map range start: ' + esc(formatDateHeading(mapState.rangeStart)) + '">' +
       '<input class="map-range-input" data-map-range-handle="end" type="range" min="0" max="' + max + '" step="1" value="' + endIndex + '" aria-label="Map range end: ' + esc(formatDateHeading(mapState.rangeEnd)) + '">' +
@@ -5555,15 +5790,53 @@ function mapFiltersHtml(trip) {
   }).join('') + '</div>';
 }
 
+function mapUnmappedRecords(trip) {
+  var records = [];
+  (trip.destinations || []).forEach(function (item) {
+    if (!mapRangeVisible(item.arriveDate, item.departDate)) return;
+    if (!savedCoords(item, 'lat', 'lng') && !item.boundaryRef) records.push({ section: 'destination', item: item, title: item.name || 'Destination', reason: 'No map location saved' });
+    else if (item.locationStale) records.push({ section: 'destination', item: item, title: item.name || 'Destination', reason: 'Saved location needs review' });
+  });
+  (trip.activities || []).forEach(function (item) {
+    if (!mapRangeVisible(activityStartDate(item), activityEndDate(item))) return;
+    if (!savedCoords(item, 'addressLat', 'addressLng')) records.push({ section: 'activity', item: item, title: item.title || 'Activity', reason: 'No address pin saved' });
+    else if (item.addressLocationStale) records.push({ section: 'activity', item: item, title: item.title || 'Activity', reason: 'Saved address needs review' });
+  });
+  (trip.accommodation || []).forEach(function (item) {
+    if (!mapRangeVisible(dateOnly(item.checkIn), dateOnly(item.checkOut))) return;
+    if (!savedCoords(item, 'lat', 'lng')) records.push({ section: 'accommodation', item: item, title: item.name || 'Accommodation', reason: 'No address pin saved' });
+    else if (item.locationStale) records.push({ section: 'accommodation', item: item, title: item.name || 'Accommodation', reason: 'Saved location needs review' });
+  });
+  (trip.transport || []).forEach(function (item) {
+    if (!mapRangeVisible(dateOnly(item.departDateTime), dateOnly(item.arriveDateTime))) return;
+    var missingFrom = !savedCoords(item, 'fromLat', 'fromLng');
+    var missingTo = !savedCoords(item, 'toLat', 'toLng');
+    if (missingFrom || missingTo) records.push({ section: 'transport', item: item, title: transportLabel(item), reason: missingFrom && missingTo ? 'Both route endpoints need locations' : (missingFrom ? 'Departure location needs a pin' : 'Arrival location needs a pin') });
+    else if (item.fromLocationStale || item.toLocationStale) records.push({ section: 'transport', item: item, title: transportLabel(item), reason: 'One or more route locations need review' });
+  });
+  return records;
+}
+
+function mapUnmappedHtml(trip) {
+  var records = mapUnmappedRecords(trip);
+  if (!records.length) return '';
+  var rows = records.map(function (record) {
+    var itemId = record.item[ENTITY_ID_FIELDS[record.section]];
+    var canRepair = canEditItem(trip, record.item);
+    return '<div class="map-unmapped-row"><span class="item-icon k-' + esc(record.section) + '">' + icon(mapLayerIconName(record.section === 'destination' ? 'destinations' : record.section === 'accommodation' ? 'accommodation' : record.section === 'activity' ? 'activities' : 'transport')) + '</span>' +
+      '<span class="map-unmapped-copy"><span class="map-unmapped-title">' + esc(record.title) + '</span><span class="map-unmapped-reason">' + esc(record.reason) + '</span></span>' +
+      (canRepair ? '<button type="button" class="btn btn-ghost" data-action="review-map-location" data-section="' + esc(record.section) + '" data-id="' + esc(itemId) + '">Find location / Set pin</button>' : '<span class="status-badge is-readonly">' + icon('readonly') + ' Ask an editor</span>') + '</div>';
+  }).join('');
+  return '<aside class="map-unmapped" aria-labelledby="map-unmapped-title"><div class="map-unmapped-head">' + icon('warning') + '<div><h3 id="map-unmapped-title">Locations needing attention</h3><p>These records stay in the itinerary but cannot be shown reliably on the map.</p></div></div><div class="map-unmapped-list">' + rows + '</div></aside>';
+}
+
 function renderMapTab(trip) {
   ensureMapRange(trip);
   var points = mapPointsForTrip(trip);
   var legs = mapLegsForTrip(trip);
 
   if (!points.length && !legs.length && !(trip.destinations || []).length && !(trip.activities || []).length && !(trip.transport || []).length && !(trip.accommodation || []).length) {
-    return '<div class="tab-panel-head"><h2>Map</h2></div><div class="empty-state">' + icon('map') +
-      '<h3>Nothing to show yet</h3>' +
-      '<p>Add a destination, activity, transport leg or place of accommodation, then use Find location or Set pin to place it on the map.</p></div>';
+    return '<div class="tab-panel-head"><h2>Map</h2></div>' + emptyStateHtml('empty', 'map', 'Nothing to show yet', 'Add a destination, activity, transport leg or place of accommodation, then use Find location or Set pin to place it on the map.');
   }
 
   return (
@@ -5578,7 +5851,7 @@ function renderMapTab(trip) {
       '<div id="map-shell" class="map-shell">' +
         '<div id="map-canvas" class="map-canvas"></div>' +
         '<div id="map-status" class="map-status">Loading map…</div>' +
-      '</div>' +
+      '</div>' + mapUnmappedHtml(trip) +
     '</div>'
   );
 }
@@ -5923,6 +6196,7 @@ function updateMapRangeUi(trip) {
   if (slider) {
     slider.style.setProperty('--range-start', startPercent + '%');
     slider.style.setProperty('--range-end', endPercent + '%');
+    slider.classList.toggle('labels-overlap', endPercent - startPercent < 20);
     var startInput = slider.querySelector('[data-map-range-handle="start"]');
     var endInput = slider.querySelector('[data-map-range-handle="end"]');
     if (startInput) { startInput.value = startIndex; startInput.setAttribute('aria-label', 'Map range start: ' + formatDateHeading(mapState.rangeStart)); }
@@ -5943,6 +6217,28 @@ function updateMapRangeUi(trip) {
     var chipCount = chip && chip.querySelector('.map-filter-count');
     if (chipCount) chipCount.textContent = layerCounts[meta.key];
   });
+  var reset = document.querySelector('[data-action="reset-map-view"]');
+  if (reset) reset.disabled = mapViewIsDefault(trip);
+}
+
+function resetMapView(trip) {
+  var days = ensureMapRange(trip);
+  if (days.length) {
+    mapState.rangeStart = days[0];
+    mapState.rangeEnd = days[days.length - 1];
+  }
+  MAP_LAYER_META.forEach(function (meta) {
+    mapState.visibility[meta.key] = true;
+    if (mapState.instance && mapState.layers && mapState.layers[meta.key] && !mapState.instance.hasLayer(mapState.layers[meta.key])) {
+      mapState.layers[meta.key].addTo(mapState.instance);
+    }
+    var chip = document.querySelector('[data-action="toggle-map-layer"][data-layer="' + meta.key + '"]');
+    if (chip) { chip.classList.add('is-active'); chip.setAttribute('aria-pressed', 'true'); }
+  });
+  updateMapRangeUi(trip);
+  safelyRefreshMapLayers(trip, true);
+  loadMapBoundaries(trip, mapState.generation);
+  announceStatus('Map restored to the full trip and all layers');
 }
 
 function scheduleMapRefresh(trip) {
@@ -6063,8 +6359,7 @@ function timelineDayActionsHtml(trip, day) {
 function renderTimelineTab(trip) {
   var days = tripDayList(trip);
   if (days.length === 0) {
-    return '<div class="empty-state">' + icon('timeline') + '<h3>Nothing planned yet</h3>' +
-      '<p>Add a destination, activity, transport leg or place to stay and this timeline will lay your trip out day by day — including overnight travel and stays that span several days.</p></div>';
+    return emptyStateHtml('empty', 'timeline', 'Nothing planned yet', 'Add a destination, activity, transport leg or place to stay and this timeline will lay your trip out day by day — including overnight travel and stays that span several days.');
   }
   var cards = days.map(function (day, i) {
     var events = eventsForDay(trip, day);
@@ -6111,12 +6406,11 @@ function renderExpensesTab(trip) {
   // but "Add expense" is still gated explicitly rather than assumed, in
   // case that ever changes.
   var head = '<div class="tab-panel-head"><h2>Expenses</h2>' +
-    '<div style="display:flex;gap:8px"><button class="btn" data-action="export-csv">' + icon('download') + ' Export CSV</button>' +
+    '<div class="expenses-actions"><button class="btn" data-action="export-csv">' + icon('download') + ' Export CSV</button>' +
     (canFullyEditTrip(trip) ? '<button class="btn btn-accent" data-action="new-expense">' + icon('add') + ' Add expense</button>' : '') + '</div></div>';
 
   if (lines.length === 0) {
-    return head + '<div class="empty-state">' + icon('expenses') + '<h3>No expenses logged yet</h3>' +
-      '<p>Costs added to activities, transport and accommodation show up here automatically — use "Add expense" for everything else, like meals, taxis and souvenirs.</p></div>';
+    return head + emptyStateHtml('empty', 'expenses', 'No expenses logged yet', 'Costs added to activities, transport and accommodation show up here automatically — use "Add expense" for everything else, like meals, taxis and souvenirs.');
   }
 
   var rows = lines.map(function (l) {
@@ -6127,25 +6421,36 @@ function renderExpensesTab(trip) {
       '<td class="num">' + (hv.known ? money(hv.value, trip.homeCurrency) : '<span class="rate-missing">rate needed</span>') + '</td></tr>';
   }).join('');
 
+  // The compact ledger is deliberately newest-first and grouped by date so a
+  // phone user can reconcile recent spending without scanning a wide table.
+  // Native and home values share identical type and width: conversion is
+  // context, not a visually subordinate footnote.
+  var ledgerByDate = {};
+  lines.slice().reverse().forEach(function (line) {
+    var key = line.date || '';
+    if (!ledgerByDate[key]) ledgerByDate[key] = [];
+    ledgerByDate[key].push(line);
+  });
+  var ledger = Object.keys(ledgerByDate).sort().reverse().map(function (date) {
+    var items = ledgerByDate[date].map(function (line) {
+      var home = homeValue(trip, line.amount, line.currency, line.rateOverride);
+      return '<article class="expense-ledger-row">' +
+        '<div class="expense-ledger-head"><span class="expense-ledger-title">' + esc(line.desc) + '</span><span class="expense-ledger-type">' + esc(line.type) + '</span></div>' +
+        (line.receiptRef ? '<div class="expense-ledger-reference">' + esc(line.receiptRef) + '</div>' : '') +
+        '<div class="expense-ledger-amounts">' +
+          '<div class="expense-ledger-amount"><span class="expense-ledger-amount-label">Native</span><span class="expense-ledger-amount-value">' + money(line.amount, line.currency) + '</span></div>' +
+          '<div class="expense-ledger-amount"><span class="expense-ledger-amount-label">Home · ' + esc(trip.homeCurrency) + '</span><span class="expense-ledger-amount-value">' + (home.known ? money(home.value, trip.homeCurrency) : '<span class="rate-missing">rate needed</span>') + '</span></div>' +
+        '</div></article>';
+    }).join('');
+    return '<section class="expense-ledger-day"><h3 class="expense-ledger-date">' + esc(date ? formatDateHeading(date) : 'Date not set') + '</h3><div class="expense-ledger-list">' + items + '</div></section>';
+  }).join('');
+
   return head +
     '<div class="stat-row"><div class="stat-tile"><div class="stat-label">Total (' + trip.homeCurrency + ')</div><div class="stat-value">' + money(spend.known, trip.homeCurrency) + '</div></div>' + catTiles + '</div>' +
-    (spend.unknownCount ? '<div class="intro-note" style="border-color:var(--wp-state-danger-subtle)"><strong>' + spend.unknownCount + ' item(s)</strong> are in a currency with no exchange rate set — <button class="warn-link" data-action="switch-tab" data-tab="settings">set one in Settings</button> to include them in the total.</div>' : '') +
-    '<div class="table-wrap"><table><caption class="sr-only">Expenses for ' + esc(trip.name) + '</caption><thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Description</th><th scope="col" class="num">Amount</th><th scope="col" class="num">' + esc(trip.homeCurrency) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    (spend.unknownCount ? '<div class="intro-note expense-rate-warning"><strong>' + spend.unknownCount + ' item(s)</strong> are in a currency with no exchange rate set — <button class="warn-link" data-action="switch-tab" data-tab="settings">set one in Settings</button> to include them in the total.</div>' : '') +
+    '<div class="table-wrap expense-table"><table><caption class="sr-only">Expenses for ' + esc(trip.name) + '</caption><thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Description</th><th scope="col" class="num">Amount</th><th scope="col" class="num">' + esc(trip.homeCurrency) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    '<div class="expense-ledger" aria-label="Expenses grouped by date, newest first">' + ledger + '</div>';
 }
-
-/* ---------- 21b. (formerly) the "Share this trip" panel ----------------
-   Used to be embedded here, at the bottom of the Companions tab -- a
-   standalone panel listing every grant with a revoke button, plus its
-   own form to share the trip with an existing account. It's gone now:
-   granting access moved onto the companion-link form itself (see
-   openCompanionLinkForm()/openAddLinkedCompanionForm()/
-   submitCompanionAccess() further up, and the Companions tab's own
-   split into "Companions"/"Guests" sections in renderCompanionsTab()),
-   so there's no separate place left that needs a dedicated list-plus-
-   form UI just for sharing. GRANT_ROLE_LABELS, and the /api/trip-grants
-   + /api/trip-grants/revoke endpoints this used to talk to, are all
-   still very much alive -- see submitCompanionAccess() above for where
-   they're used from instead. */
 
 /* ---------- 22. Render: Settings tab ------------------------------------------ */
 
@@ -6156,55 +6461,24 @@ function renderSettingsTab(trip) {
     var rate = trip.currencyRates[cur];
     return '<div class="field-row"><div class="field"><label>1 ' + esc(cur) + ' =</label>' +
       '<input type="number" step="0.0001" name="rate_' + cur + '" value="' + (rate !== undefined ? esc(rate) : '') + '" placeholder="e.g. 0.79"' + (canEdit ? '' : ' disabled') + '></div>' +
-      '<div class="field"><label>&nbsp;</label><div class="field-hint" style="margin-top:11px">' + esc(trip.homeCurrency) + ' per 1 ' + esc(cur) + '</div></div></div>';
+      '<div class="field"><label>&nbsp;</label><div class="field-hint settings-inline-hint">' + esc(trip.homeCurrency) + ' per 1 ' + esc(cur) + '</div></div></div>';
   }).join('');
-  // The rates form itself is still shown to a scoped "user"/"viewer"
-  // grant (it's useful, honest information — what currencies this trip
-  // uses and at what rate), just with every input disabled and no Save
-  // button, rather than hidden outright the way Add/Edit/Delete controls
-  // are elsewhere. Trip-level settings like this aren't something a
-  // "user" grant can change either way (see canFullyEditTrip()).
+  var currencySection = '<form id="rates-form"><section class="settings-section"><div class="settings-section-head"><div><h3>Currency</h3><p>Home currency and fixed exchange rates used for trip totals.</p></div>' + (!canEdit ? tripAccessBadgeHtml(trip) : '') + '</div>' +
+    '<div class="field"><label>Home currency</label><div class="suggest-input-wrap settings-currency-input">' +
+      '<input class="settings-uppercase" type="text" autocomplete="off" data-suggest-type="currency" maxlength="6" name="homeCurrency" value="' + esc(trip.homeCurrency) + '"' + (canEdit ? '' : ' disabled') + '>' +
+      '<div class="suggest-list" id="homeCurrency-suggest"></div></div><div class="field-hint">Every total on this trip converts into this currency.</div></div>' +
+    (currencies.length
+      ? '<div class="field"><label>Fixed exchange rates for this trip</label><div class="field-hint settings-rate-intro">Used whenever an item in that currency does not have its own rate override.</div><div class="rate-table">' + rateRows + '</div></div>'
+      : '<p class="field-hint">No foreign-currency costs logged yet — rates will appear here once you add one.</p>') +
+    (canEdit ? '<button type="submit" class="btn btn-primary">Save currency settings</button>' : '') +
+    '</section></form>';
+  var accessContent = canShareTrip(trip)
+    ? '<p class="field-hint">Access is managed alongside each person, so permissions and companion tagging stay connected.</p><button class="btn" data-action="switch-tab" data-tab="companions">' + icon('companions') + ' Manage trip access</button>'
+    : emptyStateHtml('permission', 'readonly', 'Permission restricted', 'Your access to this trip is read-only or limited to items tagged to you. Ask the trip owner or an Admin to change it.', '', true);
+  var accessSection = '<section class="settings-section"><div class="settings-section-head"><div><h3>Access</h3><p>Who can see and edit this trip.</p></div></div>' + accessContent + '</section>';
+  var dangerSection = canEdit ? '<section class="settings-section settings-section-danger"><div class="settings-section-head"><div><h3>Danger zone</h3><p>Permanently remove this trip and every record stored inside it.</p></div></div><button class="btn btn-danger" data-action="delete-trip" data-id="' + trip.tripId + '">' + icon('delete') + ' Delete this trip</button></section>' : '';
   return (
-    '<div class="tab-panel-head"><h2>Settings</h2></div>' +
-    '<form id="rates-form">' +
-      '<div class="field"><label>Home currency</label>' +
-      // Hand-built rather than through suggestInputHtml() (this form
-      // isn't part of the fieldHtml()/openForm() modal system), but
-      // uses the exact same `.suggest-input-wrap` + `data-suggest-type`
-      // markup so it gets the identical dropdown as every other
-      // currency/country/city/timezone/airport field — see the
-      // "Generic suggestion dropdown" section further down.
-      '<div class="suggest-input-wrap" style="max-width:140px">' +
-        '<input type="text" autocomplete="off" data-suggest-type="currency" maxlength="6" style="text-transform:uppercase" name="homeCurrency" value="' + esc(trip.homeCurrency) + '"' + (canEdit ? '' : ' disabled') + '>' +
-        '<div class="suggest-list" id="homeCurrency-suggest"></div>' +
-      '</div>' +
-      '<div class="field-hint">Every total on this trip converts into this currency.</div></div>' +
-      (currencies.length
-        ? '<div class="field"><label>Fixed exchange rates for this trip</label><div class="field-hint" style="margin-bottom:10px">Used whenever an item in that currency doesn\'t have its own rate override. One rate per currency for the whole trip, as you set up.</div><div class="rate-table">' + rateRows + '</div></div>'
-        : '<p class="field-hint">No foreign-currency costs logged yet — rates will appear here once you add one.</p>') +
-      (canEdit ? '<button type="submit" class="btn btn-primary">Save currency settings</button>' : '') +
-    '</form>' +
-    (canEdit ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--wp-border-default)">' +
-      '<h3 class="section-subhead">Integrations</h3>' +
-      '<p class="field-hint">The "Look up" button on the transport form (Flight number field) uses the ' +
-      '<strong>AeroDataBox Free Tier, through RapidAPI</strong>, to fill in the airline, airports and ' +
-      'scheduled times for a flight number + date. This is a per-site setup, not something stored in this ' +
-      'trip — the API key lives only as a Cloudflare Worker secret, never in this app itself.</p>' +
-    '</div>' : '') +
-    // The old "Share this trip" form used to live here -- it's now part
-    // of the Companions tab (see openCompanionLinkForm()/
-    // openAddLinkedCompanionForm() above), since who can log in and see
-    // this trip and who's tagged as a companion on it turned out to be
-    // one and the same "who's on this trip" question. Just a pointer for
-    // anyone who remembers it being here.
-    (canShareTrip(trip) ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--wp-border-default)">' +
-      '<h3 class="section-subhead">Sharing</h3>' +
-      '<p class="field-hint">Manage who has access to this trip from the <button class="warn-link" data-action="switch-tab" data-tab="companions">Companions tab</button>.</p>' +
-    '</div>' : '') +
-    (canEdit ? '<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--wp-border-default)">' +
-      '<h3 class="section-subhead">Danger zone</h3>' +
-      '<button class="btn btn-danger" data-action="delete-trip" data-id="' + trip.tripId + '">' + icon('delete') + ' Delete this trip</button>' +
-    '</div>' : '')
+    '<div class="tab-panel-head"><h2>Settings</h2></div><div class="settings-stack">' + currencySection + accessSection + dangerSection + '</div>'
   );
 }
 
@@ -6217,6 +6491,8 @@ function render() {
   document.body.classList.toggle('is-trip-view', currentView === 'trip' && !!currentTripId);
   if (currentView === 'manage-users') {
     app.innerHTML = renderManageUsersView();
+  } else if (currentView === 'site-settings') {
+    app.innerHTML = renderSiteSettingsView();
   } else {
     app.innerHTML = (currentView === 'trip' && currentTripId) ? renderTripView() : renderDashboard();
   }
@@ -6265,6 +6541,13 @@ document.addEventListener('click', function (e) {
   var action = el.dataset.action;
   var trip = currentTripId ? currentTrip() : null;
 
+  if (action === 'retry-connection') { retryConnection(); return; }
+  if (isMutationAction(action) && !editingAvailable()) {
+    setSaveStatus('readonly', connectionState === 'offline' ? 'Offline' : 'Editing locked');
+    updateSystemFeedback();
+    return;
+  }
+
   if (action === 'close-modal') {
     // The backdrop itself has data-action="close-modal" too (click
     // outside the modal box to dismiss it, a common UI convention) —
@@ -6284,7 +6567,19 @@ document.addEventListener('click', function (e) {
   if (action === 'copy-text') {
     var value = el.dataset.value;
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(value).then(function () { showToast('Copied'); }).catch(function () { showToast('Could not copy'); });
+      navigator.clipboard.writeText(value).then(function () {
+        var originalLabel = el.getAttribute('aria-label') || 'Copy';
+        el.classList.add('is-confirmed');
+        el.setAttribute('aria-label', 'Copied');
+        el.innerHTML = icon('saved');
+        announceStatus('Copied to clipboard');
+        setTimeout(function () {
+          if (!el.isConnected) return;
+          el.classList.remove('is-confirmed');
+          el.setAttribute('aria-label', originalLabel);
+          el.innerHTML = icon('copy');
+        }, 1800);
+      }).catch(function () { showToast('Could not copy to the clipboard.', 'error'); });
     }
     return;
   }
@@ -6327,8 +6622,10 @@ document.addEventListener('click', function (e) {
     }
     el.classList.toggle('is-active', mapState.visibility[layerKey]);
     el.setAttribute('aria-pressed', String(mapState.visibility[layerKey]));
+    updateMapRangeUi(trip);
     return;
   }
+  if (action === 'reset-map-view' && trip) { resetMapView(trip); return; }
   if (action === 'map-fit-selection') { fitMapToSelection(); return; }
   if (action === 'map-toggle-fullscreen') {
     var mapShell = document.getElementById('map-shell');
@@ -6384,6 +6681,7 @@ document.addEventListener('click', function (e) {
     return;
   }
   if (action === 'open-manage-users') { accountMenuOpen = false; applyAuthUI(); loadAndRenderManageUsers(); return; }
+  if (action === 'open-site-settings') { accountMenuOpen = false; applyAuthUI(); loadAndRenderSiteSettings(); return; }
   if (action === 'new-user') { openUserForm(); return; }
   if (action === 'edit-user') { openUserForm(managedUsers.find(function (u) { return u.id === el.dataset.id; })); return; }
   if (action === 'delete-user') { deleteUserAccount(el.dataset.id); return; }
@@ -6467,6 +6765,17 @@ document.addEventListener('click', function (e) {
   if (action === 'new-expense') { openExpenseForm(trip); return; }
   if (action === 'edit-expense') { openExpenseForm(trip, byId(trip.expenses, el.dataset.id, 'expenseId')); return; }
   if (action === 'delete-expense') { deleteEntity(trip, 'expenses', el.dataset.id, 'expense'); return; }
+  if (action === 'review-map-location' && trip) {
+    var section = el.dataset.section;
+    var collectionName = { destination: 'destinations', activity: 'activities', transport: 'transport', accommodation: 'accommodation' }[section];
+    var item = collectionName ? byId(trip[collectionName], el.dataset.id, ENTITY_ID_FIELDS[section]) : null;
+    if (!item) return;
+    if (section === 'destination') openDestinationForm(trip, item);
+    else if (section === 'activity') openActivityForm(trip, item);
+    else if (section === 'transport') openTransportForm(trip, item);
+    else if (section === 'accommodation') openAccommodationForm(trip, item);
+    return;
+  }
 });
 
 // The two native range inputs are deliberately handled outside the generic
@@ -6656,6 +6965,12 @@ document.addEventListener('submit', function (e) {
     submitAuthForm('/WayPoint/api/setup', { setupKey: fdSetup.get('setupKey'), username: fdSetup.get('username'), password: fdSetup.get('password') });
     return;
   }
+  if (!editingAvailable()) {
+    e.preventDefault();
+    setSaveStatus('readonly', connectionState === 'offline' ? 'Offline' : 'Editing locked');
+    updateSystemFeedback();
+    return;
+  }
   if (e.target.id === 'user-form') {
     e.preventDefault();
     var fdUser = new FormData(e.target);
@@ -6742,8 +7057,21 @@ document.addEventListener('submit', function (e) {
       });
       t.currencyRates = rates;
     });
-    showToast('Currency settings saved');
   }
+});
+
+window.addEventListener('offline', function () {
+  connectionState = 'offline';
+  setSaveStatus('readonly', 'Offline');
+  updateSystemFeedback();
+});
+
+window.addEventListener('online', function () {
+  connectionState = 'online';
+  // Browser "online" only means a network route exists. Re-fetch the server
+  // state before unlocking edits so an unsent optimistic change is never
+  // mistaken for confirmed data.
+  retryConnection({ silent: false });
 });
 
 /* ---------- 25. Init ------------------------------------------------------------
