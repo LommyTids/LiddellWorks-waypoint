@@ -1,4 +1,5 @@
 const fs = require('fs');
+const vm = require('vm');
 
 const html = fs.readFileSync('public/WayPoint/index.html', 'utf8');
 const worker = fs.readFileSync('src/worker.js', 'utf8');
@@ -37,6 +38,33 @@ requireText(html, /data-action="reset-map-view"/, 'missing persistent map reset'
 requireText(html, /function resetMapView\(trip\)/, 'missing map reset behaviour');
 requireText(html, /map-range-slider\.labels-overlap/, 'range labels must resolve collisions');
 requireText(html, /function mapUnmappedRecords\(trip\)/, 'missing unmapped-record recovery list');
+requireText(html, /<details><summary class="map-unmapped-head">/, 'map attention list must be a collapsed-by-default disclosure');
+rejectText(html, /<details open><summary class="map-unmapped-head">/, 'map attention list must not start expanded');
+requireText(html, /data-action="review-map-location"/, 'map recovery action is missing');
+
+// All four plan editors and map recovery render the shared People picker.
+// A stale `full` variable here previously threw a ReferenceError before the
+// modal could mount, making every Edit/Find location action appear inert.
+rejectText(html, /class="field" ' \+ full \+/, 'tag picker still references undefined `full` variable');
+requireText(html, /class="field' \+ fullClass \+ '"><label>/, 'tag picker must use the shared full-width class');
+
+const fieldRendererStart = html.indexOf('function fieldHtml(');
+const fieldRendererEnd = html.indexOf('// Groups adjacent short fields', fieldRendererStart);
+if (fieldRendererStart === -1 || fieldRendererEnd === -1) throw new Error('could not isolate fieldHtml for executable regression');
+const fieldRendererSource = html.slice(fieldRendererStart, fieldRendererEnd);
+[
+  [],
+  [{ companionId: 'person-1', name: 'Alex', isSuperuser: false }]
+].forEach((people) => {
+  const context = {
+    taggablePeople: () => people,
+    companionAvatarHtml: () => '<span></span>',
+    esc: (value) => String(value === undefined || value === null ? '' : value),
+    journeyTimingHtml: () => ''
+  };
+  vm.runInNewContext(fieldRendererSource + '\nresult = fieldHtml({ key: "companions", label: "People", type: "tag-picker", wide: true }, [], {}, {});', context);
+  if (!/class="field field-wide"/.test(context.result)) throw new Error('tag picker failed to render its full-width class');
+});
 
 // Settings, exceptional states and cleanup contract.
 requireText(worker, /\/WayPoint\/api\/site-status/, 'missing protected site-status endpoint');

@@ -851,9 +851,14 @@ tr:last-child td { border-bottom: none; }
 .map-route-popup { display: flex; flex-direction: column; gap: 3px; }
 .map-route-popup .map-route-meta { color: var(--wp-text-secondary); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
 .map-unmapped { margin-top: 18px; padding: 16px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); }
-.map-unmapped-head { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 12px; }
+.map-unmapped-head { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; list-style: none; }
+.map-unmapped-head::-webkit-details-marker { display: none; }
+.map-unmapped details[open] .map-unmapped-head { margin-bottom: 12px; }
 .map-unmapped-head .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); color: var(--wp-action-accent); margin-top: 2px; }
 .map-unmapped-head p { color: var(--wp-text-secondary); font: var(--wp-type-label); }
+.map-unmapped-summary { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--wp-text-secondary); font: var(--wp-type-meta); white-space: nowrap; }
+.map-unmapped-summary .icon { color: currentColor; margin: 0; transition: transform .15s; }
+.map-unmapped details[open] .map-unmapped-summary .icon { transform: rotate(180deg); }
 .map-unmapped-list { display: grid; gap: 8px; }
 .map-unmapped-row { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid var(--wp-border-default); }
 .map-unmapped-copy { flex: 1; min-width: 0; }
@@ -2487,7 +2492,7 @@ function fieldHtml(field, value, trip, allValues) {
   if (field.type === 'tag-picker') {
     var companions = taggablePeople(trip);
     if (companions.length === 0) {
-      return '<div class="field" ' + full + '><label>' + esc(field.label) + '</label>' +
+      return '<div class="field' + fullClass + '"><label>' + esc(field.label) + '</label>' +
         '<div class="field-hint">No companions added yet — add some on the Companions tab to tag them here.</div></div>';
     }
     var pickerItems = companions.slice().sort(function (a, b) {
@@ -2508,7 +2513,7 @@ function fieldHtml(field, value, trip, allValues) {
       // item regardless, matching what the Worker enforces server-side.
       return '<label class="tag-picker-item"><input type="checkbox" name="' + field.key + '__' + c.companionId + '" data-tag-picker-key="' + field.key + '" data-tag-person-id="' + c.companionId + '"' + (checked ? ' checked' : '') + (field.locked ? ' disabled' : '') + '> ' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + (c.isSuperuser ? '<span class="tag-picker-role">Superuser</span>' : '') + '</label>';
     }).join('');
-    return '<div class="field" ' + full + '><label>' + esc(field.label) + '</label><div class="tag-picker">' + pickerItems + '</div>' +
+    return '<div class="field' + fullClass + '"><label>' + esc(field.label) + '</label><div class="tag-picker">' + pickerItems + '</div>' +
       (field.locked ? '<div class="field-hint">Who this is tagged to isn\'t something you can change.</div>' : (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '')) +
       '</div>';
   }
@@ -5827,7 +5832,11 @@ function mapUnmappedHtml(trip) {
       '<span class="map-unmapped-copy"><span class="map-unmapped-title">' + esc(record.title) + '</span><span class="map-unmapped-reason">' + esc(record.reason) + '</span></span>' +
       (canRepair ? '<button type="button" class="btn btn-ghost" data-action="review-map-location" data-section="' + esc(record.section) + '" data-id="' + esc(itemId) + '">Find location / Set pin</button>' : '<span class="status-badge is-readonly">' + icon('readonly') + ' Ask an editor</span>') + '</div>';
   }).join('');
-  return '<aside class="map-unmapped" aria-labelledby="map-unmapped-title"><div class="map-unmapped-head">' + icon('warning') + '<div><h3 id="map-unmapped-title">Locations needing attention</h3><p>These records stay in the itinerary but cannot be shown reliably on the map.</p></div></div><div class="map-unmapped-list">' + rows + '</div></aside>';
+  // Keep the warning visible without letting a potentially long repair list
+  // dominate the map. Native <details> supplies keyboard and screen-reader
+  // disclosure behaviour, and omitting `open` makes it collapsed each time
+  // the Map tab is mounted, as requested.
+  return '<aside class="map-unmapped" aria-labelledby="map-unmapped-title"><details><summary class="map-unmapped-head">' + icon('warning') + '<div><h3 id="map-unmapped-title">Locations needing attention</h3><p>These records stay in the itinerary but cannot be shown reliably on the map.</p></div><span class="map-unmapped-summary">' + records.length + ' record' + (records.length === 1 ? '' : 's') + icon('collapse') + '</span></summary><div class="map-unmapped-list">' + rows + '</div></details></aside>';
 }
 
 function renderMapTab(trip) {

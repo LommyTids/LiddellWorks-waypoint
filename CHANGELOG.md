@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-03 — Record editor and map recovery hotfix
+
+### What changed
+
+- Restored Edit actions for destination, travel, accommodation and activity cards.
+- Restored the Map tab's **Find location / Set pin** recovery action, which opens the same record editors.
+- Changed **Locations needing attention** into an accessible disclosure that starts collapsed and retains its visible warning and record count.
+
+### Technical details
+
+- Fixed the shared People tag-picker renderer referencing an undefined `full` variable instead of the established `fullClass` value. The resulting `ReferenceError` prevented every form containing that shared picker from mounting.
+- Used native `<details>` and `<summary>` semantics for the collapsed map-attention panel, including a rotating disclosure icon.
+- Added an executable regression that renders the shared tag picker both with and without companions, plus source guards for the recovery action and collapsed default.
+
 ## 2026-09-02 — Condensed, collapsible Timeline
 
 ### What changed
