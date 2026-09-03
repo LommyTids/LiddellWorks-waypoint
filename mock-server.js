@@ -833,6 +833,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ---- Account management (site owner / uber-user only) ---------------
+    if (urlPath === '/WayPoint/api/site-status' && req.method === 'GET') {
+      if (!user.isUberUser) return sendJson(res, 403, { error: "Only the site owner's account can view site settings." });
+      return sendJson(res, 200, { integrations: { flightLookup: true, locationSearch: true } });
+    }
     if (urlPath === '/WayPoint/api/users' && req.method === 'GET') {
       if (!user.isUberUser) return sendJson(res, 403, { error: "Only the site owner's account can manage logins." });
       return sendJson(res, 200, { users: users.map(publicUser) });

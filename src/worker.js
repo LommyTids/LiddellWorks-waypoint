@@ -634,6 +634,17 @@ export default {
       }
 
       // ---- Account management (site-owner / uber-user only) -----------
+      if (path === "/WayPoint/api/site-status" && request.method === "GET") {
+        if (!user.isUberUser) return jsonError(403, "Only the site owner's account can view site settings.");
+        // Report presence only. Secret values never leave the Worker, even to
+        // the site owner; the Cloudflare dashboard remains their sole editor.
+        return new Response(JSON.stringify({
+          integrations: {
+            flightLookup: !!env.AERODATABOX_API_KEY,
+            locationSearch: !!env.LOCATIONIQ_API_KEY
+          }
+        }), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (path === "/WayPoint/api/users") {
         if (!user.isUberUser) return jsonError(403, "Only the site owner's account can manage logins.");
         if (request.method === "GET") return handleUsersList(env);
