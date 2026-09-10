@@ -984,31 +984,24 @@ tr:last-child td { border-bottom: none; }
 /* ================================================================
    WAYPOINT — application logic
    ----------------------------------------------------------------
-   This file has no build step and no framework: it is plain
-   JavaScript that (a) keeps all trip data in one JS object called
-   `state`, (b) turns that object into HTML strings whenever
-   something changes (the render* functions), and (c) saves the
-   updated object to our own tiny JSON API (see loadInitialState()
-   and persist() below), which stores it in Cloudflare KV — see
-   src/worker.js in this same repo for the server side of that API —
-   so the trips are still here next time you open the page. Sections
-   below are ordered so each one only depends on the ones above it.
+   No build step, no framework: plain JavaScript that (a) keeps all
+   trip data in one JS object called `state`, (b) turns that object
+   into HTML strings whenever something changes (the render*
+   functions), and (c) saves it to our own JSON API (see
+   loadInitialState()/persist() below), stored in Cloudflare KV — see
+   src/worker.js for the server side. Sections below are ordered so
+   each only depends on the ones above it.
    ================================================================ */
 
 /* ---------- 1. Small constants ---------------------------------- */
 
 // COMMON_CURRENCIES, COMMON_TIMEZONES, COMMON_COUNTRIES, COMMON_CITIES
-// and COMMON_AIRPORTS used to be defined right here as big inline
-// arrays. They're now loaded from separate files under
-// /WayPoint/data/ (see the <script> tags near the top of this file,
-// just after leaflet.js) — purely to keep this file smaller, since a
-// few thousand lines of airport/city/country names made this file
-// unwieldy to upload/edit as a single piece. Nothing about how they're
-// used changed: they're still plain globals by the time any of the
-// code below runs. See data/airports.js specifically for why
-// COMMON_AIRPORTS is shaped differently from the others (objects with
-// city/country, not flat strings) — it's about the Map tab's
-// geocoding, not just tidiness.
+// and COMMON_AIRPORTS are loaded from separate files under
+// /WayPoint/data/ (see the <script> tags near the top, after
+// leaflet.js) to keep this file smaller — they're still plain globals
+// by the time any code below runs. See data/airports.js for why
+// COMMON_AIRPORTS is shaped differently (objects with city/country,
+// not flat strings) — that's for the Map tab's geocoding.
 
 var WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1029,10 +1022,9 @@ function newId() {
   return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
 }
 
-// Escapes text so it is always safe to drop straight into an HTML
-// template string, whether it ends up as element text or inside a
-// quoted attribute. Without this, a note containing e.g. `<` or `"`
-// could break the page's markup.
+// Escapes text so it's safe to drop into an HTML template string as
+// element text or inside a quoted attribute. Without this, a note
+// containing `<` or `"` could break the page's markup.
 function esc(value) {
   return String(value === undefined || value === null ? '' : value)
     .replace(/&/g, '&amp;')
@@ -1049,25 +1041,19 @@ function cssToken(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-// Finds one item in `list` by its id. Most of Waypoint's data now uses a
-// typed id field name instead of a generic `id` -- a trip's own id field
-// is `tripId`, a destination's is `destinationId`, and so on (see the
-// "SCHEMA NOTE" comment in src/worker.js for why). Pass which field to
-// match against as `idField` -- e.g. byId(trip.destinations, someId,
-// 'destinationId'). Account/login records (see managedUsers below) still
-// use the plain `id` field, which is why that's the default when
-// `idField` is left out.
+// Finds one item in `list` by its id. Most Waypoint data uses a typed id
+// field (tripId, destinationId, ...; see "SCHEMA" in src/worker.js) --
+// pass which field to match as `idField`, e.g. byId(trip.destinations,
+// someId, 'destinationId'). Account/login records still use plain `id`,
+// the default when `idField` is omitted.
 function byId(list, id, idField) {
   var field = idField || 'id';
   return (list || []).find(function (x) { return x[field] === id; });
 }
 
-// Maps a trip item type -- however it's referred to, whether the plural
-// key it's stored under on the trip (e.g. "destinations") or the
-// singular name used in click-action strings like "edit-destination" --
-// to the name of that item's own id field. Centralised here so
-// deleteEntity() and rowActions() (further down) both stay in sync about
-// what each item type's id field is actually called.
+// Maps a trip item type -- plural key on the trip ("destinations") or
+// singular name in click-action strings ("edit-destination") -- to that
+// item's own id field, so deleteEntity() and rowActions() stay in sync.
 var ENTITY_ID_FIELDS = {
   destination: 'destinationId', destinations: 'destinationId',
   activity: 'activityId', activities: 'activityId',
@@ -1090,13 +1076,11 @@ function slug(str) {
 }
 
 /* ---- date/time helpers ----
-   All dates are stored as plain "YYYY-MM-DD" strings and combined
-   date+times as "YYYY-MM-DDTHH:MM". We deliberately avoid feeding
-   these into `new Date("YYYY-MM-DD")` for display, because that
-   parses as UTC midnight and then a *local* timezone conversion can
-   silently roll the displayed date backwards a day. Working with
-   the UTC getters keeps every user's timeline showing the date they
-   actually typed in, no matter where they are. */
+   Dates are stored as "YYYY-MM-DD", date+times as "YYYY-MM-DDTHH:MM".
+   Deliberately not fed into `new Date("YYYY-MM-DD")` for display: that
+   parses as UTC midnight, and a local timezone conversion can then
+   silently roll the displayed date back a day. The UTC getters keep
+   everyone's timeline showing the date they actually typed. */
 
 function addDays(dateStr, n) {
   var parts = dateStr.split('-').map(Number);
@@ -1159,11 +1143,11 @@ function todayStr() {
 
 /* ---- currency helpers ---- */
 
-// Converts an amount in `currency` into the trip's home currency.
-// A per-item `rateOverride` always wins; otherwise we fall back to
-// the trip's one fixed rate for that currency (set in Settings).
-// `known` is false when neither is available, so callers can flag
-// the amount instead of silently treating it as zero.
+// Converts an amount in `currency` into the trip's home currency. A
+// per-item `rateOverride` always wins; otherwise falls back to the
+// trip's fixed rate for that currency (set in Settings). `known` is
+// false when neither is available, so callers can flag the amount
+// instead of silently treating it as zero.
 function homeValue(trip, amount, currency, rateOverride) {
   var amt = Number(amount) || 0;
   if (!currency || currency === trip.homeCurrency) return { value: amt, rateUsed: 1, known: true };
@@ -1180,10 +1164,9 @@ function money(amount, currency) {
 }
 
 // Turns an IANA timezone name (e.g. "Asia/Bangkok") into a short
-// current UTC-offset label (e.g. "GMT+7") using the browser's own
-// timezone database — no network call involved. Returns '' for a
-// blank or unrecognised timezone rather than throwing, since this is
-// only ever used for a friendly hint next to the name the user typed.
+// current UTC-offset label (e.g. "GMT+7") via the browser's timezone
+// database. Returns '' for a blank/unrecognised timezone rather than
+// throwing -- only ever used as a friendly hint next to the typed name.
 function tzOffsetLabel(tz) {
   if (!tz) return '';
   try {
@@ -1229,22 +1212,16 @@ function icon(name, extraClass) {
 document.getElementById('brand-icon').innerHTML = icon('brand');
 
 /* ---------- 3b. Avatars (Companions/Avatars feature) ------------------
-   One small helper, used everywhere a companion or account's marker
-   needs to be drawn: item rows, trip cards, the timeline, and the
-   tag-picker (see companionTags()/renderTripCardAvatars()/eventRowHtml()/
-   the 'tag-picker' case in fieldHtml() further down). The actual
-   resolution — which companion gets an animal vs. a smiley, and which
-   colour/animal that is — always happens server-side (see
-   resolveCompanionAvatars() in src/worker.js and the `companionAvatars`
-   map on every trip this page ever receives); this function's only job
-   is turning that already-resolved `{ type, color, animal }` into HTML,
-   through avatarColorHex()/avatarAnimalEmoji() (data/avatars.js) so a
-   colour/animal token NEVER gets written straight into a `style`
-   attribute — see that file's own comment for why that specifically
-   matters (a CSS-injection-style risk if a stored value were ever
-   trusted directly). `name` is always shown as a title/tooltip — colour
-   (or even the animal) alone should never be the only thing telling two
-   people apart. */
+   Draws a companion/account marker: item rows, trip cards, the
+   timeline, the tag-picker (companionTags()/renderTripCardAvatars()/
+   eventRowHtml()/the 'tag-picker' case in fieldHtml()). Resolution --
+   animal vs. smiley, which colour/animal -- always happens server-side
+   (resolveCompanionAvatars() in src/worker.js, the `companionAvatars`
+   map on every trip); this only turns the resolved
+   `{ type, color, animal }` into HTML, via avatarColorHex()/
+   avatarAnimalEmoji() (data/avatars.js) so a token never gets written
+   straight into a `style` attribute (see that file for the
+   CSS-injection risk). `name` is always shown as a title/tooltip. */
 function avatarMarkerHtml(avatar, name, extraClass) {
   if (!avatar) return '';
   var title = ' title="' + esc(name || '') + '" aria-label="' + esc(name || '') + '"';
@@ -1253,21 +1230,17 @@ function avatarMarkerHtml(avatar, name, extraClass) {
     var glyph = avatarAnimalEmoji(avatar.animal) || '';
     return '<span class="avatar-marker ' + (extraClass || '') + '" style="background:' + bg + '"' + title + '>' + glyph + '</span>';
   }
-  // Non-account companion: fixed grey circle (never a choice — see
-  // AVATAR_GREY_HEX's own comment), coloured smiley per whoever added
-  // them.
+  // Non-account companion: fixed grey circle (see AVATAR_GREY_HEX),
+  // coloured smiley per whoever added them.
   var smileyHex = avatarColorHex(avatar.color) || '#6b7280';
   return '<span class="avatar-marker ' + (extraClass || '') + '" style="background:' + AVATAR_GREY_HEX + '"' + title + '>' +
     '<span class="avatar-marker-smiley" style="color:' + smileyHex + '">☺</span></span>';
 }
 
 // Looks up companion `companionId`'s resolved marker on `trip` and draws
-// it via avatarMarkerHtml() above, paired with their name. Returns '' if
-// the trip has no resolved avatar for that id at all (shouldn't happen
-// for a real companion — every one gets an entry, even before anyone's
-// picked anything, thanks to the deterministic default — but a
-// dangling/removed companion id, same as everywhere else in this file,
-// degrades to "nothing shown" rather than an error).
+// it via avatarMarkerHtml() above, paired with their name. Returns ''
+// for a dangling/removed companion id, degrading to "nothing shown"
+// rather than an error.
 function companionAvatarHtml(trip, companionId, name) {
   if (companionId === SUPERUSER_PARTICIPANT_ID) {
     return avatarMarkerHtml(trip.superuserParticipant && trip.superuserParticipant.avatar, name);
@@ -1297,18 +1270,13 @@ function taggablePersonById(trip, id) {
   return taggablePeople(trip).find(function (person) { return person.companionId === id; }) || null;
 }
 
-// Dashboard trip cards: "who's on this trip at a glance" (plan §5's last
-// placement). Deliberately bare markers with NO '.tag' pill around them
-// (unlike companionTags() above) — a trip card is already dense with the
-// name/dates/status/stats, so this renders as a plain row of small circles
-// wrapped in .avatar-row rather than the larger .item-tags pill treatment
-// used inside a trip's own tabs. Capped at MAX_CARD_AVATARS so a trip with
-// a long companion list still fits on one card; any overflow collapses
-// into a single "+N" bubble (title lists the remaining names) rather than
-// wrapping the card onto extra lines. Every account and viewer role sees
-// this (trip.companions/companionAvatars are already scoped/stripped
-// server-side per buildVisibleTrip(), same as everywhere else avatars are
-// drawn), so there's nothing extra to permission-check here.
+// Dashboard trip cards: "who's on this trip at a glance". Bare markers
+// with no '.tag' pill (unlike companionTags() above) — a plain row of
+// small circles rather than the pill treatment used inside a trip's own
+// tabs. Capped at MAX_CARD_AVATARS; overflow collapses into a single
+// "+N" bubble (title lists remaining names) rather than wrapping. Data
+// is already scoped/stripped server-side per buildVisibleTrip(), so
+// there's nothing extra to permission-check here.
 var MAX_CARD_AVATARS = 6;
 function tripCardAvatarsHtml(trip) {
   var companions = trip.companions || [];
@@ -1324,11 +1292,10 @@ function tripCardAvatarsHtml(trip) {
 }
 
 /* ---------- 4. Application state & persistence --------------------
-   `state` holds every trip and is the single source of truth for
-   everything on screen. `currentView` / `currentTripId` / `currentTab`
-   track where the viewer is right now (dashboard vs. a trip, which
-   tab) — that's per-viewer navigation, not trip data, so it is kept
-   out of `state` and never saved into the page. */
+   `state` holds every trip, the single source of truth on screen.
+   `currentView`/`currentTripId`/`currentTab` track where the viewer is
+   (dashboard vs. a trip, which tab) — per-viewer navigation, not trip
+   data, so it's kept out of `state` and never saved. */
 
 var state = { trips: [] };
 var currentView = 'dashboard';
@@ -1367,58 +1334,44 @@ function timelineDayExpanded(tripId, day, today) {
 
 // ---- Accounts / login (see section 4b, "Auth", further down) ----------
 // `currentUser` is null until checkAuth() resolves at boot, and stays
-// null for the whole session if nobody's logged in — in that state
-// renderBoot() shows the login screen instead of any trip data at all.
-// { id, username, isUberUser } once set. There's deliberately no global
-// "role" here anymore — what an account can do is entirely PER TRIP now
-// (see each trip's own `myGrant`, annotated by the server — src/worker.js's
-// buildResponseState() — and the canFullyEditTrip()/canEditItem() helpers
-// further down). `isUberUser` is the one exception: it's this account's
-// own flag, returned only in responses that describe the CALLER's own
-// account (login/whoami/setup), never anywhere that describes OTHER
-// accounts — see the "undisclosed" explanation in src/worker.js. It's
-// used only to decide whether to show the "Manage accounts" button.
+// null for the session if nobody's logged in — renderBoot() then shows
+// the login screen instead of trip data. { id, username, isUberUser }
+// once set. No global "role" -- what an account can do is entirely per
+// trip (each trip's own `myGrant`, from src/worker.js's
+// buildResponseState(); see canFullyEditTrip()/canEditItem() below).
+// `isUberUser` is this account's own flag, only in responses describing
+// the caller's own account (login/whoami/setup), never other accounts —
+// see "undisclosed" in src/worker.js. Used only to show "Manage accounts".
 var currentUser = null;
-// A reserved, server-recognised participant id used when the trip owner is
-// tagged directly. The owner is an account rather than a companion record,
-// so this virtual id lets destinations and itinerary items include them
-// explicitly without manufacturing a duplicate companion just for tagging.
+// Reserved participant id for tagging the trip owner directly (an
+// account, not a companion record) without a duplicate companion.
 var SUPERUSER_PARTICIPANT_ID = '__trip_superuser__';
-// Set by checkAuth() from the whoami response: true only when NO
-// accounts exist yet anywhere, meaning the login screen should offer
-// first-run setup (create the site owner's own account) instead of an
-// ordinary username/password form. See renderAuthScreen().
+// Set by checkAuth() from whoami: true only when no accounts exist yet,
+// so the login screen offers first-run setup instead of a login form.
+// See renderAuthScreen().
 var setupNeeded = false;
-// The account list as last fetched for the "Manage accounts" screen
-// (site owner / uber-user only) — see
-// loadAndRenderManageUsers()/renderManageUsersView().
+// Account list as last fetched for "Manage accounts" (site owner only).
+// See loadAndRenderManageUsers()/renderManageUsersView().
 var managedUsers = [];
 var siteStatus = null;
 
-// Self-hosted version: state no longer lives inside the page's own HTML
-// (that was the Claude Artifact "publish" trick). Instead, the very
-// first thing this page does (see the init() function at the bottom of
-// this file) is fetch() the saved data from our own tiny JSON API,
-// which is backed by Cloudflare KV (see src/worker.js in this repo).
-// This function does the fetching and always resolves to a valid
-// { trips: [...] } object, even if the request fails, so the rest of
-// the app never has to worry about a missing or malformed response.
-// True only while `state` is known to be a faithful copy of what the
-// server actually holds. Set to false the moment a load fails, which is
-// what stops persist() (below) from ever saving over real data with a
-// state that was never really loaded.
+// The first thing this page does (see init() at the bottom) is fetch()
+// saved data from our own JSON API, backed by Cloudflare KV (see
+// src/worker.js). loadInitialState() below always resolves to a valid
+// { trips: [...] }, even on failure, so the rest of the app never
+// worries about a missing/malformed response.
 //
-// WHY THIS EXISTS — this is the most dangerous failure mode this whole
-// app has. A trip is deleted by being LEFT OUT of what the browser sends
-// back (there's no separate delete endpoint — see "SAVING SAFELY" in
-// src/worker.js). So if a load fails and we fall back to "no trips at
-// all", the very next edit would POST an empty list and the server would
-// read that as "delete everything this account can see". For the site
-// owner's account, which can see EVERY trip, that's the entire site's
-// data gone, from one failed request and one subsequent click. The
-// server refuses a save that would delete more than one trip at once as
-// its own backstop, but the browser shouldn't be sending it in the first
-// place.
+// `stateIsTrustworthy` is true only while `state` is known to be a
+// faithful copy of the server's data, set false the moment a load
+// fails — this is what stops persist() from ever saving over real data
+// with a state that was never really loaded. WHY THIS MATTERS: a trip
+// is deleted by being left out of what the browser sends back (no
+// separate delete endpoint — see "SAVING SAFELY" in src/worker.js). If
+// a load fails and falls back to "no trips at all", the next edit would
+// POST an empty list and the server would read that as "delete
+// everything this account can see" — for the site owner, every trip.
+// The server refuses a save deleting more than one trip as a backstop,
+// but the browser shouldn't be sending it in the first place.
 var stateIsTrustworthy = false;
 
 async function loadInitialState() {
@@ -1529,12 +1482,10 @@ async function retryConnection(options) {
   }
 }
 
-// Every mutation in the app goes through here: `mutator` receives a
-// deep clone of the current state and edits it in place (push into an
-// array, change a field, etc). We then hand that clone to persist(),
-// which saves it to the server (see below). Using a clone means a save
-// that fails partway through never leaves the on-screen state
-// half-changed.
+// Every mutation goes through here: `mutator` receives a deep clone of
+// the current state and edits it in place, then persist() saves it to
+// the server. The clone means a save that fails partway never leaves
+// the on-screen state half-changed.
 function updateState(mutator) {
   if (!editingAvailable()) {
     setSaveStatus('readonly', connectionState === 'offline' ? 'Offline' : 'Editing locked');
@@ -1547,25 +1498,19 @@ function updateState(mutator) {
   return true;
 }
 
-// Every mutation in the app goes through updateState() -> persist():
-// updateState() hands persist() a full, already-mutated copy of the
-// trips data, and persist() is the only place that talks to the
-// network. It (a) swaps it in as the live `state`, (b) re-renders
-// immediately so the UI feels instant, and (c) saves it to the server
-// in the background, updating the little "Saved" / "Saving…" label in
-// the top bar so you can always tell whether your last change actually
-// made it to the server.
-// Save queue. Only ever ONE POST to /api/data is in flight at a time,
-// and if more edits happen while one is running, only the newest state
-// is sent afterwards (intermediate ones are already superseded by it —
-// every POST carries the whole picture, not a diff).
+// Every mutation goes through updateState() -> persist(): persist() is
+// the only place that talks to the network. It (a) swaps in the live
+// `state`, (b) re-renders immediately so the UI feels instant, and (c)
+// saves to the server in the background, updating the "Saved"/"Saving…"
+// label in the top bar.
 //
-// Two real problems this avoids. First, ordering: two overlapping saves
-// can finish in either order, so without this an older state could land
-// last and quietly undo the newer edit. Second, and worse: deleting two
-// trips in quick succession used to put two requests in flight whose
-// bodies BOTH omitted the second trip, which the server (rightly) treats
-// as a suspicious multi-trip deletion and rejects outright.
+// Save queue. Only ever one POST to /api/data in flight; if more edits
+// happen while one runs, only the newest state is sent afterwards
+// (every POST carries the whole picture, not a diff). This avoids two
+// problems: ordering (two overlapping saves finishing out of order could
+// let an older state undo a newer edit), and deleting two trips in quick
+// succession putting two requests in flight that both omit the second
+// trip, which the server rejects as a suspicious multi-trip deletion.
 var saveInFlight = false;
 var pendingSaveState = null;
 var lastSaveStartedAt = 0;
@@ -1587,10 +1532,9 @@ function saveNavigationState() {
 }
 
 async function persist(newState) {
-  // See stateIsTrustworthy's comment above: refuse to save at all rather
-  // than risk writing a state we never successfully loaded over real
-  // data. The edit stays on screen so nothing typed is lost visually,
-  // but it is NOT saved, and the indicator says so plainly.
+  // See stateIsTrustworthy above: refuse to save rather than risk
+  // writing over real data with a state never successfully loaded. The
+  // edit stays on screen but is NOT saved; the indicator says so.
   if (!stateIsTrustworthy) {
     setSaveStatus('readonly', 'Editing locked');
     updateSystemFeedback();
@@ -1634,8 +1578,7 @@ async function sendSave(toSave) {
     }
     if (!res.ok) {
       // The server sends a human-readable explanation for a refused save
-      // (e.g. the multi-trip-deletion guard) — show that rather than a
-      // bare status code, since it tells the person what to actually do.
+      // (e.g. the multi-trip-deletion guard) — show that, not a bare code.
       var body = await res.json().catch(function () { return {}; });
       throw new Error(body.error || ('Server responded with status ' + res.status));
     }
@@ -1668,19 +1611,16 @@ async function sendSave(toSave) {
 }
 
 /* ---------- 4b. Auth: login / setup / logout / per-trip permissions ---
-   Everything about WHO is using the app right now, as opposed to WHAT
-   trip data they're looking at (that's `state`, above). See the big
-   comment at the top of src/worker.js for the server side of all of
-   this — this section is just the frontend's half: show a login screen
-   when there's no session, and remember who's logged in once there is
-   one. What that account can actually DO is decided per trip (and, for
-   a "user" grant, per item) — see canFullyEditTrip()/canEditItem() near
-   currentTrip() further down, not anything in this section. */
+   Who's using the app right now, as opposed to what trip data they're
+   looking at (`state`, above). See the top of src/worker.js for the
+   server side; this is just the frontend's half: show a login screen
+   with no session, remember who's logged in once there is one. What
+   that account can DO is decided per trip (and, for a "user" grant, per
+   item) — see canFullyEditTrip()/canEditItem() near currentTrip(). */
 
-// Asks the server "is there a valid session on this browser right now,
-// and if so who?" — always resolves (never throws), leaving currentUser
-// null on any failure so the rest of the app safely falls back to
-// showing the login screen rather than a half-broken page.
+// Asks the server "is there a valid session, and if so who?" — always
+// resolves (never throws), leaving currentUser null on failure so the
+// app falls back to the login screen rather than a half-broken page.
 async function checkAuth() {
   try {
     var res = await fetch('/WayPoint/api/whoami', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
@@ -1697,23 +1637,18 @@ async function checkAuth() {
 }
 
 // Keeps the topbar's "who's logged in" area in sync with `currentUser`.
-// Called any time currentUser changes (after checkAuth(), after a
-// successful login/setup, after logout). There's no global read-only
-// styling to apply here anymore — see the big CSS comment near
-// .account-bar for why permissions moved from "one global role" to "per
-// trip", which every trip/item-level render now checks for itself.
+// Called whenever currentUser changes (checkAuth(), login/setup,
+// logout). No global read-only styling here — permissions are per trip,
+// checked by every trip/item-level render itself.
 function applyAuthUI() {
   var el = document.getElementById('account-bar');
   if (!el) return;
   if (!currentUser) { el.innerHTML = ''; return; }
   // The avatar swatch itself IS the "change your avatar" control -- a
-  // single clickable button showing your current colour+animal, rather
-  // than a separate "Edit avatar" link next to a static preview. See
-  // openAvatarPicker() for the modal it opens. currentUser.avatar is
-  // always a real {color,animal} pair once logged in -- resolveAccountAvatar()
-  // on the server never sends back nothing, even before you've picked one
-  // yourself (see that function's own comment in src/worker.js) -- so
-  // there's no "avatar not set yet" case to special-case here.
+  // single clickable button, rather than a separate edit link. See
+  // openAvatarPicker(). currentUser.avatar is always a real
+  // {color,animal} pair once logged in (resolveAccountAvatar() on the
+  // server never sends back nothing), so no "not set yet" case here.
   var marker = avatarMarkerHtml(currentUser.avatar ? { type: 'account', color: currentUser.avatar.color, animal: currentUser.avatar.animal } : null, currentUser.username);
   var manageDesktop = currentUser.isUberUser ? '<button class="btn btn-ghost" data-action="open-site-settings">Site settings</button><button class="btn btn-ghost" data-action="open-manage-users">Manage accounts</button>' : '';
   var manageMobile = currentUser.isUberUser ? '<button class="account-menu-item" role="menuitem" data-action="open-site-settings">' + icon('settings') + ' Site settings</button><button class="account-menu-item" role="menuitem" data-action="open-manage-users">' + icon('people') + ' Manage accounts</button>' : '';
@@ -1735,11 +1670,9 @@ function applyAuthUI() {
     '</div>';
 }
 
-// Builds the login screen (or, if no account exists anywhere yet, the
-// one-time "set up your Admin account" screen instead — see setupNeeded,
-// set by checkAuth() from the whoami response). `errorMessage`, when
-// given, is shown above the form — e.g. "Incorrect username or password."
-// after a failed attempt.
+// Builds the login screen, or (if no account exists yet — see
+// setupNeeded, set by checkAuth()) the one-time setup screen instead.
+// `errorMessage`, when given, is shown above the form.
 function renderAuthScreen(errorMessage) {
   var errorHtml = errorMessage ? '<p class="auth-error" role="alert" tabindex="-1">' + esc(errorMessage) + '</p>' : '';
   if (setupNeeded) {
@@ -1767,11 +1700,10 @@ function renderAuthScreen(errorMessage) {
   '</div></div>';
 }
 
-// Shared by both the login form and the first-run setup form (see the
-// 'login-form'/'setup-form' branches in the submit listener further
-// down) — POSTs credentials to whichever endpoint, and either lands in
-// the app (on success) or re-shows the same screen with an error message
-// (on failure) rather than leaving the form silently stuck.
+// Shared by the login form and the first-run setup form ('login-form'/
+// 'setup-form' branches in the submit listener below) — POSTs
+// credentials, lands in the app on success or re-shows the screen with
+// an error on failure, rather than leaving the form silently stuck.
 async function submitAuthForm(url, payload) {
   try {
     var res = await fetch(url, {
@@ -1800,16 +1732,13 @@ async function submitAuthForm(url, payload) {
   }
 }
 
-// Forgets "which trip/tab was last open" (see persist()'s own
-// sessionStorage.setItem, and renderBoot()'s read of it) whenever the
-// logged-in account changes — on the app's very first login, and again
-// on every subsequent login/logout. Without this, logging out of one
-// account and straight into a DIFFERENT one on the same browser tab
-// (the exact scenario a shared family device makes routine — see the
-// "Proper login page" choice in the big auth comment above) could land
-// the new account inside whatever trip the PREVIOUS account happened to
-// be viewing, rather than starting fresh at the dashboard — a real bug
-// this project's own tests caught (see test-auth-roles.js).
+// Forgets "which trip/tab was last open" (see persist()'s
+// sessionStorage.setItem and renderBoot()'s read of it) whenever the
+// logged-in account changes. Without this, logging out of one account
+// into a different one on the same browser tab (routine on a shared
+// family device) could land the new account inside the previous
+// account's trip instead of the dashboard — a real bug caught by
+// test-auth-roles.js.
 function clearSavedNav() {
   try { sessionStorage.removeItem('waypoint-nav'); } catch (e) { /* sessionStorage may be unavailable */ }
 }
@@ -1818,28 +1747,24 @@ async function doLogout() {
   try {
     await fetch('/WayPoint/api/logout', { method: 'POST', credentials: 'same-origin' });
   } catch (err) {
-    // Worst case the server-side cookie check still thinks we're logged
-    // in until it expires — but we still drop back to the login screen
-    // client-side either way, and every real data endpoint re-checks
-    // the session itself regardless of what this page believes.
+    // Worst case the server-side cookie lingers until it expires -- we
+    // still drop back to the login screen client-side either way, and
+    // every real data endpoint re-checks the session regardless.
   }
   state = { trips: [] };
   currentView = 'dashboard'; currentTripId = null; currentTab = 'timeline';
   clearSavedNav();
-  // Re-run checkAuth() (rather than just setting currentUser = null
-  // directly) so setupNeeded gets refreshed too — without this, logging
-  // out after the very first-ever setup would show the SETUP screen
-  // again instead of an ordinary login form, because setupNeeded was
-  // last computed back when no account existed yet at all.
+  // Re-run checkAuth() (not just currentUser = null) so setupNeeded
+  // refreshes too -- otherwise logging out right after first-ever setup
+  // would show the setup screen again instead of a login form.
   await checkAuth();
   await renderBoot();
 }
 
-// The single entry point that decides what the page actually shows:
-// the login/setup screen (no session), or the normal app (a valid one).
-// Called once at boot (see init() at the bottom of this file) and again
-// after every login/setup/logout, so it's always this function — never
-// render() directly — that's responsible for that top-level decision.
+// The single entry point deciding what the page shows: the login/setup
+// screen, or the normal app. Called once at boot (see init() at the
+// bottom) and after every login/setup/logout -- always this function,
+// never render() directly, decides that top-level split.
 async function renderBoot() {
   applyAuthUI();
   if (!currentUser) {
@@ -1866,18 +1791,13 @@ async function renderBoot() {
 
 /* ---------- 4c. Manage accounts (site owner / uber-user only) ---------
    A trip-agnostic screen (currentView === 'manage-users') for creating,
-   renaming, resetting the password of, and deleting LOGINS. Deliberately
-   minimal now that permissions live on trips, not accounts (see the big
-   comment near currentTrip() further down) — this screen no longer has
-   anything to do with roles or which trips someone can see; that's
-   entirely up to each trip's own Superuser (or Admin) now, via that
-   trip's own Companions tab (see openCompanionLinkForm()/
-   openAddLinkedCompanionForm() further down). Reached via
-   the "Manage accounts" button in the topbar (see applyAuthUI()), which
-   only ever appears for the account that's actually the uber-user — the
-   server enforces the same rule independently (see src/worker.js's
-   /api/users routes), so this isn't the only thing stopping anyone else
-   from reaching it, just the normal way in. */
+   renaming, resetting the password of, and deleting logins. Minimal,
+   since permissions live on trips now, not accounts -- roles and trip
+   access are each trip's own Superuser/Admin's call, via that trip's
+   Companions tab (openCompanionLinkForm()/openAddLinkedCompanionForm()).
+   Reached via "Manage accounts" in the topbar (applyAuthUI()), shown
+   only for the uber-user -- the server enforces the same rule
+   independently (src/worker.js's /api/users routes). */
 
 async function loadAndRenderManageUsers() {
   currentView = 'manage-users';
@@ -1947,12 +1867,10 @@ function renderSiteSettingsView() {
   return '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + ' All trips</button><div class="section-head"><h1 data-page-heading tabindex="-1">Site settings</h1></div>' + content;
 }
 
-// Opens the Add/Edit account modal. Built directly (rather than through
-// the openForm()/fieldHtml() system every OTHER form in this app uses)
-// since it's such a small, fixed shape that pulling in the generic
-// machinery wouldn't save anything. Uses the same visual chrome (.modal,
-// .field, .btn classes) by hand instead, so it still looks identical to
-// every other modal in the app.
+// Opens the Add/Edit account modal. Built directly rather than through
+// the openForm()/fieldHtml() system every other form uses -- too small a
+// fixed shape to be worth the generic machinery. Uses the same visual
+// chrome (.modal, .field, .btn classes) by hand.
 function openUserForm(existing) {
   var root = document.getElementById('modal-root');
   root.innerHTML =
@@ -2331,24 +2249,19 @@ function closeModal() {
    one field description into the right input, and openForm() wires
    the whole array up into a modal with Cancel/Save buttons. */
 
-// Shared markup for every field with app-rendered suggestions
-// (currency, country, city, timezone, airport) — see the "Generic
-// suggestion dropdown" section further down for the JS that actually
-// drives it. `suggestType` names one of SUGGEST_SOURCES' keys, written
-// as `data-suggest-type` so the generic event listeners know which
-// search/display functions to use without caring which specific field
-// this is. `extraAttrs` is a raw attribute string for whatever a given
-// field type needs beyond the basics (maxlength, uppercase styling,
-// ...); `placeholderFallback` is used only when the field itself
-// didn't specify one.
+// Shared markup for every field with app-rendered suggestions (currency,
+// country, city, timezone, airport) — see "Generic suggestion dropdown"
+// further down for the JS. `suggestType` names a SUGGEST_SOURCES key,
+// written as `data-suggest-type` so generic listeners know which
+// search/display functions to use. `extraAttrs` is a raw attribute
+// string for whatever a field needs beyond the basics; `placeholderFallback`
+// is used only when the field didn't specify its own.
 // Reads a 'tag-picker' field's selections back out of a submitted form's
 // values object. A tag-picker renders one checkbox per companion, each
-// with its OWN unique name ("<field.key>__<companionId>") rather than
-// several checkboxes sharing one name — see the 'tag-picker' case in
-// fieldHtml() below for exactly why (currentFormValues()'s handling of
-// repeated names is the short version). This is the matching read-back
-// half: it scans every key in `values` for that "<key>__" prefix and
-// pulls the companion id back out of whichever ones were checked.
+// with its own unique name ("<field.key>__<companionId>") rather than
+// several sharing one name (see the 'tag-picker' case in fieldHtml()
+// below for why). This scans every key in `values` for that "<key>__"
+// prefix and pulls the companion id from whichever were checked.
 function readTagPicker(values, key) {
   var prefix = key + '__';
   var ids = [];
@@ -2360,17 +2273,13 @@ function readTagPicker(values, key) {
   return ids;
 }
 
-// Returns a shallow copy of `fields` with its 'tag-picker' field (if it
-// has one) marked `locked: true` — see fieldHtml()'s 'tag-picker' case
-// for what that actually does (disables the checkboxes, adds an
-// explanatory hint). Used whenever an item's edit form is opened by a
-// "user" grant editing one of their own tagged items: they can change
-// that item's OTHER fields, but never retag it — the Worker's
-// mergeUserScopedList() (src/worker.js) silently keeps the stored tags
-// no matter what a submitted form claims anyway, so this is just making
-// the UI honest about that rather than showing a control that wouldn't
-// do anything. `fields` may itself be a function (e.g. Transport's
-// mode-dependent field list) — this wraps it transparently either way.
+// Returns a shallow copy of `fields` with its 'tag-picker' field (if any)
+// marked `locked: true` (see fieldHtml()'s 'tag-picker' case: disables
+// checkboxes, adds a hint). Used when a "user" grant edits one of its own
+// tagged items -- they can change other fields but never retag; the
+// Worker's mergeUserScopedList() keeps stored tags regardless, so this
+// just makes the UI honest about a control that wouldn't do anything.
+// `fields` may be a function (e.g. Transport's mode-dependent list).
 function fieldsWithTagPickerLock(fields, locked) {
   if (!locked) return fields;
   var lockOne = function (list) {
@@ -2534,33 +2443,27 @@ function journeyTimingHtml(field, values, trip) {
 }
 
 function fieldHtml(field, value, trip, allValues) {
-  // allValues (optional): every value currently in the form (initial
-  // values, or the live values on a reactive re-render — see
-  // fieldsHtml() below), so a field can peek at a sibling field's
-  // value while building its own HTML. Only the 'flight-lookup' case
-  // uses this today (to default its date input from "Depart date").
+  // allValues (optional): every value currently in the form (initial or
+  // live on a reactive re-render, see fieldsHtml() below), so a field
+  // can peek at a sibling's value. Only 'flight-lookup' uses this today.
   var val = (value === undefined || value === null) ? '' : value;
   var req = field.required ? 'required' : '';
   var fullClass = field.wide ? ' field-wide' : '';
 
-  // Rendered separately from every other type below: a checkbox reads
-  // naturally with its label right next to it on one line ("[x] Use a
-  // different exchange rate for this leg"), not the standard pattern
-  // of a block label sitting above the input. Always full-width (see
-  // callers, which mark every checkbox field `wide: true`) so it never
-  // gets paired into a two-column row next to an unrelated field.
+  // Rendered separately: a checkbox reads naturally with its label next
+  // to it on one line, not a block label above the input. Always
+  // full-width (callers mark every checkbox `wide: true`) so it's never
+  // paired into a two-column row.
   if (field.type === 'checkbox') {
     return '<div class="field' + fullClass + '"><label class="checkbox-field">' +
       '<input type="checkbox" name="' + field.key + '"' + (val ? ' checked' : '') + '> ' + esc(field.label) + '</label>' +
       (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '') + '</div>';
   }
 
-  // Also rendered separately, for the same reason as 'checkbox' above: a
-  // multi-select (several companions can be tagged to one item) doesn't
-  // fit the "one <input>, one value" shape the switch below assumes. See
-  // readTagPicker() just above for the read-back side, and its comment
-  // for why each checkbox gets its own unique name rather than sharing
-  // `field.key` the way every other field's single <input> does.
+  // Also rendered separately, like 'checkbox': a multi-select (several
+  // companions tagged to one item) doesn't fit the "one <input>, one
+  // value" shape the switch below assumes. See readTagPicker() above for
+  // the read-back side and why each checkbox gets its own unique name.
   if (field.type === 'tag-picker') {
     var companions = taggablePeople(trip);
     if (companions.length === 0) {
@@ -2571,18 +2474,13 @@ function fieldHtml(field, value, trip, allValues) {
       if (!!a.isSuperuser !== !!b.isSuperuser) return a.isSuperuser ? -1 : 1;
       return a.name.localeCompare(b.name);
     }).map(function (c) {
-      // Checked if this render came from the record's saved value (`val`
-      // is the plain array of companion ids in that case), OR — on a
-      // reactive re-render, where `val` itself is blank because there's
-      // no single flat "companions" key in live form data — if the
-      // uniquely-named checkbox for this companion shows up checked in
-      // `allValues` instead. Either source is enough; checking both means
-      // this reads correctly whichever situation produced this render.
+      // Checked if `val` is the record's saved array of companion ids, OR
+      // (on a reactive re-render, where `val` is blank) the uniquely-named
+      // checkbox shows up checked in `allValues` instead.
       var checked = (Array.isArray(val) && val.indexOf(c.companionId) !== -1) || (allValues && allValues[field.key + '__' + c.companionId]);
-      // `field.locked` (see fieldsWithTagPickerLock()) disables every
-      // checkbox — a disabled checkbox is left out of the submitted
-      // FormData entirely, so readTagPicker() sees no change for this
-      // item regardless, matching what the Worker enforces server-side.
+      // `field.locked` (fieldsWithTagPickerLock()) disables every checkbox
+      // -- a disabled checkbox is left out of FormData entirely, matching
+      // what the Worker enforces server-side.
       return '<label class="tag-picker-item"><input type="checkbox" name="' + field.key + '__' + c.companionId + '" data-tag-picker-key="' + field.key + '" data-tag-person-id="' + c.companionId + '"' + (checked ? ' checked' : '') + (field.locked ? ' disabled' : '') + '> ' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + (c.isSuperuser ? '<span class="tag-picker-role">Superuser</span>' : '') + '</label>';
     }).join('');
     return '<div class="field' + fullClass + '"><label>' + esc(field.label) + '</label><div class="tag-picker">' + pickerItems + '</div>' +
@@ -2634,25 +2532,17 @@ function fieldHtml(field, value, trip, allValues) {
       inputHtml = suggestInputHtml(field, val, req, 'city', 'maxlength="80"');
       break;
     case 'airport':
-      // Suggestions are shown as "CODE — Name" but nothing forces the
-      // value to match that shape — typing just the 3-letter code (or
-      // a city name for a mode where a full airport isn't really the
-      // right concept) is equally valid. Uses the same suggestInputHtml()
-      // dropdown as currency/country/city/timezone (see the "Generic
-      // suggestion dropdown" section further down) — airport was the
-      // first field converted from a native <datalist> to this, for the
-      // reasons explained there, and the rest followed for consistency.
+      // Suggestions show as "CODE — Name" but nothing forces that shape
+      // -- a 3-letter code or a city name is equally valid. Uses the
+      // same suggestInputHtml() dropdown as currency/country/city/
+      // timezone (see "Generic suggestion dropdown" below).
       //
-      // The hint underneath is airport-specific, on top of the shared
-      // dropdown: a live, honest signal of whether whatever's typed so
-      // far actually resolves to a real coordinate — checked against
-      // the SAME two sources (COMMON_AIRPORTS, then AIRPORT_DB) that
-      // openTransportForm()'s onSubmit uses when the leg is actually
-      // saved, via airportCoordsFromText(). Computed once here for
-      // whatever the field already contains (e.g. editing an existing
-      // leg, or the field list re-rendering after a mode switch), then
-      // kept live after that by the shared 'input' listener (see its
-      // airport-specific branch).
+      // The hint underneath is airport-specific: a live signal of
+      // whether the typed text resolves to a real coordinate, checked
+      // against the same two sources (COMMON_AIRPORTS, then AIRPORT_DB)
+      // openTransportForm()'s onSubmit uses when saved, via
+      // airportCoordsFromText(). Computed once here, then kept live by
+      // the shared 'input' listener's airport-specific branch.
       var airportResolved = airportCoordsFromText(val);
       var airportHintText = !val ? ''
         : (airportResolved ? '✓ Mapped precisely for the Map tab' : 'No exact airport match yet — the map will try to search by name instead.');
@@ -2661,28 +2551,16 @@ function fieldHtml(field, value, trip, allValues) {
         '<div class="' + airportHintClass + '" id="' + field.key + '-resolve-hint">' + esc(airportHintText) + '</div>';
       break;
     case 'flight-lookup':
-      // A text input, a date input, and a "Look up" button — clicking
-      // it calls our /WayPoint/api/flight-lookup endpoint (see the
-      // click delegation handler's 'lookup-flight' branch) and, on
-      // success, fills in Airline/From/To/times right in this same
-      // open form. AeroDataBox looks flights up by number AND date;
-      // that date used to only come from "Depart date" further down
-      // this same form (not visible yet at the point someone's just
-      // typed a flight number, which was awkward — see
-      // performFlightLookup()'s comment for the full story). The date
-      // input right here is deliberately NOT a named form field (no
-      // `name` attribute, so it isn't submitted with the rest of the
-      // form) — it's just a convenient place to type/confirm the date
-      // for the lookup itself; performFlightLookup() falls back to the
-      // real "Depart date" field if this one's left blank, and copies
-      // whichever date was actually used back into "Depart date" on a
-      // successful lookup, so the two never end up disagreeing. It's
-      // pre-filled from "Depart date" here (via the 4th `allValues`
-      // argument fieldHtml() gets — see fieldsHtml()) when editing an
-      // existing leg or when the mode was just switched to Flight with
-      // a date already typed. The status line underneath reports what
-      // happened (looking up / not found / filled in), since there's
-      // nowhere else in a modal form to show that feedback.
+      // A text input, a date input, and a "Look up" button — calls
+      // /WayPoint/api/flight-lookup (see the click delegation handler's
+      // 'lookup-flight' branch) and fills in Airline/From/To/times on
+      // success. AeroDataBox needs a date too; the date input here is
+      // deliberately not a named form field (no `name`, not submitted)
+      // -- just a place to confirm the lookup date. performFlightLookup()
+      // falls back to "Depart date" if this is blank, and copies
+      // whichever date was used back into "Depart date" on success, so
+      // the two never disagree. Pre-filled from "Depart date" via the
+      // `allValues` argument. The status line reports what happened.
       var lookupDateDefault = (allValues && allValues.departDate) || '';
       inputHtml = '<div class="flight-lookup-row">' +
         '<input class="flight-lookup-code" type="text" maxlength="10" ' +
@@ -2708,20 +2586,14 @@ function fieldHtml(field, value, trip, allValues) {
         return '<option value="' + c.contactId + '" ' + (c.contactId === val ? 'selected' : '') + '>' + esc(c.name) + '</option>';
       }).join('') + '</select>';
       break;
-    // A row of colour swatches, native radio buttons underneath (visually
-    // hidden — see the .avatar-swatch-radio CSS rule) so this needs no
-    // custom click-handling JS at all, the same way every other field
-    // here just relies on FormData at submit time. Used for a
-    // companion's smiley colour (see COMPANION_FIELDS/
-    // COMPANION_FIELDS_LIMITED and openCompanionForm() further down) --
-    // the account-holder picker (a bigger, two-step colour+animal choice)
-    // is its own dedicated modal, openAvatarPicker(), rather than a
-    // field in this generic form system. `c.hex` here is interpolated
-    // straight from AVATAR_COLORS, a fixed local constant this page
-    // ships with — never a stored/network value — so this is NOT the
-    // "never put a raw stored token in a style attribute" case that
-    // avatarColorHex() exists to guard against elsewhere (see
-    // avatarMarkerHtml()'s comment).
+    // A row of colour swatches over visually-hidden native radio buttons
+    // (.avatar-swatch-radio), needing no custom click-handling JS. Used
+    // for a companion's smiley colour (COMPANION_FIELDS/
+    // COMPANION_FIELDS_LIMITED, openCompanionForm()) -- the account-holder
+    // picker is its own modal, openAvatarPicker(). `c.hex` comes straight
+    // from AVATAR_COLORS, a fixed local constant, not a stored/network
+    // value, so this isn't the risk avatarColorHex() guards against
+    // elsewhere (see avatarMarkerHtml()).
     case 'avatar-color':
       inputHtml = '<div class="avatar-swatch-grid">' + AVATAR_COLORS.map(function (c) {
         return '<label class="avatar-swatch-label" title="' + esc(c.token) + '">' +
@@ -2737,13 +2609,10 @@ function fieldHtml(field, value, trip, allValues) {
     (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '') + '</div>';
 }
 
-// Groups adjacent short fields into two-column rows so the form
-// doesn't feel like one long single column; textareas and any field
-// marked `wide` always take the full width.
-// Any single-line input type can share a row; only a textarea (or a
-// field explicitly marked `wide`) always takes the full width. Kept
-// as a blacklist rather than a whitelist so a new short-input field
-// type (like "country") doesn't need this list updated too.
+// Groups adjacent short fields into two-column rows so the form doesn't
+// feel like one long column; textareas and fields marked `wide` always
+// take full width. A blacklist rather than a whitelist, so a new
+// short-input field type doesn't need this list updated too.
 function isPairableField(f) {
   return f.type !== 'textarea' && !f.wide;
 }
@@ -2845,10 +2714,8 @@ function openForm(opts) {
       '</div>' +
     '</div>';
   // No <datalist> elements to seed here — every suggestible field
-  // (currency, country, city, timezone, airport) renders its own
-  // app-managed dropdown via suggestInputHtml(), built on demand as
-  // each field is focused/typed into rather than seeded once here. See
-  // the "Generic suggestion dropdown" section further down.
+  // renders its own app-managed dropdown via suggestInputHtml(), built
+  // on demand. See "Generic suggestion dropdown" further down.
 }
 
 /* ---------- 7. Entity field schemas --------------------------------- */
@@ -2861,28 +2728,19 @@ var TRIP_FIELDS = [
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
-// Same as TRIP_FIELDS above, plus one extra box -- ONLY used when
-// creating a brand-new trip (see openTripForm()), never when editing
-// one that already exists. Editing doesn't get this field because it's
-// a one-shot "quick add" convenience for the moment a trip is first set
-// up; re-showing it on every edit would be misleading (typing a name in
-// here again would just create ANOTHER new companion, not edit an
-// existing one -- there's no way for a plain text box to mean "edit").
-// Adding, renaming or removing companions after creation is always done
-// from the trip's own Companions tab instead (openCompanionForm(),
-// openAddLinkedCompanionForm()), which have the full picture (existing
-// companions, smiley colours, account links) that this quick box
-// deliberately leaves out to keep trip creation itself fast and simple.
+// Same as TRIP_FIELDS above, plus one extra box -- only used when
+// creating a brand-new trip (openTripForm()), never when editing one.
+// A one-shot "quick add" convenience; re-showing it on edit would be
+// misleading (typing a name would create ANOTHER companion, not edit
+// one). Adding/renaming/removing companions after creation is done from
+// the Companions tab instead (openCompanionForm(),
+// openAddLinkedCompanionForm()), which has the full picture this quick
+// box deliberately leaves out.
 //
-// The box itself is just a plain multiline textarea -- reusing the
-// existing 'textarea' field type rather than inventing a new one -- with
-// its contents parsed into brand-new Guest companion records at submit
-// time (see openTripForm()'s onSubmit). It's built this way rather than
-// with the 'tag-picker' field type used elsewhere (e.g. DESTINATION_FIELDS'
-// "Companions" field) because tag-picker can only PICK FROM a trip's
-// EXISTING companions (see fieldHtml()'s 'tag-picker' case) -- and a
-// trip that's still being created has no companions yet for it to pick
-// from.
+// A plain multiline textarea, parsed into new Guest companion records
+// at submit time (openTripForm()'s onSubmit) -- not the 'tag-picker'
+// type used elsewhere, since tag-picker can only pick from EXISTING
+// companions, and a trip being created has none yet.
 var TRIP_FIELDS_NEW = TRIP_FIELDS.concat([
   { key: 'companionNames', label: 'Who\'s coming with you? (optional)', type: 'textarea', wide: true,
     placeholder: 'One name per line -- e.g.\nAlex\nSam',
@@ -2933,16 +2791,12 @@ var ACTIVITY_FORM_SECTIONS = [
 ];
 
 // Transport fields depend on the chosen mode: a flight needs a flight
-// number, a car rental doesn't (but wants a rental company and plate
-// instead), and so on. transportSectionsForMode() builds the right field
-// list for whichever mode/payment-type is currently selected in the
-// form; "Mode", "Paid with", and the exchange-rate checkbox are all
-// wired up as the form's `reactiveKey` (see openForm/openTransportForm
-// below, and the 'change' listener that reads it) so changing any of
-// them re-renders the field list live, without losing whatever else
-// was typed. (Seat/coach numbers used to live here too — dropped as
-// unwanted clutter; carrier/flight-number/plate still do, they're
-// worth keeping.)
+// number, a car rental wants a rental company and plate instead, etc.
+// transportSectionsForMode() builds the right field list for whichever
+// mode/payment-type is selected; "Mode", "Paid with", and the
+// exchange-rate checkbox are wired up as the form's `reactiveKey` (see
+// openForm/openTransportForm below) so changing any re-renders the
+// field list live without losing what was typed.
 var TRANSPORT_MODE_FIELDS = {
   Flight: [
     { key: 'carrier', label: 'Airline', type: 'text', placeholder: 'e.g. British Airways' },
@@ -2966,17 +2820,12 @@ var TRANSPORT_MODE_FIELDS = {
   ]
 };
 
-// Builds the cost/points portion of the form for whichever "Paid with"
-// option is currently selected — the only part of this form that
-// varies by something other than Mode. Cash and Points are each a
-// self-contained pair of fields; Combo is literally both sections one
-// after another; Free contributes nothing past the selector itself,
-// since there's nothing to record. Every field here is either part of
-// an even-numbered pair (so fieldsHtml()'s automatic adjacent-pairing
-// puts them on one row, e.g. currency+amount) or marked `wide` (so it
-// always stands alone) — that's what keeps this laid out correctly
-// however the branches combine, with no extra layout logic needed
-// beyond ordering things right below.
+// Builds the cost/points portion for whichever "Paid with" option is
+// selected. Cash and Points are each a self-contained pair of fields;
+// Combo is both one after another; Free contributes nothing. Every
+// field is either part of an even pair (fieldsHtml() auto-pairs them
+// onto one row) or marked `wide` -- that's what keeps layout correct
+// however the branches combine.
 function transportPaymentFields(values) {
   var paymentType = values.paymentType || 'Free';
   var showCash = paymentType === 'Cash' || paymentType === 'Combo';
@@ -3066,37 +2915,28 @@ var CONTACT_FIELDS = [
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
-// Companions are a different idea from Contacts above: not a service
-// provider you might call, but a person actually ON this trip with you
-// (or on part of it) — the thing every destination/activity/accommodation/
-// transport form's "Companions" tag-picker field points at (see
-// tagPickerHtml()/the 'tag-picker' case in fieldHtml(), further down).
+// Companions are a different idea from Contacts above: a person actually
+// on this trip, the thing every "Companions" tag-picker field points at
+// (see the 'tag-picker' case in fieldHtml()).
 //
-// `smileyColor` is the one new field for the Companions/Avatars feature
-// (see openCompanionForm() further down for how it maps to/from the
-// stored `avatar.smiley`): it only actually shows up on a companion's
-// marker if they're NOT linked to an account (see resolveCompanionAvatars()
-// in src/worker.js) — an account-linked companion always shows that
-// account's own coloured-circle-and-animal instead, picked separately via
-// openAvatarPicker(). Deliberately nothing else about a companion is ever
-// referenced elsewhere in the app (`accountId` is real but is NEVER part
-// of this form — see the big COMPANIONS & AVATARS comment in
-// src/worker.js for why it's only ever set through the dedicated
-// link/unlink action, openCompanionLinkForm() further down).
+// `smileyColor` (openCompanionForm() maps it to/from stored
+// `avatar.smiley`) only shows up if the companion isn't linked to an
+// account (resolveCompanionAvatars() in src/worker.js) -- a linked
+// companion shows that account's own colour+animal instead, picked via
+// openAvatarPicker(). `accountId` is real but never part of this form --
+// see COMPANIONS & AVATARS in src/worker.js for why it's only ever set
+// via the dedicated link/unlink action, openCompanionLinkForm().
 var COMPANION_FIELDS = [
   { key: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Sarah' },
   { key: 'smileyColor', label: 'Smiley colour', type: 'avatar-color', wide: true, hint: 'Shown on their marker unless they\'re linked to an account, which gives them their own colour + animal instead.' },
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
-// The Phase-3 version of the form above: what a "user" grant is allowed
-// to specify when APPENDING a brand-new companion (see
-// mergeUserScopedCompanions() in src/worker.js) — name and a smiley
-// colour, nothing else. Deliberately a separate, shorter list rather
-// than just hiding fields on COMPANION_FIELDS with CSS: showing a Notes
-// field that then silently gets dropped server-side (mergeUserScopedCompanions()
-// never carries it through) would be actively misleading, not just
-// unnecessary.
+// The Phase-3 version of the form above: what a "user" grant may specify
+// when appending a brand-new companion (mergeUserScopedCompanions() in
+// src/worker.js) -- name and a smiley colour, nothing else. A separate,
+// shorter list rather than hiding fields with CSS: a Notes field that
+// silently gets dropped server-side would be misleading.
 var COMPANION_FIELDS_LIMITED = [
   { key: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Sarah' },
   { key: 'smileyColor', label: 'Smiley colour', type: 'avatar-color', wide: true }
@@ -3181,68 +3021,53 @@ function readPickerBbox(value) {
 }
 
 /* ---- Per-trip permissions ---------------------------------------------
-   Every trip the server sends back carries a `myGrant` field (set by
-   buildResponseState() in src/worker.js) saying exactly what THIS
-   account may do with THIS trip, right now — there's no single global
-   "role" anymore (compare the old `currentUser.role` this app used to
-   have). `myGrant` is always one of:
-     { role: 'superuser' }                    -- owner, or the uber-user.
-     { role: 'admin' }                         -- full read/write, no sharing control.
-     { role: 'user',   companionId: '...' }    -- read/write, own tagged items only.
-     { role: 'viewer', companionId: '...' }    -- read-only, own tagged items only.
-   These four little functions are the ONLY place the rest of the app
-   asks "am I allowed to ___ on this trip/item?" — every render below
-   goes through them rather than re-deriving the logic inline, so there's
-   exactly one place to get this right. ------------------------------- */
+   Every trip carries a `myGrant` field (buildResponseState() in
+   src/worker.js) saying what this account may do with it, right now --
+   no single global role. `myGrant` is always one of:
+     { role: 'superuser' }                  -- owner, or the uber-user.
+     { role: 'admin' }                      -- full read/write, no sharing.
+     { role: 'user',   companionId: '...' } -- read/write, own tagged items.
+     { role: 'viewer', companionId: '...' } -- read-only, own tagged items.
+   These functions are the only place the app asks "am I allowed to ___
+   on this trip/item?" — every render below goes through them. ------- */
 
-// Full read/write on the trip itself (its own name/dates/notes, and
-// every item on it) — true for a Superuser or an "admin" grant. False
+// Full read/write on the trip -- true for Superuser or "admin". False
 // for a scoped "user"/"viewer" grant.
 function canFullyEditTrip(trip) {
   var g = trip && trip.myGrant;
   return !!g && (g.role === 'superuser' || g.role === 'admin');
 }
 
-// A trip's Superuser (its owner, or the uber-user) can decide who else
-// has access to it -- and, as of Phase 2 of the Companions/Avatars
-// feature, so can an "admin" grant, though only as far as User/Viewer
-// (see canGrantAdminRole() below for the one thing an Admin still can't
-// do). See openCompanionLinkForm()/openAddLinkedCompanionForm() further
-// down (their privilege-level select is gated on this), and
-// handleTripGrantsUpsert()/handleTripGrantsRevoke() in src/worker.js for
-// the server-side mirror of this exact check.
+// A trip's Superuser can decide who else has access -- and so can an
+// "admin" grant, but only as far as User/Viewer (see canGrantAdminRole()
+// below). Mirrored server-side by handleTripGrantsUpsert()/
+// handleTripGrantsRevoke() in src/worker.js.
 function canShareTrip(trip) {
   var g = trip && trip.myGrant;
   return !!g && (g.role === 'superuser' || g.role === 'admin');
 }
 
-// Only the trip's actual Superuser (its owner, or the uber-user) may
-// grant someone ELSE Admin access -- an Admin grant can share the trip,
-// but only as User or Viewer, so creating another Admin stays the
-// owner's call alone. See openCompanionLinkForm()/
-// openAddLinkedCompanionForm()'s own privilege-level dropdowns further
-// down.
+// Only the trip's actual Superuser may grant someone else Admin access --
+// an Admin grant can share as User/Viewer only, so creating another
+// Admin stays the owner's call alone.
 function canGrantAdminRole(trip) {
   var g = trip && trip.myGrant;
   return !!g && g.role === 'superuser';
 }
 
-// Can THIS account link a companion to an account -- either upgrading an
-// existing Guest into a Companion (openCompanionLinkForm()), or adding a
-// brand-new one already linked in one step (openAddLinkedCompanionForm())?
-// Superuser/Admin only (Phase 2), same bar as sharing itself -- see
-// canShareTrip() above. Note this is a DIFFERENT, lower bar than
-// canAddCompanion() below: canAddCompanion() also covers a "user" grant
-// adding a plain Guest (Phase 3), but a "user" grant may never link one
-// to an account -- see mergeUserScopedCompanions() in src/worker.js for
-// exactly what a "user" grant's own submission is allowed to contain.
+// Can this account link a companion to an account -- upgrading an
+// existing Guest into a Companion, or adding a new one already linked?
+// Superuser/Admin only, same bar as sharing -- see canShareTrip() above.
+// A lower bar than canAddCompanion() below covers: a "user" grant may add
+// a plain Guest but never link one to an account (see
+// mergeUserScopedCompanions() in src/worker.js).
 function canLinkCompanion(trip) {
   return canShareTrip(trip);
 }
-// Can THIS account add a brand-new Guest (name + smiley colour, no
-// login)? True for Superuser/Admin (who can also add a linked Companion
-// instead -- see canLinkCompanion() above) PLUS a "user" grant, who may
-// only ever append a Guest, never a Companion.
+// Can this account add a brand-new Guest (name + smiley colour, no
+// login)? True for Superuser/Admin (who can also add a linked Companion,
+// see canLinkCompanion() above) plus a "user" grant, who may only ever
+// append a Guest, never a Companion.
 function canAddCompanion(trip) {
   if (canFullyEditTrip(trip)) return true;
   var g = trip && trip.myGrant;
@@ -3257,13 +3082,10 @@ function myCompanionId(trip) {
   return (g && (g.role === 'user' || g.role === 'viewer')) ? (g.companionId || '') : '';
 }
 
-// Can THIS ONE item be edited? True everywhere canFullyEditTrip() is,
-// PLUS for a "user" grant when `item` is tagged with their companion —
-// never true for a "viewer" grant, however it's scoped (read-only is
-// read-only). Only meaningful for the four taggable item types
-// (destinations/activities/accommodation/transport); companions,
-// contacts and expenses aren't per-companion scoped, so callers for
-// those just use canFullyEditTrip() directly instead of this.
+// Can this one item be edited? True wherever canFullyEditTrip() is, plus
+// for a "user" grant when `item` is tagged with their companion -- never
+// true for "viewer". Only meaningful for the four taggable item types;
+// companions/contacts/expenses use canFullyEditTrip() directly.
 function canEditItem(trip, item) {
   if (canFullyEditTrip(trip)) return true;
   var g = trip && trip.myGrant;
@@ -3283,13 +3105,9 @@ function defaultHomeCurrency() {
   return (last && last.homeCurrency) || 'GBP';
 }
 
-// Splits the "Who's coming with you?" textarea (see TRIP_FIELDS_NEW)
-// into a list of trimmed, non-empty names -- one per line, but a comma
-// also works as a separator in case someone types "Alex, Sam" on a
-// single line instead. Duplicates aren't filtered out: if someone
-// genuinely types the same name twice that's their call, and two
-// guests are allowed to share a name anyway (companions are matched by
-// id everywhere, never by name -- see e.g. readTagPicker()).
+// Splits the "Who's coming with you?" textarea into trimmed, non-empty
+// names -- one per line, or comma-separated. Duplicates aren't filtered:
+// two guests may share a name anyway (matched by id, never by name).
 function parseCompanionNamesBox(text) {
   return (text || '').split(/[\n,]/).map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
 }
@@ -3309,15 +3127,12 @@ function openTripForm(existing) {
           var t = byId(next.trips, existing.tripId, 'tripId');
           t.name = v.name; t.startDate = v.startDate || ''; t.endDate = v.endDate || '';
           t.homeCurrency = (v.homeCurrency || 'GBP').toUpperCase(); t.notes = v.notes || '';
-          // ownerId/grants/myGrant aren't touched here at all -- they
-          // already carried over from `existing` via byId() above, and
-          // the Worker only ever trusts its OWN stored copy of them
-          // regardless (see "SAVING SAFELY" in src/worker.js).
+          // ownerId/grants/myGrant aren't touched -- they carried over
+          // from `existing` via byId() above, and the Worker only trusts
+          // its own stored copy anyway (see "SAVING SAFELY" in src/worker.js).
         } else {
-          // Turn whatever was typed into the "Who's coming with you?"
-          // box into brand-new Guest companion records (name only, no
-          // login, no smiley colour picked yet -- same minimal shape
-          // openCompanionForm() creates when no colour is chosen). Each
+          // Turn the "Who's coming with you?" box into brand-new Guest
+          // companion records (name only, no login/colour yet). Each
           // needs its own fresh id, same as any other companion.
           var newCompanions = parseCompanionNamesBox(v.companionNames).map(function (name) {
             return { companionId: newId(), name: name, notes: '' };
@@ -3329,13 +3144,10 @@ function openTripForm(existing) {
             // Kept for backwards compatibility with existing trip records.
             // New map locations are saved directly on their entries.
             geocodeCache: {},
-            // Creating a trip makes you its permanent Superuser (owner) --
-            // the Worker enforces this for real when it actually saves a
-            // brand-new trip id (see handlePost()'s "anything submitted
-            // that ISN'T an existing trip id" branch), but setting it here
-            // too means the UI shows the right controls (Edit/Delete trip,
-            // "Add" buttons, the Share panel) immediately, on this very
-            // first render, rather than only after the next reload.
+            // Creating a trip makes you its permanent Superuser -- the
+            // Worker enforces this for real (handlePost()'s new-trip-id
+            // branch), but setting it here too shows the right controls
+            // immediately rather than only after the next reload.
             ownerId: currentUser.id, ownerUsername: currentUser.username, grants: [],
             myGrant: { role: 'superuser' },
             // Server-computed on future loads; included optimistically so
@@ -3465,16 +3277,11 @@ function openActivityForm(trip, existing, seed) {
 
 // Resolves the map coordinate to save for one end (From or To) of a
 // Flight leg, in priority order: (1) a known match in COMMON_AIRPORTS
-// for the typed/selected code — the common case, and the one that
-// actually fixes routes like SFO–ICN not showing up on the Map tab;
-// (2) whatever the most recent "Look up" click in this form session (if
-// any) returned for that end, via AeroDataBox's own location data (see
-// lastFlightLookupCoords) — covers airports too minor to be in
-// COMMON_AIRPORTS; (3) a coordinate already saved on this same leg from
-// an earlier save, reused ONLY if the location text hasn't changed
-// since (so editing "From" to somewhere else can't accidentally keep
-// the old place's coordinate). Anything else returns null and is shown
-// as an unmapped transport end until the person selects or pins it.
+// for the typed/selected code; (2) the most recent "Look up" click's
+// AeroDataBox location data for that end (see lastFlightLookupCoords),
+// covering airports too minor for COMMON_AIRPORTS; (3) a coordinate
+// already saved on this leg, reused only if the location text hasn't
+// changed since. Anything else returns null and shows as unmapped.
 function resolveLegCoords(text, lookupCoords, existing, textKey, latKey, lngKey) {
   var staticMatch = airportCoordsFromText(text);
   if (staticMatch) return staticMatch;
@@ -3494,47 +3301,36 @@ function pickerCoords(values, prefix) {
 }
 
 function openTransportForm(trip, existing, seed) {
-  // A brand-new leg needs paymentType set explicitly to 'Free' here,
-  // not left undefined — a <select> with nothing marked `selected`
-  // just shows its first listed option ("Cash") regardless of what
-  // transportPaymentFields() treats as the default internally, which
-  // would show "Cash" selected while still rendering NO cost fields
-  // (since that function separately defaults an undefined paymentType
-  // to 'Free'). Setting it here keeps the visible selection and the
-  // fields actually shown in agreement from the very first render.
+  // A brand-new leg needs paymentType explicitly set to 'Free', not left
+  // undefined -- a <select> with nothing `selected` shows its first
+  // option ("Cash") even though transportPaymentFields() separately
+  // defaults undefined to 'Free', which would render no cost fields.
+  // Setting it here keeps the selection and shown fields in agreement.
   var initial = existing ? Object.assign({}, existing, splitDateTime(existing.departDateTime), transportPickerInitial(existing, 'from'), transportPickerInitial(existing, 'to'), {
     arriveDate: dateOnly(existing.arriveDateTime), arriveTime: timeOnly(existing.arriveDateTime)
   }) : Object.assign({ mode: 'Flight', paymentType: 'Free' }, seed || {});
   if (existing) { initial.departDate = dateOnly(existing.departDateTime); initial.departTime = timeOnly(existing.departDateTime); }
   if (existing) {
-    // Older saved legs predate "Paid with" — infer a starting value
-    // from what they already have (a cost amount means Cash; nothing
-    // means Free) rather than defaulting blank, so editing one doesn't
-    // make its existing cost data vanish behind a payment type that
-    // hides it. costRateOverrideEnabled is real boolean state (not a
-    // saved field) purely so the checkbox starts checked when a rate
-    // override was already saved — see transportPaymentFields()'s
-    // comment on how it reads this same key back off live form data.
+    // Older saved legs predate "Paid with" -- infer a starting value
+    // (a cost amount means Cash, nothing means Free) rather than blank,
+    // so editing doesn't hide existing cost data. costRateOverrideEnabled
+    // is real boolean state, not a saved field, so the checkbox starts
+    // checked when a rate override was already saved.
     if (!initial.paymentType) initial.paymentType = existing.costAmount ? 'Cash' : 'Free';
     initial.costRateOverrideEnabled = !!existing.costRate;
   }
-  // A fresh form session shouldn't inherit a coordinate from whatever
-  // leg was last looked up (possibly minutes ago, possibly a
-  // completely different leg) — see lastFlightLookupCoords' own
-  // comment for why this matters.
+  // A fresh form session shouldn't inherit a coordinate from whatever leg
+  // was last looked up -- see lastFlightLookupCoords' own comment.
   lastFlightLookupCoords = { from: null, to: null };
   openForm({
     title: existing ? 'Edit transport leg' : 'Add transport leg',
-    // The field list depends on whichever mode AND payment type are
-    // currently selected (a flight shows a flight-number field, Cash
-    // shows a currency+amount, etc.) — see transportSectionsForMode().
-    // sectionsWithTagPickerLock() wraps that transparently to also lock
-    // the Companions picker when a "user" grant is editing their own leg.
+    // Field list depends on mode and payment type (a flight shows a
+    // flight-number field, Cash shows currency+amount, etc.) — see
+    // transportSectionsForMode(). sectionsWithTagPickerLock() also locks
+    // the Companions picker when a "user" grant edits their own leg.
     sections: sectionsWithTagPickerLock(function (values) { return transportSectionsForMode(values); }, !!existing && !canFullyEditTrip(trip)),
-    // Three fields drive a live re-render, not just Mode: switching
-    // "Paid with" swaps in the right cost/points fields, and toggling
-    // the exchange-rate checkbox shows/hides the override input right
-    // underneath it — see the 'change' listener that reads this array.
+    // Switching "Paid with" swaps in the right cost/points fields, and
+    // toggling the exchange-rate checkbox shows/hides the override input.
     reactiveKey: ['mode', 'paymentType', 'costRateOverrideEnabled'],
     initial: initial, trip: trip, submitLabel: 'Save',
     onSubmit: function (v) {
@@ -3547,12 +3343,10 @@ function openTransportForm(trip, existing, seed) {
           fromCoords = fromCoords || resolveLegCoords(v.fromLocation, lastFlightLookupCoords.from, existing, 'fromLocation', 'fromLat', 'fromLng');
           toCoords = toCoords || resolveLegCoords(v.toLocation, lastFlightLookupCoords.to, existing, 'toLocation', 'toLat', 'toLng');
         }
-        // Only keep cost/points data for whichever section "Paid with"
-        // actually shows right now — e.g. switching an already-priced
-        // leg to Free clears its cost rather than silently keeping a
-        // cash amount nothing on screen still shows. This mirrors
-        // exactly what transportPaymentFields() decided to render, so
-        // nothing gets dropped that was still visible on save.
+        // Only keep cost/points data for the section "Paid with"
+        // currently shows -- switching an already-priced leg to Free
+        // clears its cost rather than silently keeping it. Mirrors
+        // exactly what transportPaymentFields() renders.
         var paymentType = v.paymentType || 'Free';
         var showCash = paymentType === 'Cash' || paymentType === 'Combo';
         var showPoints = paymentType === 'Points' || paymentType === 'Combo';
@@ -3586,40 +3380,26 @@ function openTransportForm(trip, existing, seed) {
 }
 
 // Handles the "Look up" button next to Flight number (see fieldHtml's
-// 'flight-lookup' case and the 'lookup-flight' click-delegation
-// branch below). Talks to our own /WayPoint/api/flight-lookup, which
-// proxies AeroDataBox (via RapidAPI) — see src/worker.js's
-// handleFlightLookup() for why that's a server-side call rather than
-// one made straight from here. AeroDataBox looks flights up by number
-// AND date.
+// 'flight-lookup' case and the 'lookup-flight' click-delegation branch
+// below). Talks to /WayPoint/api/flight-lookup, which proxies
+// AeroDataBox server-side (see handleFlightLookup() in src/worker.js).
+// AeroDataBox looks flights up by number and date.
 //
-// The date used to come ONLY from the real "Depart date" field further
-// down the form — awkward, since that field isn't even visible yet at
-// the point someone's just typed a flight number, so the natural first
-// click just bounced off a "fill in Depart date first" message. Now
-// there's a dedicated date input right next to the flight number (see
-// fieldHtml's 'flight-lookup' case) — this prefers that one, and only
-// falls back to "Depart date" if it's left blank, so editing an
-// existing leg (which already prefilled both) still works exactly as
-// before. Either way, once a lookup succeeds, the date actually used
-// gets written back into "Depart date" too, so the two fields can't
-// end up disagreeing regardless of which one someone actually typed
-// into.
+// The date used to come only from "Depart date" further down the form --
+// awkward, since that field isn't visible yet when someone's just typed
+// a flight number. Now there's a dedicated date input next to the flight
+// number (fieldHtml's 'flight-lookup' case); this prefers that one and
+// falls back to "Depart date" if blank. Once a lookup succeeds, the date
+// used is written back into "Depart date" too, so they can't disagree.
 //
 // On success this fills in Airline/From/To/times directly in the
-// still-open form (not through updateState()/render() — the form is
-// mid-edit, and a full re-render would discard anything else typed and
-// reset field focus/scroll).
+// still-open form (not through updateState()/render(), which would
+// discard other typed fields and reset focus/scroll).
 //
-// AeroDataBox returns a few extra details (aircraft type, terminal,
-// gate) that used to only ever appear transiently in the status line
-// underneath ("...— not saved, just FYI") — genuinely thrown away the
-// moment the form closed. mergeFlightLookupNotes() below is what fixes
-// that: it folds those details into the Notes field instead, inside a
-// clearly-delimited block so they're easy to spot (and so re-running
-// "Look up" — e.g. after fixing a typo'd flight number — replaces that
-// block rather than piling up duplicates underneath whatever the
-// viewer already typed into Notes by hand).
+// AeroDataBox returns extra details (aircraft type, terminal, gate) that
+// used to just flash in the status line and vanish. mergeFlightLookupNotes()
+// below folds those into Notes instead, in a clearly-delimited block so
+// re-running "Look up" replaces it rather than piling up duplicates.
 var FLIGHT_LOOKUP_NOTES_START = '--- Flight lookup details (auto-filled by "Look up") ---';
 var FLIGHT_LOOKUP_NOTES_END = '--- end flight lookup details ---';
 
@@ -3721,23 +3501,17 @@ function performFlightLookup(button) {
       if (carrierInput && data.airline) carrierInput.value = data.airline;
       if (fromInput && data.origin) applyFlightAirport(fromInput, data.origin);
       if (toInput && data.destination) applyFlightAirport(toInput, data.destination);
-      // See this function's opening comment, and lastFlightLookupCoords'
-      // own comment (near airportCoordsFromText()) — this is the "even
-      // for an airport too minor to be in COMMON_AIRPORTS" fallback
-      // source of real map coordinates, consulted at save time in
-      // openTransportForm()'s onSubmit.
+      // See lastFlightLookupCoords' own comment -- this is the fallback
+      // coordinate source for an airport too minor for COMMON_AIRPORTS,
+      // consulted at save time in openTransportForm()'s onSubmit.
       lastFlightLookupCoords = {
         from: (data.origin && data.origin.location) ? data.origin.location : null,
         to: (data.destination && data.destination.location) ? data.destination.location : null
       };
-      // The date searched with (whichever field it came from — see
-      // this function's opening comment) is written into "Depart
-      // date" here so it's always right there, even if someone typed
-      // it only into the quick date input next to the flight number.
-      // Arrival date DOES get filled in fresh (not just the time): a
-      // flight can land the next calendar day, and AeroDataBox tells
-      // us the real arrival date rather than us having to guess or
-      // leave it defaulted to the depart date.
+      // The date searched with is written into "Depart date" here, even
+      // if typed only into the quick date input. Arrival date gets
+      // filled in fresh too: a flight can land the next calendar day,
+      // and AeroDataBox gives the real date rather than us guessing.
       if (departDateField) departDateField.value = departDate;
       if (departTimeField && data.departure && data.departure.time) departTimeField.value = data.departure.time;
       if (arriveDateField && data.arrival && data.arrival.date) arriveDateField.value = data.arrival.date;
@@ -3749,11 +3523,9 @@ function performFlightLookup(button) {
         updateJourneyPresentation(currentForm, transportJourney);
       }
 
-      // Everything below used to only ever flash briefly in the status
-      // line, then vanish once the form closed — mergeFlightLookupNotes()
-      // (see this function's opening comment) now actually saves it
-      // into the leg's Notes field instead, so it's still there next
-      // time this leg is opened.
+      // This used to only flash in the status line, then vanish --
+      // mergeFlightLookupNotes() now saves it into Notes so it's still
+      // there next time this leg is opened.
       var noteLines = [];
       noteLines.push(flightNumber + ' on ' + departDate + (data.airline ? ' (' + data.airline + ')' : ''));
       if (data.aircraft) noteLines.push('Aircraft: ' + data.aircraft);
@@ -3791,25 +3563,19 @@ function performFlightLookup(button) {
     });
 }
 
-// Builds the display/saved string for one airport, from EITHER shape
-// this app deals with: a COMMON_AIRPORTS entry (data/airports.js —
-// { code, name, city, country }), or one of handleFlightLookup()'s
-// reshaped airport objects (src/worker.js's airportSummary() —
-// { code, name, municipality, country }). Both are used the same way:
-// as the value typed/saved into a transport leg's "From"/"To" field, so
-// a looked-up value reads consistently with one a viewer picked by
-// hand from the airport suggestion dropdown (see openSuggestions()).
+// Builds the display/saved string for one airport, from either shape
+// this app deals with: a COMMON_AIRPORTS entry ({ code, name, city,
+// country }), or handleFlightLookup()'s reshaped airportSummary()
+// ({ code, name, municipality, country }). Both feed a transport leg's
+// "From"/"To" field the same way, so a looked-up value reads consistently
+// with one picked from the suggestion dropdown.
 //
-// The result looks like "LHR — London Heathrow, London, United
-// Kingdom" — deliberately fuller than the old "CODE — Name" alone. The
-// coordinate used on the map is stored separately, while this string gives
-// a person enough context to choose between similarly named airports.
-//
-// City is skipped from the "place" part when it's already embedded in
-// the airport name (e.g. "London Heathrow" already says "London"), so
-// the common case doesn't read as "LHR — London Heathrow, London,
-// United Kingdom" with London twice — just "...London Heathrow, United
-// Kingdom".
+// Result looks like "LHR — London Heathrow, London, United Kingdom" --
+// fuller than "CODE — Name" alone, giving enough context to choose
+// between similarly named airports; the map coordinate is stored
+// separately. City is skipped from the "place" part when already
+// embedded in the airport name, to avoid "...London Heathrow, London,
+// United Kingdom" reading with London twice.
 function airportDisplay(airport) {
   if (!airport) return '';
   var codeName = (airport.code && airport.name) ? (airport.code + ' — ' + airport.name)
@@ -3824,22 +3590,15 @@ function airportDisplay(airport) {
   return place ? (codeName + ', ' + place) : codeName;
 }
 
-// Looks up a real, known coordinate for an IATA-style airport code —
-// the actual fix for routes like SFO–ICN not showing up on the Map
-// tab. Tries two sources, in order:
-//   1. COMMON_AIRPORTS (data/airports.js) — the curated ~126 major
-//      hubs, checked first since it's tiny and always already loaded.
+// Looks up a real, known coordinate for an IATA-style airport code.
+// Tries two sources, in order:
+//   1. COMMON_AIRPORTS (data/airports.js) — curated ~126 major hubs,
+//      tiny and always already loaded.
 //   2. AIRPORT_DB (data/airports-full.js) — ~7,900 airports worldwide,
-//      loaded with `defer` so it may (very briefly, on a first-ever
-//      page load) not be ready yet; that's fine, since this only ever
-//      runs when a Flight leg is actually saved, well after page load
-//      finishes. Guarded with `typeof AIRPORT_DB !== 'undefined'`
-//      purely as a defensive fallback in case that file ever fails to
-//      load at all (e.g. briefly offline) — everything still works,
-//      just without this tier.
-// Returns null if neither has it, which is the signal for the caller
-// (openTransportForm()'s onSubmit) to keep the end unmapped unless it
-// was selected through the picker or flight lookup supplied a location.
+//      loaded with `defer`, so guarded with `typeof AIRPORT_DB !==
+//      'undefined'` in case it hasn't loaded yet (or fails to load).
+// Returns null if neither has it -- the caller (openTransportForm()'s
+// onSubmit) then leaves the end unmapped.
 function airportCoordsForCode(code) {
   var found = COMMON_AIRPORTS.filter(function (a) { return a.code === code; })[0];
   if (found && typeof found.lat === 'number' && typeof found.lng === 'number') return { lat: found.lat, lng: found.lng };
@@ -3851,12 +3610,9 @@ function airportCoordsForCode(code) {
 }
 
 // Pulls the leading 3-letter airport code off a "CODE — Name, City,
-// Country" (or bare "CODE") string — the shape both the airport
-// suggestion dropdown and a successful flight lookup fill "From"/"To"
-// with — and resolves it via airportCoordsForCode() above. Returns
-// null for anything that doesn't start with a plausible 3-letter code
-// (a city name typed for a non-Flight mode, say), which simply leaves
-// that end unmapped until a picker result or pin is supplied.
+// Country" (or bare "CODE") string and resolves it via
+// airportCoordsForCode() above. Returns null for anything that doesn't
+// start with a plausible code (a city name for a non-Flight mode, say).
 function airportCoordsFromText(text) {
   var m = /^([A-Za-z]{3})\b/.exec((text || '').trim());
   return m ? airportCoordsForCode(m[1].toUpperCase()) : null;
@@ -3866,15 +3622,10 @@ var MAX_AIRPORT_SUGGESTIONS = 30;
 var MIN_AIRPORT_SEARCH_LENGTH = 2;
 
 // A flattened, lowercased copy of AIRPORT_DB, built once on first use
-// rather than every keystroke. AIRPORT_DB itself stores name/city with
-// their original casing (so airportDisplay() and other callers get
-// proper capitalization); searching needs a lowercased version of the
-// same text to compare against, and doing that ~7,900-entry lowercase
-// pass fresh on every single keystroke was real, measurable work on a
-// slower device — most of what made typing feel laggy. This trades a
-// few hundred KB of memory (built once, kept for the rest of the
-// session) to turn every search after the first into a plain
-// substring-compare loop instead.
+// rather than every keystroke. AIRPORT_DB keeps original casing (for
+// display); searching needs lowercase, and redoing that ~7,900-entry
+// pass on every keystroke was measurably laggy on a slower device.
+// Trades a few hundred KB of memory for a plain substring-compare loop.
 var airportSearchIndex = null;
 function airportSearchIndexReady() {
   if (airportSearchIndex || typeof AIRPORT_DB === 'undefined') return !!airportSearchIndex;
@@ -3890,16 +3641,12 @@ function airportSearchIndexReady() {
   return true;
 }
 
-// Searches for airports matching whatever's typed into a Flight leg's
-// "From"/"To" field, against the FULL ~7,900-airport AIRPORT_DB, not
-// just COMMON_AIRPORTS' curated ~126 — so typing e.g. "birmingham" or
-// "bhx" finds a secondary airport too, the same way typing "london"
-// already found LHR/LGW/STN/LTN among the curated hubs. Returns a
-// plain array of { code, name, city }, capped at
-// MAX_AIRPORT_SUGGESTIONS — under 2 characters (or before AIRPORT_DB
-// has finished its `defer`red load) just returns the curated list, the
-// same "nothing to search yet, show the obvious answers" fallback as
-// before.
+// Searches airports typed into a Flight leg's "From"/"To" field against
+// the full ~7,900-airport AIRPORT_DB, not just COMMON_AIRPORTS' curated
+// ~126, so "birmingham" or "bhx" finds a secondary airport too. Returns
+// { code, name, city } capped at MAX_AIRPORT_SUGGESTIONS -- under 2
+// characters (or before AIRPORT_DB finishes loading) falls back to the
+// curated list.
 function searchAirports(query) {
   var q = (query || '').trim();
   if (q.length < MIN_AIRPORT_SEARCH_LENGTH || !airportSearchIndexReady()) return COMMON_AIRPORTS;
@@ -3938,37 +3685,23 @@ function updateAirportResolveHint(input) {
 
 // ---- Generic suggestion dropdown -------------------------------------
 //
-// EVERY free-text field with suggestions — currency, timezone, country,
-// city, and airport — shares this one mechanism, so they all look and
-// behave identically. It replaces what used to be a native
-// <input list="..."> wired to a <datalist> (airport was converted
-// first, when real-world use turned up two problems with datalist that
-// the others all had too: the browser's own suggestion popup renders
-// wherever the browser decides, with no CSS hook to move it, so on a
-// field near the edge of a narrow modal it can end up covering the very
-// input it's attached to; and swapping the datalist's <option>s live —
-// needed for airport's search-as-you-type widening — was interrupting
-// mid-word typing on at least one real device/browser, the native
-// popup seemingly fighting with the input over the keystroke that
-// triggered the rebuild). A plain, app-rendered <div> (`.suggest-list`,
-// positioned by the `.suggest-input-wrap` CSS rule right under its
-// input) sidesteps both: we choose exactly where it sits, and
-// rebuilding it is just an ordinary DOM update the input itself is
-// never involved in, so it can never interrupt what's being typed.
+// Every free-text field with suggestions — currency, timezone, country,
+// city, airport — shares this one mechanism. Replaces a native
+// <input list="..."> + <datalist> (dropped after two real problems: the
+// browser's own popup renders wherever it decides, with no CSS hook, so
+// it can cover the input near a narrow modal's edge; and swapping
+// <option>s live for airport's search-as-you-type interrupted mid-word
+// typing on at least one device). A plain app-rendered <div>
+// (`.suggest-list`, positioned by `.suggest-input-wrap`) sidesteps both.
 //
 // A field opts in by rendering its input inside `.suggest-input-wrap`
-// with a `data-suggest-type="..."` attribute naming one of the sources
-// below (see fieldHtml()'s 'currency'/'country'/'city'/'timezone'/
-// 'airport' cases) — everything past that is handled here, generically,
-// for every field the same way.
+// with `data-suggest-type="..."` naming one of the sources below (see
+// fieldHtml()'s 'currency'/'country'/'city'/'timezone'/'airport' cases).
 //
-// Each source is just { search(query) -> array of items,
-// display(item) -> the string shown in the dropdown AND written into
-// the field on selection }. The plain-string fields (currency/timezone/
-// country/city) share one small substring search; airport keeps its
-// own richer one (code/city/name scoring across ~7,900 entries — see
-// searchAirports() above) since it has real search work to do that the
-// others don't.
+// Each source is { search(query) -> items, display(item) -> the string
+// shown and written on selection }. Plain-string fields share one
+// substring search; airport keeps its own richer scoring (see
+// searchAirports() above).
 function searchStringList(list, query) {
   var q = (query || '').trim().toLowerCase();
   if (!q) return list;
@@ -3992,12 +3725,9 @@ var SUGGEST_SOURCES = {
   airport: { search: searchAirports, display: airportDisplay }
 };
 
-// suggestDropdownState tracks whichever ONE field currently has its
-// dropdown open — a form can have several suggestible fields (a
-// Flight leg has two airport fields, say), but only one can be
-// focused/typed-into at a time, so a single shared state object
-// (rather than one per field) is enough, and keeps the
-// keyboard-navigation handlers below simple.
+// suggestDropdownState tracks whichever one field currently has its
+// dropdown open — only one can be focused at a time, so a single shared
+// state object keeps the keyboard-navigation handlers below simple.
 var suggestDropdownState = { input: null, items: [], activeIndex: -1, source: null };
 
 function suggestListEl(input) {
@@ -4421,19 +4151,13 @@ document.addEventListener('keydown', function (e) {
   if (wrapper) searchLocationPicker(wrapper);
 });
 
-// Holds whatever real coordinates the most recent successful flight
-// lookup (in the currently-open transport form) returned for its
-// origin/destination — set in performFlightLookup() below, from
-// AeroDataBox's own location data (see src/worker.js's
-// airportSummary() — this is what withLocation=true on that API call
-// is for). This is the fallback used at save time (see
-// openTransportForm()'s onSubmit) when an airport ISN'T one of the
-// major hubs in COMMON_AIRPORTS: AeroDataBox knows the location of
-// pretty much every airport it can look up a flight for, even ones far
-// too minor to be worth hand-curating into this app's own shortlist.
-// Reset every time the transport form is (re)opened (see
-// openTransportForm()) so a stale lookup from a previously-edited leg
-// can never leak into a new one.
+// Holds coordinates the most recent successful flight lookup (in the
+// open transport form) returned for origin/destination -- set in
+// performFlightLookup() from AeroDataBox's location data (see
+// airportSummary() in src/worker.js). Fallback at save time
+// (openTransportForm()'s onSubmit) for an airport not in COMMON_AIRPORTS.
+// Reset every time the transport form is (re)opened so a stale lookup
+// can't leak into a new leg.
 var lastFlightLookupCoords = { from: null, to: null };
 
 function openAccommodationForm(trip, existing, seed) {
@@ -4482,16 +4206,13 @@ function openContactForm(trip, existing) {
 
 function openCompanionForm(trip, existing) {
   // A "user" grant only ever reaches this via "Add companion" (rowActions()
-  // never shows Edit/Delete for a companion to anything less than
-  // full-scope — see its own comment) — so `existing` should never be set
-  // for them in practice, but the shorter field list is chosen from the
-  // ACTUAL permission either way, not from whether this is an edit,
-  // exactly so this can't silently show a field that would just be
-  // dropped on save (see COMPANION_FIELDS_LIMITED's own comment).
+  // never shows Edit/Delete to anything less than full-scope), so
+  // `existing` shouldn't be set for them, but the shorter field list is
+  // chosen from the actual permission either way, so it can't silently
+  // show a field that would just be dropped on save.
   var fields = canFullyEditTrip(trip) ? COMPANION_FIELDS : COMPANION_FIELDS_LIMITED;
   // `smileyColor` is a flat form field but lives nested in storage
-  // (`avatar.smiley`) — flatten it out here for the form to show, and
-  // fold it back into the nested shape in onSubmit below.
+  // (`avatar.smiley`) — flatten it here, fold it back in onSubmit below.
   var initial = existing ? Object.assign({}, existing, { smileyColor: (existing.avatar && existing.avatar.smiley) || '' }) : {};
   openForm({
     title: existing ? 'Edit companion' : 'Add companion', fields: fields,
@@ -4500,45 +4221,28 @@ function openCompanionForm(trip, existing) {
       updateState(function (next) {
         var t = byId(next.trips, trip.tripId, 'tripId');
         var rec = { companionId: existing ? existing.companionId : newId(), name: v.name };
-        // notes is only ever on the full COMPANION_FIELDS list -- v.notes
-        // is simply undefined when a "user" grant submitted this via
-        // COMPANION_FIELDS_LIMITED, so this naturally comes out as ''
-        // rather than needing an extra check for which list was used.
+        // notes is only on the full COMPANION_FIELDS list -- v.notes is
+        // undefined for a "user" grant's COMPANION_FIELDS_LIMITED, so
+        // this naturally comes out as '' without an extra check.
         rec.notes = v.notes || '';
         if (v.smileyColor) rec.avatar = { smiley: v.smileyColor };
-        // Deliberately no `accountId` here, ever -- see COMPANION_FIELDS'
-        // own comment. If this companion is already linked (editing an
-        // existing one), the Worker reasserts that link from its own
-        // stored truth regardless of what this save contains (see
-        // reconcileCompanionAccountLinks() in src/worker.js) -- so simply
-        // never mentioning it here is enough; there's no need to (and no
-        // safe way to) carry it forward by hand.
+        // Deliberately no `accountId` here, ever -- the Worker reasserts
+        // any existing link from its own stored truth regardless (see
+        // reconcileCompanionAccountLinks() in src/worker.js).
         if (existing) t.companions[t.companions.findIndex(function (x) { return x.companionId === existing.companionId; })] = rec;
         else t.companions.push(rec);
-        // Deliberately NOT touching every destination/activity/
-        // accommodation/transport record here to rename a tag — nothing
-        // needs to, since every tag is stored as just the companion's id
-        // (see readTagPicker()) and looked up by name at render time
-        // (see e.g. renderActivitiesTab()'s tag list) — so a rename here
-        // is instantly reflected everywhere that companion is tagged,
-        // with nothing else to keep in sync.
+        // No need to touch other records to rename a tag -- every tag is
+        // stored as just the companion's id and looked up by name at
+        // render time, so a rename is instantly reflected everywhere.
 
-        // Keep the OPTIMISTIC render's companionAvatars map in sync too —
-        // persist() (see below) re-renders immediately from THIS
-        // locally-mutated clone, before the server's own freshly-
-        // recomputed map comes back on the next full reload. Without
-        // this, a just-added (or just-recoloured) companion's marker
-        // would render blank until something else happened to trigger a
-        // reload. Mirrors resolveCompanionAvatars()'s "smiley" branch in
-        // src/worker.js exactly (using the client-side twin of its
-        // deterministic-default logic, deterministicAvatarIndex() in
-        // data/avatars.js) — only ever the "smiley" shape here, never
-        // "account": linking is its own separate action (see
-        // openCompanionLinkForm()/submitCompanionAccess() below), and
-        // changing an already-linked companion's smiley doesn't affect
-        // its resolved marker at all (the server always prefers the
-        // linked account's own avatar), so there's nothing to recompute
-        // for that case — just leave whatever's already there.
+        // Keep the optimistic render's companionAvatars map in sync too --
+        // persist() re-renders immediately from this locally-mutated
+        // clone, before the server's recomputed map comes back. Without
+        // this a just-added/recoloured companion's marker would render
+        // blank until the next reload. Mirrors resolveCompanionAvatars()'s
+        // "smiley" branch in src/worker.js. Never "account": linking is
+        // its own action (openCompanionLinkForm()), and recolouring an
+        // already-linked companion doesn't affect its marker at all.
         if (!existing || !existing.accountId) {
           t.companionAvatars = t.companionAvatars || {};
           var smileyToken = (v.smileyColor && avatarColorHex(v.smileyColor)) ? v.smileyColor : AVATAR_COLORS[deterministicAvatarIndex(rec.companionId, AVATAR_COLORS.length)].token;
@@ -4550,18 +4254,14 @@ function openCompanionForm(trip, existing) {
 }
 
 /* ---------- Link (or unlink) a companion to an account, AND manage
-   their privilege level on this trip -- Phase 2 of the Companions/
-   Avatars feature, revised to fold the old standalone "Share access"
-   panel into this same form. Superuser/Admin only (canLinkCompanion()).
-   Two small dedicated endpoints do the actual work -- /api/companions/link
-   for the account link, /api/trip-grants (and /trip-grants/revoke) for
-   the privilege level -- rather than the normal save path, for the same
-   reason as ever: this is identity/access data, not ordinary trip
-   content, and needs its own server-side permission check regardless of
-   what a save would otherwise allow (see handleCompanionLink()/
-   handleTripGrantsUpsert() and the big COMPANIONS & AVATARS comment in
-   src/worker.js). See submitCompanionAccess() below for how the two
-   calls fit together in one submit. ------------------------------------ */
+   their privilege level on this trip. Superuser/Admin only
+   (canLinkCompanion()). Two small dedicated endpoints do the work --
+   /api/companions/link for the account link, /api/trip-grants (and
+   /trip-grants/revoke) for the privilege level -- rather than the normal
+   save path, since this is identity/access data needing its own
+   server-side permission check (see handleCompanionLink()/
+   handleTripGrantsUpsert() and COMPANIONS & AVATARS in src/worker.js).
+   See submitCompanionAccess() below for how the calls fit together. --- */
 var GRANT_ROLE_LABELS = {
   admin: 'Admin — full read/write',
   user: 'User — read/write, own items only',
@@ -4570,31 +4270,22 @@ var GRANT_ROLE_LABELS = {
 
 function openCompanionLinkForm(trip, companion) {
   var isLinked = isCompanionLinked(trip, companion);
-  // Prefills the current username when we actually have one to show --
-  // only possible for a full-scope role (Superuser/admin both receive
-  // `trip.grants`; a scoped role never does, and never reaches this form
-  // at all, since canLinkCompanion() requires full-scope anyway). If
-  // this companion is linked to an account that ISN'T (or is no longer)
-  // shared on this trip, there's simply nothing to look the username up
-  // in -- the field just starts blank, same as an unlinked companion,
-  // rather than guessing.
+  // Prefills the current username when there is one to show -- only
+  // possible for a full-scope role (both receive `trip.grants`). If this
+  // companion is linked to an account not shared on this trip, the field
+  // just starts blank rather than guessing.
   var currentGrant = companion.accountId ? (trip.grants || []).find(function (g) { return g.accountId === companion.accountId; }) : null;
   var currentUsername = currentGrant ? currentGrant.username : '';
-  // The privilege level to prefill the select with. Resolved the exact
-  // same way the access-level TAG on their row is (see
-  // renderCompanionsTab()) -- 'superuser'/'admin'/'user'/'viewer', or
-  // undefined for "linked but no access" / not linked at all.
+  // The privilege level to prefill, resolved the same way the
+  // access-level tag on their row is (renderCompanionsTab()) --
+  // 'superuser'/'admin'/'user'/'viewer', or undefined for none.
   var currentRole = trip.companionAccessLevels && trip.companionAccessLevels[companion.companionId];
   var iCanGrantAdmin = canGrantAdminRole(trip);
-  // Two cases where the privilege level can't be changed from THIS form
-  // at all -- shown as a disabled select rather than hidden outright, so
-  // it's still obvious what their current standing actually is:
-  //   - 'superuser' means this account IS the trip's owner (or the
-  //     site's uber-user) -- that's not a `grants` entry at all, so
-  //     there's nothing here to upsert or revoke.
-  //   - 'admin' when *I* can't grant Admin myself (only the trip's real
-  //     owner can) -- same restriction that already applied to revoking
-  //     an Admin grant from the old Share panel, just carried over here.
+  // Two cases where the level can't be changed from this form -- shown
+  // as a disabled select, not hidden, so their standing is still clear:
+  //   - 'superuser' means this account IS the trip's owner (or uber-user)
+  //     -- not a `grants` entry, nothing to upsert or revoke.
+  //   - 'admin' when I can't grant Admin myself (only the real owner can).
   var roleLocked = currentRole === 'superuser' || (currentRole === 'admin' && !iCanGrantAdmin);
   var roleSelectHtml;
   if (roleLocked) {
@@ -4637,28 +4328,20 @@ function openCompanionLinkForm(trip, companion) {
 
 // The one function both openCompanionLinkForm() above and
 // openAddLinkedCompanionForm() below submit through -- reconciles a
-// companion's account LINK and their ACCESS grant in one go, since the
-// old "Share access" panel is gone and every place that used to grant
-// access now does it right alongside linking instead.
+// companion's account link and access grant in one go.
 //
-//   payload.username  -- '' unlinks (or, for a brand-new companion,
-//                         just never links at all).
-//   payload.role       -- '' explicitly means "No trip access" was
-//                         chosen (revoke whatever grant is there, if
-//                         any); a real role ('admin'/'user'/'viewer')
-//                         shares the trip as that role, replacing any
-//                         existing grant; `undefined` means the
-//                         privilege select was DISABLED (roleLocked, see
-//                         openCompanionLinkForm()) and shouldn't be
-//                         touched at all -- a disabled <select> is never
-//                         included in a submitted FormData, which is
-//                         exactly how the caller tells these two "no
-//                         role" cases apart.
-//   payload.priorAccountId -- the account (if any) this companion was
-//                         linked to BEFORE this submit, so a switch to
-//                         "No trip access" knows whose grant to revoke,
-//                         or a new grant knows which stale grant it must
-//                         atomically replace when the username changes.
+//   payload.username  -- '' unlinks (or never links, for a new companion).
+//   payload.role       -- '' means "No trip access" was chosen (revoke
+//                         any existing grant); a real role shares the
+//                         trip as that role, replacing any existing
+//                         grant; `undefined` means the select was
+//                         disabled (roleLocked) and shouldn't be touched
+//                         -- a disabled <select> is never in FormData,
+//                         which is how these two cases are told apart.
+//   payload.priorAccountId -- the account this companion was linked to
+//                         before this submit, so a switch to "No trip
+//                         access" knows whose grant to revoke, or a new
+//                         grant knows which stale grant to replace.
 async function submitCompanionAccess(payload) {
   var username = (payload.username || '').trim();
   var accessForm = document.getElementById('companion-link-form') || document.getElementById('add-linked-companion-form');
@@ -4772,17 +4455,12 @@ function openAddLinkedCompanionForm(trip) {
     '</div>';
 }
 
-// Polls until the save queue is completely empty -- see persist()'s own
-// big comment further up for why only ONE POST /api/data is ever allowed
-// in flight at a time, and how a later edit collapses onto
-// `pendingSaveState` rather than firing its own overlapping request.
-// submitAddLinkedCompanion() below needs to know the NEW companion it
-// just asked updateState() to add has actually reached the server before
-// it tries to link that companion id -- handleCompanionLink() 404s on a
-// companion id the server doesn't know about yet. A short poll is a lot
-// simpler (and just as reliable) than threading a promise all the way
-// through updateState()/persist()/sendSave() for what is, in practice, a
-// rare, explicitly user-triggered action rather than a hot path.
+// Polls until the save queue is empty -- see persist() above for why
+// only one POST /api/data is ever in flight. submitAddLinkedCompanion()
+// below needs to know the new companion it added has actually reached
+// the server before linking it (handleCompanionLink() 404s otherwise). A
+// short poll is simpler than threading a promise through
+// updateState()/persist()/sendSave() for this rare, explicit action.
 function waitForSaveToSettle() {
   return new Promise(function (resolve) {
     (function check() {
@@ -4801,47 +4479,34 @@ async function submitAddLinkedCompanion(payload) {
   if (!username) { showFormError(form, 'Enter the username to link.', form && form.elements.username); return; }
 
   var newCompanionId = newId();
-  // Step 1: add them as an ordinary Guest first, through the SAME
-  // optimistic updateState()/persist() pipeline every other edit in this
-  // app uses -- see openCompanionForm() above for the twin of this
-  // mutator. Going through the normal queued save (rather than posting
-  // directly ourselves here) means this can never race an unrelated
-  // in-flight save and clobber it.
+  // Step 1: add them as an ordinary Guest first, through the same
+  // optimistic updateState()/persist() pipeline every other edit uses --
+  // going through the normal queued save means this can never race an
+  // unrelated in-flight save and clobber it.
   updateState(function (next) {
     var t = byId(next.trips, payload.tripId, 'tripId');
     t.companions.push({ companionId: newCompanionId, name: name });
   });
-  // Step 2: wait for that save (and anything it was already queued
-  // behind) to actually finish, so the companion genuinely exists
+  // Step 2: wait for that save to finish, so the companion exists
   // server-side before asking to link/share it.
   await waitForSaveToSettle();
-  // Step 3: link AND share it in one go -- see submitCompanionAccess()'s
-  // own comment for exactly what that does. priorAccountId is
-  // deliberately null: this companion didn't exist a moment ago, so
-  // there's nothing to revoke regardless of what role ends up chosen. If
-  // this step fails (e.g. the username doesn't exist), the person still
-  // ends up added as an ordinary Guest rather than not existing at all --
-  // submitCompanionAccess()'s own error toast explains what went wrong,
-  // and the row's "Manage account & access" button (see
-  // renderCompanionsTab()) is right there to retry once it's sorted out.
+  // Step 3: link and share it in one go (see submitCompanionAccess()).
+  // priorAccountId is null: this companion didn't exist a moment ago.
+  // If this fails, the person still ends up added as a Guest rather than
+  // not existing -- the row's "Manage account & access" button can retry.
   await submitCompanionAccess({ tripId: payload.tripId, companionId: newCompanionId, username: username, role: role, priorAccountId: null });
 }
 
-// Self-service avatar picker (Phase 1b) -- every logged-in account can
-// change ONLY its own colour+animal here (see handleAccountAvatarUpdate()
-// in src/worker.js -- it always writes to `user.id` from the session, so
-// there's no id field in this form at all to worry about tampering with).
-// Hand-written rather than run through the generic openForm() machinery,
-// since two linked swatch grids feeding one shared live preview doesn't
-// fit that helper's one-field-at-a-time model. Selection is tracked in
-// two hidden inputs (name="color"/"animal") that the swatch clicks below
-// update directly, so the actual <form> submit still works the ordinary
-// way (read via FormData in the submit-delegation listener).
+// Self-service avatar picker -- every logged-in account can change only
+// its own colour+animal (handleAccountAvatarUpdate() in src/worker.js
+// always writes to `user.id` from the session). Hand-written rather than
+// through openForm(), since two linked swatch grids feeding one shared
+// live preview don't fit that helper's one-field-at-a-time model.
+// Selection is tracked in two hidden inputs (name="color"/"animal") the
+// swatch clicks update directly, so submit still works via FormData.
 function openAvatarPicker() {
   // currentUser.avatar is always a real {color,animal} pair once logged
-  // in (see applyAuthUI()'s own comment) -- this fallback only guards
-  // against a malformed/missing response, so the picker still opens
-  // showing SOMETHING rather than breaking.
+  // in -- this fallback only guards against a malformed/missing response.
   var current = currentUser.avatar || { color: AVATAR_COLORS[0].token, animal: AVATAR_ANIMALS[0].token };
   var root = document.getElementById('modal-root');
   root.innerHTML =
@@ -4902,19 +4567,14 @@ async function submitAvatarPick(payload) {
     });
     var body = await res.json().catch(function () { return {}; });
     if (!res.ok) { showFormError(form, body.error || 'Could not save your avatar.'); return; }
-    // Trust the server's own (re-resolved) avatar back rather than just
-    // echoing what we sent -- same defensive habit as everywhere else in
-    // this file that a save's response is the source of truth, not the
-    // request that produced it.
+    // Trust the server's re-resolved avatar rather than echoing what was sent.
     currentUser.avatar = body.avatar || payload;
     applyAuthUI();
     closeModal();
     setSaveStatus('saved');
-    // Any companion linked to this account needs its resolved
-    // companionAvatars entry (on every trip it's shared on) to pick up
-    // the change too -- simplest correct way is the same "reload state"
-    // pattern used after submitCompanionAccess(), rather than trying to
-    // patch every trip's companionAvatars map by hand.
+    // Any companion linked to this account needs its companionAvatars
+    // entry updated too, on every trip it's shared on -- simplest is to
+    // reload state rather than patching each trip's map by hand.
     state = await loadInitialState();
     render();
   } catch (err) {
@@ -5380,22 +5040,17 @@ function costTag(trip, amount, currency, rateOverride) {
   return '<span class="tag tag-cost">' + icon('expenses') + label + '</span>';
 }
 
-// Edit/Delete buttons for one item row — which ones actually show up
-// depends on this account's permission on `trip` (see the "Per-trip
-// permissions" helpers near currentTrip() above). `taggable` should be
-// true for the four per-companion-scoped item types (destination/
-// activity/transport/accommodation), false for everything else
-// (companion/contact/expense) — those aren't tagged to a companion at
-// all, so a "user" grant never gets to edit them, only full-scope roles
-// do. Returns '' (no actions block at all) if this account can't do
-// anything to this particular row.
+// Edit/Delete buttons for one item row — depends on this account's
+// permission on `trip` (see "Per-trip permissions" near currentTrip()).
+// `taggable` should be true for the four per-companion-scoped item types,
+// false for companion/contact/expense (never editable by a "user" grant).
+// Returns '' if this account can't do anything to this row.
 function rowActions(trip, section, item) {
   var taggable = ['destination', 'activity', 'transport', 'accommodation'].indexOf(section) !== -1;
   var canEdit = taggable ? canEditItem(trip, item) : canFullyEditTrip(trip);
-  // Deleting is always full-scope-only — even a "user" grant, which CAN
-  // edit their own tagged items, can never delete one (see
-  // mergeUserScopedList() in src/worker.js, which silently keeps an item
-  // even if it's missing from what they submit).
+  // Deleting is always full-scope-only -- even a "user" grant can never
+  // delete an item (mergeUserScopedList() in src/worker.js silently
+  // keeps it even if missing from what they submit).
   var canDelete = canFullyEditTrip(trip);
   if (!canEdit && !canDelete) return '';
   var itemId = item[ENTITY_ID_FIELDS[section]];
@@ -5582,13 +5237,10 @@ function renderContactsTab(trip) {
 
 /* ---------- 19b. Render: Companions tab ------------------------------- */
 
-// Companions are who to tag on individual destinations/activities/
-// accommodation/transport (see the 'tag-picker' field type in
-// fieldHtml()) — this tab is just where you add the people, not where you
-// tag them to anything. There's deliberately no "used on N items" count
-// here: it'd mean scanning all four other lists on every render just for
-// a number nobody's asked for — if you want to know what someone's tagged
-// to, that's what each tab's own item tags already show.
+// Companions are who to tag on individual items (see 'tag-picker' in
+// fieldHtml()) — this tab is where you add people, not tag them. No
+// "used on N items" count: that would mean scanning every other list on
+// each render for a number nobody's asked for.
 function companionTags(trip, companionIds) {
   return (companionIds || [])
     .map(function (id) { return taggablePersonById(trip, id); })
@@ -5597,67 +5249,38 @@ function companionTags(trip, companionIds) {
     .join('');
 }
 
-// The Companions tab is deliberately the ONE place you manage everyone
-// on a trip — both "who's traveling" (companions, tagged to items) and
-// "who can log in and see/edit this" (accounts, via sharing). They used
-// to be two separate screens (this tab for adding a person, Settings ->
-// Share for giving an account access) that only made sense read
-// together, and — as of this section's own revision below — the
-// standalone "Share access" panel that used to sit under the companion
-// list is GONE too, folded into the add/link actions themselves: see
-// claude/waypoint-companions-plan.md ("The structural change", and its
-// later "Access moves onto the companion itself" section) for the full
-// reasoning.
+// The Companions tab is the one place you manage everyone on a trip --
+// both "who's traveling" (companions, tagged to items) and "who can log
+// in and see/edit this" (accounts, via sharing). See
+// claude/waypoint-companions-plan.md for the design discussion.
 //
-// GUEST vs COMPANION -- this is product vocabulary, not a new data
-// field: every person on this list is stored the same way (a plain
-// "companion" record, see COMPANION_FIELDS above), and whether they're
-// shown as a "Guest" or a "Companion" is purely whether `accountId` is
-// set on them -- i.e. whether they have their own Waypoint login. The
-// list itself is now visually SPLIT into two sections below (see
-// renderCompanionsTab()) so the two kinds of person are never mixed
-// together in one list the way they used to be.
+// GUEST vs COMPANION is product vocabulary, not a new data field: every
+// person is stored the same way (COMPANION_FIELDS above), and whether
+// they're a "Guest" or "Companion" is purely whether `accountId` is set
+// (a Waypoint login). The list is visually split into two sections
+// (renderCompanionsTab()).
 //   - A GUEST has no login. Anyone who canAddCompanion() (a "user" grant
-//     included, Phase 3) can add one -- name + smiley colour only.
+//     included) can add one -- name + smiley colour only.
 //   - A COMPANION has one. Only canLinkCompanion() (Superuser/Admin) can
-//     create one directly, or upgrade an existing Guest into one by
-//     linking a username -- see openAddLinkedCompanionForm() and
-//     openCompanionLinkForm() below. EITHER action now also asks for a
-//     privilege level (Admin/User/Viewer, or "no trip access") right
-//     there in the same form, and grants it automatically -- this is
-//     what replaced the old separate "Share access" panel: adding or
-//     linking a companion and sharing the trip with them used to be two
-//     separate steps (add/link here, then go find them again in the
-//     share panel below), and are now genuinely one.
-// A Companion who DOES also have access to this trip (because they're
-// its owner, the site's uber-user, or hold a grant) gets an extra tag
-// showing that access level -- Super/Admin/User/Viewer, resolved
-// server-side by resolveCompanionAccessLevels() in src/worker.js and
-// sent down as `trip.companionAccessLevels`. Unlike the raw `grants`
-// list, that map is sent to every role that can see the trip at all --
-// a deliberate choice to make everyone's standing on a trip visible to
-// everyone else on it (see resolveCompanionAccessLevels()'s own comment
-// for exactly what it does and doesn't reveal) -- so these tags render
-// the same for a Superuser and for a scoped Viewer looking at the very
-// same trip.
+//     create one directly, or upgrade a Guest by linking a username --
+//     see openAddLinkedCompanionForm()/openCompanionLinkForm() below.
+//     Either action also asks for a privilege level (Admin/User/Viewer,
+//     or "no trip access") in the same form and grants it automatically.
+// A Companion who also has access to this trip gets an extra tag showing
+// that level -- Super/Admin/User/Viewer, from resolveCompanionAccessLevels()
+// in src/worker.js, sent as `trip.companionAccessLevels`. Unlike raw
+// `grants`, that map goes to every role that can see the trip, so these
+// tags render the same for a Superuser and a scoped Viewer alike.
 var COMPANION_ACCESS_LEVEL_LABELS = { superuser: 'Super', admin: 'Admin', user: 'User', viewer: 'Viewer' };
 
-// Deliberately reading `trip.companionAvatars[...].type` here rather than
-// `c.accountId` to decide Guest vs Companion -- accountId is stripped
-// from a scoped "user"/"viewer" role's own companion list (see
-// buildVisibleTrip() in src/worker.js), so `c.accountId` is ALWAYS
-// falsy for them even when a companion genuinely IS linked.
-// `companionAvatars` doesn't have that problem: it's already sent to
-// every role (same as `companionAccessLevels`), and its `type` ('account'
-// vs 'smiley') already encodes exactly this same "does this person have
-// a login" fact for the avatar marker -- reusing it here means
-// Guest/Companion always agrees with what the marker itself is showing,
-// for every role, including one whose linked account has since been
-// deleted (resolveCompanionAvatars() quietly falls back to 'smiley' in
-// that case too, so this then correctly reads as a Guest again rather
-// than a dangling Companion). Used both to decide which of the two
-// segregated lists below a companion belongs in, and by
-// openCompanionLinkForm() to word its own title/hint correctly.
+// Reads `trip.companionAvatars[...].type` rather than `c.accountId` to
+// decide Guest vs Companion -- accountId is stripped from a scoped
+// "user"/"viewer" role's own companion list (buildVisibleTrip() in
+// src/worker.js), so it's always falsy for them even when genuinely
+// linked. `companionAvatars` is sent to every role and its `type`
+// ('account' vs 'smiley') already encodes this same fact, so Guest/
+// Companion always agrees with the marker shown, including for a
+// deleted linked account (which falls back to 'smiley' too).
 function isCompanionLinked(trip, c) {
   return !!(trip.companionAvatars && trip.companionAvatars[c.companionId] && trip.companionAvatars[c.companionId].type === 'account');
 }
@@ -5665,21 +5288,15 @@ function isCompanionLinked(trip, c) {
 function renderCompanionsTab(trip) {
   var canAddGuest = canAddCompanion(trip);
   var canAddLinked = canLinkCompanion(trip);
-  // Superuser/Admin get two explicit choices up front (add someone who
-  // already has a login and share the trip with them in one step, or
-  // add someone with no login at all); a "user" grant only ever gets
-  // the second -- see COMPANION_FIELDS_LIMITED and
-  // mergeUserScopedCompanions() in src/worker.js for the field-level
-  // enforcement behind that restriction (this button is just the UI
-  // reflection of it, not the actual security boundary).
+  // Superuser/Admin get two explicit choices (link an existing login and
+  // share in one step, or add someone with no login); a "user" grant
+  // only gets the second -- enforced server-side by
+  // mergeUserScopedCompanions() in src/worker.js.
   //
-  // "Add companion" deliberately gets the ACCENT (coloured) button and
-  // "Add guest" the plain grey one -- matching the same colour-coding
-  // already used for their MARKERS elsewhere on this tab (a Companion's
-  // marker is their own account's colour + animal; a Guest's is always
-  // the plain grey circle, see companionAvatarHtml()) makes the two
-  // buttons themselves an extension of that same visual language, rather
-  // than an arbitrary choice of which one looks more "primary". Wrapped
+  // "Add companion" gets the accent button, "Add guest" the plain grey
+  // one -- matching the colour-coding already used for their markers
+  // elsewhere (a Companion's marker is their account's colour+animal, a
+  // Guest's is the plain grey circle). Wrapped
   // in a shared .head-btn-row so the pair sits right next to each other
   // (see that class's own comment for why that needs a wrapper at all).
   var addButtons =
@@ -5698,24 +5315,17 @@ function renderCompanionsTab(trip) {
   // structure itself.
   function companionRowHtml(c) {
     var linkedAccount = c.accountId ? (trip.grants || []).find(function (g) { return g.accountId === c.accountId; }) : null;
-    // A companion can be linked to an account that ISN'T (or is no
-    // longer) shared on THIS trip -- e.g. deliberately linked with "no
-    // trip access" (see openCompanionLinkForm() below). `trip.grants`
-    // only exists for a full-scope role anyway (see buildVisibleTrip()
-    // in src/worker.js), so there's often nothing to look the username
-    // up in even when `c.accountId` is present -- the linked-tag below
-    // just quietly says "has a login" in that case rather than guessing.
+    // A companion can be linked to an account not shared on this trip
+    // (e.g. "no trip access", see openCompanionLinkForm()). `trip.grants`
+    // only exists for full-scope roles, so the linked-tag below just
+    // says "has a login" when there's nothing to look the username up in.
     var linkedTag = c.accountId
       ? '<span class="tag">' + icon('person') + (linkedAccount ? esc(linkedAccount.username) : 'has a login') + '</span>'
       : '';
-    // The access-level tag -- see the big comment above this function.
-    // A Guest (no accountId) always just reads "Guest". A Companion
-    // shows their actual resolved access level when there is one
-    // (Super/Admin/User/Viewer), or a generic "Companion" tag when
-    // they're linked but genuinely have no access to this trip (linked
-    // purely for their avatar, or explicitly given "no trip access" in
-    // openCompanionLinkForm() -- see resolveCompanionAccessLevels()'s
-    // own comment on this case).
+    // The access-level tag -- see the comment above this function. A
+    // Guest always reads "Guest". A Companion shows their resolved
+    // access level (Super/Admin/User/Viewer), or a generic "Companion"
+    // tag when linked but with no actual access to this trip.
     var isLinked = isCompanionLinked(trip, c);
     var accessRole = trip.companionAccessLevels && trip.companionAccessLevels[c.companionId];
     var accessTag = isLinked
@@ -5756,32 +5366,26 @@ function renderCompanionsTab(trip) {
 
 /* ---------- 19b. Map tab ---------------------------------------------------
    Plots saved locations on one interactive map, using Leaflet (vendored
-   under vendor/leaflet/) and OpenStreetMap tiles. Coordinates are selected
-   in the shared location picker and stored with each entry; the map does
-   not silently geocode free text in the browser.
+   under vendor/leaflet/) and OpenStreetMap tiles. Coordinates are
+   selected in the shared location picker and stored with each entry; the
+   map doesn't silently geocode free text in the browser.
 
-   The tricky part is that this app normally redraws #app from scratch (see
-   render() near the bottom of this file) every time anything changes —
-   great for plain HTML, but a map needs to be built once with a JS library
-   call (L.map(...)) and then updated in place, not thrown away and rebuilt
-   constantly, or it would flicker and forget its zoom/pan position. So this
-   section keeps its own little bit of state (`mapState`, below) outside of
-   the normal `state`/render() pipeline, mounts the actual Leaflet map
-   itself imperatively (see initMap()) whenever the Map tab's HTML has just
-   been drawn, and updates it directly (see the "toggle-map-layer" handler
-   in the click listener) for anything — like a layer checkbox — that
+   The tricky part: this app normally redraws #app from scratch (see
+   render()) on every change, but a map needs to be built once with
+   L.map(...) and updated in place, not rebuilt constantly (it would
+   flicker and lose zoom/pan). So this section keeps its own state
+   (`mapState` below) outside the normal render() pipeline, mounts
+   Leaflet imperatively (initMap()) whenever the Map tab's HTML is drawn,
+   and updates it directly (see "toggle-map-layer") for anything that
    doesn't need a full re-render.
    ---------------------------------------------------------------------- */
 
-// One layer group per category, so the checkboxes in the tab can show/hide
-// each kind of pin independently. `color` is used both for each category's
-// map markers and for the little dot next to its checkbox label.
+// One layer group per category, so checkboxes can show/hide each kind of
+// pin independently. `color` is used for markers and the checkbox dot.
 //
-// Destinations keep a deliberately muted, "targeted" shade — they're the
-// anchor points of the trip, not something that needs to shout — while
-// activities/transport/accommodation get bright, clearly-distinct hues so
-// they actually pop against the (fairly busy, fairly light) OpenStreetMap
-// tiles instead of blending into the background.
+// Destinations keep a muted "anchor point" shade, while activities/
+// transport/accommodation get bright, distinct hues so they pop against
+// the OpenStreetMap tiles.
 var MAP_LAYER_META = [
   { key: 'destinations', label: 'Destinations', color: cssToken('--wp-map-destination'), soft: 'var(--wp-map-destination-subtle)' },
   { key: 'transport', label: 'Transport', color: cssToken('--wp-map-transport'), soft: 'var(--wp-map-transport-subtle)' },
@@ -5789,11 +5393,10 @@ var MAP_LAYER_META = [
   { key: 'activities', label: 'Activities', color: cssToken('--wp-map-activity'), soft: 'var(--wp-map-activity-subtle)' }
 ];
 
-// Everything the Map tab needs to remember between renders that ISN'T part
-// of the saved trip data — which Leaflet map/layers are currently mounted,
-// which layers are currently checked on, and a `generation` counter (see
-// initMap() for what that guards against). None of this is saved or
-// shared — it just resets to the defaults below on a fresh page load.
+// Everything the Map tab needs to remember between renders that isn't
+// part of the saved trip data -- which Leaflet map/layers are mounted,
+// which are checked, and a `generation` counter (see initMap()). None of
+// this is saved or shared, resets to these defaults on a fresh load.
 var mapState = {
   instance: null,
   layers: null,
@@ -6751,16 +6354,11 @@ document.addEventListener('click', function (e) {
   }
 
   if (action === 'close-modal') {
-    // The backdrop itself has data-action="close-modal" too (click
-    // outside the modal box to dismiss it, a common UI convention) —
-    // but a click that starts inside the modal and simply has no more
-    // specific data-action ancestor (e.g. tapping blank space in the
-    // form body) would otherwise bubble up to that same backdrop and
-    // close the form by accident. Only treat it as "clicked the
-    // backdrop" when the click's actual target IS the backdrop
-    // element, not merely a descendant of it. Explicit close controls
-    // (the × button, "Cancel") are unaffected — el there is the
-    // button itself, not the backdrop.
+    // The backdrop has data-action="close-modal" too (click outside to
+    // dismiss) -- but a click starting inside the modal with no more
+    // specific data-action ancestor would otherwise bubble up and close
+    // it by accident. Only treat it as "clicked the backdrop" when the
+    // click's actual target IS the backdrop, not a descendant of it.
     if (el.classList.contains('modal-backdrop') && e.target !== el) return;
     closeModal();
     return;
@@ -7018,14 +6616,12 @@ document.addEventListener('fullscreenchange', function () {
 });
 
 // Powers "reactive" forms: when a field named by the open form's
-// `reactiveKey` changes, we recompute the field list from the form's
-// own current values and re-render only #modal-fields, so e.g.
-// switching Flight → Car swaps in the right fields without discarding
-// From/To, dates, cost, etc. `reactiveKey` can be a single field name
-// (most forms) or an array of names — Transport's form watches three:
-// "Mode" (swaps in flight-number vs. license-plate etc.), "Paid with"
-// (swaps in the Cash/Points/Combo fields), and the exchange-rate
-// checkbox (shows/hides its override input) — see openTransportForm().
+// `reactiveKey` changes, recompute the field list from the form's
+// current values and re-render only #modal-fields, so switching Flight
+// → Car swaps in the right fields without discarding From/To, dates,
+// cost, etc. `reactiveKey` can be one name or an array -- Transport
+// watches three: "Mode", "Paid with", and the exchange-rate checkbox
+// (see openTransportForm()).
 function journeyConfigFromElement(journey) {
   return {
     startDateKey: journey.dataset.startDate,
@@ -7237,10 +6833,9 @@ document.addEventListener('submit', function (e) {
       username: (fdAddLinked.get('username') || '').trim(),
       role: fdAddLinked.get('role') || 'user'
     });
-    // Deliberately no closeModal() here -- submitAddLinkedCompanion()'s
-    // own final step, submitCompanionAccess(), already closes it on
-    // success (and leaves it open with an error toast on failure, same
-    // as filling in the standalone link/access form wrong would).
+    // No closeModal() here -- submitAddLinkedCompanion()'s final step,
+    // submitCompanionAccess(), already closes it on success (and leaves
+    // it open with an error toast on failure).
     return;
   }
   if (e.target.id === 'avatar-pick-form') {
@@ -7266,13 +6861,11 @@ document.addEventListener('submit', function (e) {
   }
   if (e.target.id === 'rates-form') {
     e.preventDefault();
-    // Every input in this form is rendered `disabled` for a scoped
-    // "user"/"viewer" grant (see renderSettingsTab()), so this shouldn't
-    // normally be reachable for one at all -- this check is just a
-    // belt-and-braces guard against an unusual browser's implicit-submit
-    // behavior with a form full of disabled fields. The Worker would
-    // reject the resulting save either way (see "SAVING SAFELY" in
-    // src/worker.js), but there's no reason to even try.
+    // Every input here is `disabled` for a scoped "user"/"viewer" grant
+    // (renderSettingsTab()), so this check is just a belt-and-braces
+    // guard against an unusual browser's implicit-submit behavior. The
+    // Worker would reject the save either way (see "SAVING SAFELY" in
+    // src/worker.js).
     if (!canFullyEditTrip(currentTrip())) return;
     var fd2 = new FormData(e.target);
     updateState(function (next) {
