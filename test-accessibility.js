@@ -22,7 +22,7 @@ requirePattern(/dialog\.setAttribute\('aria-labelledby'/, 'Dialog title associat
 requirePattern(/el\.inert = inert/, 'Modal background is not made inert');
 requirePattern(/event\.key === 'Escape'[\s\S]*?closeModal\(\)/, 'Escape does not close dialogs');
 requirePattern(/event\.key !== 'Tab'[\s\S]*?modalFocusableElements/, 'Dialog focus containment is missing');
-requirePattern(/restore && restore\.isConnected[\s\S]*?restore\.focus\(\)/, 'Dialog trigger focus is not restored');
+requirePattern(/restore && restore\.isConnected \? restore[\s\S]*?target\.focus\(\)/, 'Dialog focus must restore the trigger or a replacement heading');
 
 // Form labels, hints, required state and errors are deliberately centralised
 // because almost all WayPoint forms are assembled from reusable field schemas.
