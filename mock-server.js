@@ -1,61 +1,42 @@
-// A tiny stand-in for the real Cloudflare Worker, used only to test the
-// adapted frontend locally before it's deployed for real. It serves the
-// static app at /WayPoint and implements the same API the real Worker
-// does (backed by in-memory variables instead of KV) — including the
-// per-trip ownership/grants permission system AND the per-trip storage
-// split (index + one content blob per trip) described in the big comment
-// at the top of src/worker.js. This file deliberately re-implements that
-// logic rather than importing worker.js directly: worker.js is written as
-// a Cloudflare Worker ES module (uses Web Crypto, KV bindings, etc.) and
-// isn't meant to run under plain Node — keeping a parallel, simplified
-// copy here is the same tradeoff already made for the real flight-lookup
-// API (see test-flight-lookup.js's own comment: this sandbox has no route
-// to the real internet, so tests intercept that one call directly
-// instead).
+// A tiny stand-in for the real Cloudflare Worker, used to test the
+// frontend locally. Serves the static app at /WayPoint and implements the
+// same API as the real Worker (in-memory instead of KV) — including the
+// per-trip ownership/grants permission system and the index/per-trip
+// storage split described at the top of src/worker.js. Re-implements that
+// logic rather than importing worker.js directly, since worker.js is a
+// Cloudflare Worker ES module (Web Crypto, KV bindings) that isn't meant
+// to run under plain Node — the same tradeoff test-flight-lookup.js makes
+// for the flight-lookup API (no real internet in this sandbox).
 //
-// Two DELIBERATE differences from the real Worker, both purely about
-// running locally over plain http instead of production https — neither
-// is a bug, just noted here so nobody "fixes" this file to match
-// worker.js exactly and breaks every test that uses it:
-//   1. The session cookie is set WITHOUT the `Secure` attribute. A real
-//      browser silently refuses to store a `Secure` cookie on a
-//      non-https origin, so a faithful copy would mean no test could
-//      ever stay logged in.
-//   2. Passwords are compared as plain text in memory rather than
-//      PBKDF2-hashed. There's no real secret at stake in a throwaway
-//      in-memory test server, and hashing would just slow every test
-//      down for no safety benefit — the actual hashing code (see
-//      hashPassword()/verifyPassword() in src/worker.js) is exercised
-//      by reading that file carefully, not by this mock.
+// Three deliberate differences from the real Worker, noted so nobody
+// "fixes" this file to match worker.js exactly and breaks every test:
+//   1. The session cookie has no `Secure` attribute — a real browser
+//      refuses to store a Secure cookie on non-https, which would break
+//      every test's login.
+//   2. Passwords are compared as plain text, not PBKDF2-hashed — no real
+//      secret is at stake in a throwaway in-memory server, and hashing
+//      code (hashPassword()/verifyPassword() in src/worker.js) is
+//      exercised by reading that file, not by this mock.
+//   3. This mock never runs the legacy "state" -> index/content migration
+//      (ensureMigrated() in src/worker.js) — there's no old data to
+//      migrate in a server that always starts empty; migration logic is
+//      likewise exercised by reading src/worker.js.
 //
-// A THIRD difference, also deliberate: this mock never runs the legacy
-// "state" -> index/content migration (ensureMigrated() in src/worker.js).
-// There's no old single-blob data to migrate in a throwaway in-memory
-// test server that always starts empty — every trip a test creates goes
-// straight into the new tripIndex/tripContents shape below. The
-// migration logic itself is exercised by reading src/worker.js carefully,
-// same as the password hashing above.
+// Also adds two endpoints the real Worker doesn't have, under an obvious
+// `/api/__` prefix, so tests can see otherwise-invisible state: `__writes`
+// (how many times each trip's content/index has been written) and
+// `__hide-content` (make one trip's content unreadable while its index
+// entry stays, reproducing a state KV can reach on its own). See their
+// own comments below, and test-storage-safety.js.
 //
-// It also adds two endpoints the real Worker does NOT have, both under an
-// obvious `/api/__` prefix and both purely so tests can see or reach
-// something that's otherwise invisible from outside: `__writes` (how many
-// times each trip's content, and the shared index, has actually been
-// written) and `__hide-content` (make one trip's content unreadable while
-// leaving its index entry, reproducing a state Cloudflare KV can reach on
-// its own). See their own comments further down, and
-// test-storage-safety.js.
-//
-// Everything else — endpoint paths, request/response JSON shapes, status
-// codes, per-trip permission resolution, the index+per-trip-content
-// storage split, the schema field names (tripId/destinationId/etc.), the
-// safe merge-save logic, and the safety pass that refuses a save which
-// would delete several trips at once — mirrors src/worker.js as closely
-// as possible, since THAT'S what the frontend is actually written
-// against. If you change how permissions or storage work in
-// src/worker.js, make the SAME change here, or these tests stop meaning
-// anything. That isn't hypothetical: `isUberUser` once went missing from
-// the real Worker's login responses while this file still had it, and
-// nothing caught it until it broke in production — which is why
+// Everything else — endpoint paths, JSON shapes, status codes, permission
+// resolution, the storage split, schema field names, the safe merge-save
+// logic, and the multi-delete safety pass — mirrors src/worker.js as
+// closely as possible, since that's what the frontend is actually written
+// against. Change permissions or storage in src/worker.js, make the same
+// change here, or these tests stop meaning anything: `isUberUser` once
+// went missing from the real Worker's login responses while this file
+// still had it, and nothing caught it until production — which is why
 // test-auth-roles.js now asserts that flag explicitly.
 const http = require('http');
 const crypto = require('crypto');
@@ -67,38 +48,30 @@ const html = fs.readFileSync(path.join(__dirname, 'public/WayPoint/index.html'),
 // ---- Trip storage: mirrors the real Worker's index + per-trip-content
 // split (see "HOW TRIPS ARE STORED" in src/worker.js). `tripIndex` holds
 // just enough per trip to render the dashboard and resolve permissions
-// (tripId, name, dates, homeCurrency, ownerId, grants); `tripContents` is
-// a plain object mapping tripId -> that trip's full content (destinations,
-// activities, transport, accommodation, contacts, expenses, companions,
-// notes, currencyRates, geocodeCache). There's no KV-style "one write per
-// key per second" limit to worry about in-memory, but keeping the SHAPE
-// identical to production is what makes this a meaningful test double.
+// (tripId, name, dates, homeCurrency, ownerId, grants); `tripContents`
+// maps tripId -> full content (destinations, activities, transport,
+// accommodation, contacts, expenses, companions, notes, currencyRates,
+// geocodeCache). No KV-style write-rate limit in-memory, but keeping the
+// shape identical to production is what makes this a meaningful test double.
 let tripIndex = { trips: [] };
 let tripContents = {}; // tripId -> content object
 
-// In-memory account list. Pass `--empty-users` on the command line (see
-// bottom of this file) to start with NO accounts at all, so a test can
-// exercise the first-run "/api/setup" bootstrap screen — every other
-// test gets one pre-seeded account (see DEFAULT_ADMIN below), set up as
-// the uber-user (the site owner's account — see the big "WHO IS ALLOWED
-// IN" comment in src/worker.js), so it doesn't have to run through that
-// setup flow itself just to log in, and so it has full access to
-// whatever trips a test creates or needs to reach regardless of who
-// technically owns them.
+// In-memory account list. Pass `--empty-users` to start with none, so a
+// test can exercise the first-run "/api/setup" bootstrap screen — every
+// other test gets one pre-seeded uber-user account (DEFAULT_ADMIN below,
+// see "WHO IS ALLOWED IN" in src/worker.js) with full access to whatever
+// trips it creates or needs, without running through setup itself.
 const DEFAULT_ADMIN = { id: 'admin1', username: 'admin', password: 'testpass123', isUberUser: true };
-// The setup key a test's setup flow needs to supply — stands in for the
-// real deployment's WAYPOINT_PASSWORD secret (see handleSetup() in
-// src/worker.js).
+// Stands in for the real deployment's WAYPOINT_PASSWORD secret (see
+// handleSetup() in src/worker.js).
 const SETUP_KEY = 'setup-key-for-tests';
 
 let users = process.argv.indexOf('--empty-users') === -1 ? [Object.assign({}, DEFAULT_ADMIN)] : [];
 
 // token -> { uid } — the mock's equivalent of a signed session cookie.
-// Real signing/verification (HMAC over a base64url payload) is pure
-// overhead here: nothing forges cookies against a local test server, and
-// what the frontend actually needs exercised is "a cookie comes back on
-// login, and gets sent + checked on later requests" — a random opaque
-// token in a Map does that identically from the frontend's point of view.
+// Real HMAC signing is pure overhead here: nothing forges cookies against
+// a local test server, and a random opaque token in a Map exercises "a
+// cookie comes back on login and is sent + checked later" identically.
 const sessions = {};
 let nextId = 2;
 
@@ -366,13 +339,11 @@ function buildResponseState(user) {
   return { trips: trips };
 }
 
-// Never let a client-submitted trip object smuggle its own idea of who
-// owns it, who it's shared with, or (for a scoped account) what its
-// permission even is into storage -- these fields only ever exist in a
-// GET response as a convenience for the UI, and are always recomputed
-// server-side before anything is written back. Also strips tripId itself
-// -- that lives in the index/storage key, never inside a trip's own
-// content. Mirrors stripClientOwnershipFields() in src/worker.js.
+// Never let a client-submitted trip smuggle its own idea of who owns it,
+// who it's shared with, or its permission into storage -- those fields
+// only exist in a GET response as a UI convenience and are always
+// recomputed server-side. Also strips tripId, which lives in the
+// index/storage key. Mirrors stripClientOwnershipFields() in src/worker.js.
 function stripClientOwnershipFields(trip) {
   const copy = Object.assign({}, trip);
   delete copy.tripId;
@@ -462,14 +433,11 @@ function mergeUserScopedCompanions(storedCompanions, incomingCompanions) {
   return stored.concat(appended);
 }
 
-// Counts how many times each trip's CONTENT was actually written, and how
-// many times the shared index was. Purely a test affordance (exposed via
-// the /WayPoint/api/__writes debug endpoint further down) — the real
-// Worker has no equivalent and doesn't need one. It exists because the
-// entire point of the per-trip storage split is "saving trip A doesn't
-// touch trip B's key", and that claim is otherwise invisible from the
-// outside: every response looks identical whether or not the write was
-// skipped. See test-storage-writes.js.
+// Counts how many times each trip's content, and the shared index, was
+// actually written. A test affordance (exposed via /WayPoint/api/__writes
+// below) that makes the storage split's core claim -- "saving trip A
+// doesn't touch trip B's key" -- verifiable, since every response looks
+// identical whether a write was skipped or not. See test-storage-writes.js.
 let writeCounts = { index: 0, trips: {} };
 
 function writeTripContent(tripId, content) {
@@ -682,26 +650,18 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { status: 'ok' });
     }
 
-    // ---- Test-only introspection: how many times each trip's content
-    // (and the shared index) has actually been written. No equivalent
-    // exists in the real Worker — see writeCounts above for why this is
-    // here. GET to read, DELETE to reset the counters between phases of
-    // a test. -------------------------------------------------------------
+    // ---- Test-only introspection: write counts (see writeCounts above).
+    // GET reads, DELETE resets between test phases. ----
     if (urlPath === '/WayPoint/api/__writes') {
       if (req.method === 'DELETE') { writeCounts = { index: 0, trips: {} }; return sendJson(res, 200, { status: 'ok' }); }
       if (req.method === 'GET') return sendJson(res, 200, writeCounts);
     }
 
-    // ---- Test-only: make ONE trip's content unreadable while leaving
-    // its index entry in place. Also has no equivalent in the real
-    // Worker — but the STATE it produces very much does, which is why
-    // it's worth being able to reach on purpose. Cloudflare KV is
-    // eventually consistent: a key written a moment ago can briefly read
-    // as missing elsewhere, and misses are cached. So "the index says
-    // this trip exists, but its content reads as absent" is a real,
-    // reachable state, and how the save path behaves in it decides
-    // whether a trip survives or is destroyed. See src/worker.js's
-    // SAFETY PASS. -------------------------------------------------------
+    // ---- Test-only: make one trip's content unreadable while leaving
+    // its index entry in place. Reproduces a real, reachable KV state
+    // (eventually consistent: a just-written key can briefly read as
+    // missing elsewhere) whose handling decides whether a trip survives
+    // or is destroyed. See src/worker.js's SAFETY PASS. ----
     if (urlPath === '/WayPoint/api/__hide-content' && req.method === 'POST') {
       let body;
       try { body = await readJsonBody(req); } catch (e) { return sendJson(res, 400, { error: 'bad json' }); }
