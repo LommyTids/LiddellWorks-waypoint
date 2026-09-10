@@ -18,7 +18,7 @@ for (const destination of ['overview', 'plan', 'people', 'more']) {
 }
 
 // Compact identity and Overview hierarchy are the agreed phone shell.
-requirePattern(/\.trip-header\s*\{[\s\S]*?position:\s*sticky[\s\S]*?top:\s*56px/, 'Trip header is not sticky below the mobile top bar');
+requirePattern(/\.trip-header\s*\{[\s\S]*?position:\s*sticky[\s\S]*?top:\s*calc\(var\(--wp-shell-bar-height, 56px\) \+ var\(--wp-shell-banner-height, 0px\)\)/, 'Trip header must remain below the measured top bar and system banner');
 requirePattern(/class="trip-date-range"/, 'Compact trip header has no date range');
 requirePattern(/mobile-overview-switch/, 'Timeline and Map have no prominent mobile segmented control');
 requirePattern(/body\.is-trip-view \.page/, 'Trip view does not reserve space for bottom navigation');

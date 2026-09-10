@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-09 — Astra UI review
+
+- Fixed cancelled location search controls, accidental zero-coordinate pins, preview-to-placement switching, stale destination boundaries and picker cleanup.
+- Preserved reviewed same-airport pins during flight refresh; changed airports update both labels and coordinates, and obsolete lookup responses are ignored.
+- Restored expense editing in desktop/mobile views without exposing deletion of linked itinerary records from the ledger.
+- Improved inline validation, FX-rate precision, hidden/disclosure focus handling, nested Escape behavior and suggestion change notifications.
+- Corrected phone-width form layout, modal action visibility, map stacking, sticky offsets and offline Save/status behavior.
+- Added phone-accessible trip settings, a shared Settings currency combobox and collapsed dependency inventory.
+- Added executable production-function regressions and expanded browser QA cases. See `UI-REVIEW-20260909.md` for technical notes, verification limitations and pre-merge checks.
+
 ## 2026-09-03 — Record editor and map recovery hotfix
 
 ### What changed

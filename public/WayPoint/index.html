@@ -17,6 +17,7 @@
      would silently 404 in the no-trailing-slash case. -->
 <link rel="stylesheet" href="/WayPoint/vendor/leaflet/leaflet.css">
 <style>
+[hidden] { display: none !important; }
 /* ============================================================
    WAYPOINT — a multi-trip travel planner
    ------------------------------------------------------------
@@ -234,7 +235,7 @@ input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-si
 .save-indicator[data-kind="error"] { color: var(--wp-state-danger); }
 .save-indicator[data-kind="readonly"] { color: var(--wp-state-danger); }
 .save-indicator[data-kind="saved"] { color: var(--wp-state-success); }
-.system-banner { display: none; position: sticky; top: 61px; z-index: 19; align-items: center; justify-content: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--wp-border-default); background: var(--wp-action-accent-subtle); color: var(--wp-text-primary); font: var(--wp-type-label); }
+.system-banner { display: none; position: sticky; top: var(--wp-shell-bar-height, 61px); z-index: 19; align-items: center; justify-content: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--wp-border-default); background: var(--wp-action-accent-subtle); color: var(--wp-text-primary); font: var(--wp-type-label); }
 .system-banner.is-visible { display: flex; }
 .system-banner[data-kind="offline"], .system-banner[data-kind="error"] { background: var(--wp-state-danger-subtle); }
 .system-banner .icon { color: var(--wp-state-danger); }
@@ -459,6 +460,7 @@ textarea { resize: vertical; min-height: 60px; }
 .location-picker { position: relative; }
 .location-picker-row { display: flex; gap: 8px; }
 .location-picker-row input { flex: 1; }
+.location-picker-row input, .flight-lookup-row input { min-width: 0; }
 .location-picker-row .btn { flex-shrink: 0; white-space: nowrap; }
 .location-results { max-height: 288px; margin-top: 8px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--wp-bg-surface); }
 .location-result { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--wp-border-default); background: transparent; padding: 9px 10px; color: var(--wp-text-primary); cursor: pointer; }
@@ -467,6 +469,7 @@ textarea { resize: vertical; min-height: 60px; }
 .location-result-title { display: flex; justify-content: space-between; gap: 10px; font: var(--wp-type-label); }
 .location-result-kind { font: var(--wp-type-micro); color: var(--wp-text-secondary); white-space: nowrap; }
 .location-result-address { margin-top: 2px; color: var(--wp-text-secondary); font: var(--wp-type-micro); }
+.location-result-title > span:first-child, .location-result-address, .item-notes { overflow-wrap: anywhere; }
 .location-selected { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; margin-top: 8px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-subdued); font: var(--wp-type-meta); }
 .location-selected.is-stale { border-color: var(--wp-state-danger-subtle); }
 .location-selected-status { color: var(--wp-state-success); font-weight: 650; }
@@ -475,6 +478,9 @@ textarea { resize: vertical; min-height: 60px; }
 .location-picker-actions .btn { padding: 5px 8px; font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
 .location-pin-map { display: none; height: 220px; margin-top: 9px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); overflow: hidden; }
 .location-pin-map.is-open { display: block; }
+/* Leaflet uses large internal z-indices. Contain them below dialogs, sticky
+   navigation and account menus, both on the main map and within forms. */
+.map-shell, .map-canvas, .location-pin-map { isolation: isolate; z-index: 0; position: relative; }
 /* Generic suggestion dropdown — shared by EVERY field with app-managed
    suggestions (currency, country, city, timezone, airport; see
    suggestInputHtml() and the "Generic suggestion dropdown" section in
@@ -545,6 +551,12 @@ textarea { resize: vertical; min-height: 60px; }
 .settings-section-head p { margin-top: 4px; color: var(--wp-text-secondary); font: var(--wp-type-label); }
 .settings-section .field:last-child { margin-bottom: 0; }
 .settings-section-danger { border-color: var(--wp-state-danger-subtle); }
+.settings-dependencies > summary { cursor: pointer; font: var(--wp-type-heading); }
+.settings-dependencies > p { margin-top: 10px; }
+.dependency-row { padding: 10px 0; border-bottom: 1px solid var(--wp-border-default); }
+.dependency-row:last-child { border: 0; }
+.dependency-row dt { font: var(--wp-type-label); }
+.dependency-row dd { margin: 3px 0 0; font: var(--wp-type-label); color: var(--wp-text-secondary); overflow-wrap: anywhere; }
 .settings-inline-hint { margin-top: 11px; }
 .settings-currency-input { max-width: 140px; }
 .settings-uppercase { text-transform: uppercase; }
@@ -740,10 +752,11 @@ tr:last-child td { border-bottom: none; }
 
 /* ---- 4g. Modal & toast --------------------------------------------- */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(15,18,24,.5); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 100; }
-.modal { background: var(--wp-bg-surface); border-radius: var(--radius); max-width: 560px; width: 100%; max-height: calc(100dvh - 80px); overflow: hidden; box-shadow: var(--wp-shadow-surface); }
-.modal form { display: flex; flex-direction: column; min-height: 0; max-height: calc(100dvh - 137px); }
+.modal { display: flex; flex-direction: column; background: var(--wp-bg-surface); border-radius: var(--radius); max-width: 560px; width: 100%; max-height: calc(100dvh - 80px); overflow: hidden; box-shadow: var(--wp-shadow-surface); }
+.modal form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--wp-border-default); }
-.modal-head h2 { font: var(--wp-type-heading); }
+.modal-head { flex: 0 0 auto; }
+.modal-head h2 { font: var(--wp-type-heading); min-width: 0; overflow-wrap: anywhere; }
 .modal-body { flex: 1 1 auto; min-height: 0; padding: 18px 20px; overflow-y: auto; }
 .modal-foot { position: sticky; bottom: 0; flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--wp-border-default); background: var(--wp-bg-surface); box-shadow: 0 -5px 16px rgba(26,34,51,.06); }
 .confirm-text { font: var(--wp-type-label); color: var(--wp-text-secondary); }
@@ -753,6 +766,22 @@ tr:last-child td { border-bottom: none; }
 .toast.toast-error { background: var(--wp-state-danger); color: var(--wp-color-paper-0); border-radius: var(--radius-sm); }
 
 @media (max-width: 640px) {
+  .flight-lookup-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .flight-lookup-row .btn { grid-column: 1 / -1; }
+  .flight-lookup-date { width: 100%; }
+  .journey-date-time-row { grid-template-columns: minmax(0, 1fr); }
+  .journey-moment-head, .journey-duration { display: flex; flex-wrap: wrap; }
+  .journey-duration-strip { flex: 1 1 80px; }
+  .journey-local-label { overflow-wrap: anywhere; text-align: left; }
+  .journey-duration-label { white-space: normal; }
+  .trip-heading-line { min-width: 0; }
+  .trip-heading-line h1 { min-width: 0; }
+  .location-picker-row { flex-wrap: wrap; }
+  .location-picker-row input { flex-basis: 180px; }
+  .modal-backdrop { padding: 12px 8px; }
+  .modal { max-height: calc(100dvh - 24px); }
+  .modal-body { padding: 14px 12px; }
+  .modal-head, .modal-foot { padding: 12px; }
   .field-row { grid-template-columns: 1fr; }
   .journey-date-time-row { grid-template-columns: 1fr; }
   .journey-duration { grid-template-columns: 1fr; }
@@ -773,7 +802,7 @@ tr:last-child td { border-bottom: none; }
 
   body.is-trip-view .page { padding: 0 16px calc(92px + env(safe-area-inset-bottom)); }
   .trip-header {
-    position: sticky; z-index: 16; top: 56px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px;
+    position: sticky; z-index: 16; top: calc(var(--wp-shell-bar-height, 56px) + var(--wp-shell-banner-height, 0px)); display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px;
     margin: 0 -16px 16px; padding: 9px 16px; border-bottom: 1px solid var(--wp-border-default); background: color-mix(in srgb, var(--wp-bg-canvas) 94%, transparent); backdrop-filter: blur(12px);
   }
   .back-link { margin: 0; min-height: 40px; padding: 7px 8px 7px 0; }
@@ -909,6 +938,7 @@ tr:last-child td { border-bottom: none; }
 @media (pointer: coarse) {
   .btn-icon { width: 44px; height: 44px; }
   input, select, textarea, .btn { min-height: 44px; }
+  .map-filter-chip, .map-reset, .copy-btn, .tag-picker-item, .form-section summary { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
@@ -1432,7 +1462,7 @@ function setSaveStatus(kind, message) {
   el.dataset.kind = kind;
   el.setAttribute('role', kind === 'error' || kind === 'unsaved' ? 'alert' : 'status');
   el.setAttribute('aria-live', kind === 'error' || kind === 'unsaved' ? 'assertive' : 'polite');
-  var labels = { saving: 'Saving…', saved: 'Saved', error: message || 'Save failed', readonly: 'Read-only', unsaved: message || 'Not saved' };
+  var labels = { saving: 'Saving…', saved: 'Saved', error: message || 'Save failed', readonly: message || 'Read-only', unsaved: message || 'Not saved' };
   el.textContent = labels[kind] || '';
 }
 
@@ -1463,9 +1493,20 @@ function updateSystemFeedback() {
       ((kind === 'offline' || kind === 'error') ? '<button type="button" class="btn btn-ghost" data-action="retry-connection"' + (reconnectInFlight ? ' disabled' : '') + '>' + (reconnectInFlight ? 'Retrying…' : 'Retry now') + '</button>' : '')
     : '';
   document.body.classList.toggle('editing-locked', !editingAvailable());
+  updateStickyShellOffsets();
+  updateSubmitAvailability(document);
   Array.prototype.forEach.call(document.querySelectorAll('[data-action]'), function (control) {
     if (isMutationAction(control.dataset.action)) control.disabled = !editingAvailable();
   });
+}
+
+// Sticky offsets follow the actual rendered header/banner, including text
+// zoom, role badges and wrapping offline messages, rather than fixed heights.
+function updateStickyShellOffsets() {
+  var topbar = document.querySelector('.topbar');
+  var banner = document.getElementById('system-banner');
+  if (topbar) document.documentElement.style.setProperty('--wp-shell-bar-height', topbar.getBoundingClientRect().height + 'px');
+  if (banner) document.documentElement.style.setProperty('--wp-shell-banner-height', banner.getBoundingClientRect().height + 'px');
 }
 
 async function retryConnection(options) {
@@ -2071,16 +2112,26 @@ function enhanceAccessibility(scope) {
   Array.prototype.forEach.call(scope.querySelectorAll('[data-action]'), function (control) {
     if (isMutationAction(control.dataset.action)) control.disabled = !editingAvailable();
   });
+  updateSubmitAvailability(scope);
+}
+
+function updateSubmitAvailability(scope) {
+  Array.prototype.forEach.call(scope.querySelectorAll('form:not(#login-form):not(#setup-form) button[type="submit"]'), function (button) {
+    // Retain intentional (e.g. pending request) disables when the lock lifts.
+    if (!editingAvailable() && !button.disabled) { button.dataset.editLock = 'true'; button.disabled = true; }
+    else if (editingAvailable() && button.dataset.editLock === 'true') { delete button.dataset.editLock; button.disabled = false; }
+  });
 }
 
 function modalFocusableElements(dialog) {
-  return Array.prototype.filter.call(dialog.querySelectorAll('button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'), function (el) {
-    return !el.hidden && el.getAttribute('aria-hidden') !== 'true';
+  return Array.prototype.filter.call(dialog.querySelectorAll('button:not([disabled]), summary, [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'), function (el) {
+    // Hidden disclosure contents and CSS-hidden controls cannot receive focus.
+    return !el.closest('[hidden], [inert], [aria-hidden="true"]') && el.getClientRects().length > 0;
   });
 }
 
 function setModalBackgroundInert(inert) {
-  ['.topbar', '#main-content'].forEach(function (selector) {
+  ['.topbar', '#main-content', '#system-banner'].forEach(function (selector) {
     var el = document.querySelector(selector);
     if (!el) return;
     el.inert = inert;
@@ -2105,6 +2156,7 @@ function activateModal() {
   setModalBackgroundInert(true);
   document.body.classList.add('has-modal');
   requestAnimationFrame(function () {
+    if (!dialog.isConnected) return;
     var initial = dialog.querySelector('[data-modal-initial]') || modalFocusableElements(dialog)[0] || dialog;
     initial.focus();
   });
@@ -2123,6 +2175,13 @@ function showFormError(form, message, control) {
   }
   summary.textContent = message;
   if (control) {
+    // Invalid fields can live in a collapsed optional section. Reveal every
+    // ancestor disclosure before focus so the error is visible and reachable.
+    var ancestor = control.parentElement;
+    while (ancestor && ancestor !== form) {
+      if (ancestor.tagName === 'DETAILS') ancestor.open = true;
+      ancestor = ancestor.parentElement;
+    }
     control.setAttribute('aria-invalid', 'true');
     var error = control.parentElement && control.parentElement.querySelector('.field-error');
     if (!error) {
@@ -2144,7 +2203,7 @@ function isMutationAction(action) {
     ['confirm-yes', 'open-avatar-picker', 'set-location-pin', 'use-typed-location', 'review-map-location'].indexOf(action) !== -1;
 }
 
-document.addEventListener('input', function (event) {
+function clearFieldError(event) {
   var control = event.target;
   if (!control || !control.removeAttribute) return;
   if (control.getAttribute('aria-invalid') === 'true') {
@@ -2163,7 +2222,9 @@ document.addEventListener('input', function (event) {
       if (summary) summary.remove();
     }
   }
-});
+}
+document.addEventListener('input', clearFieldError);
+document.addEventListener('change', clearFieldError);
 
 // Native constraint validation is still the source of truth, but presenting
 // its message inside the dialog makes the failure persistent, programmatically
@@ -2206,6 +2267,11 @@ document.addEventListener('keydown', function (event) {
   if (!dialog) return;
   if (event.key === 'Escape') {
     event.preventDefault();
+    // Dismiss the innermost popup first; a second Escape closes the dialog.
+    if (typeof suggestDropdownState !== 'undefined' && suggestDropdownState.input && suggestDropdownState.input.getAttribute('aria-expanded') === 'true') {
+      closeSuggestions(suggestDropdownState.input);
+      return;
+    }
     closeModal();
     return;
   }
@@ -2242,6 +2308,8 @@ function openConfirm(opts) {
 }
 
 function closeModal() {
+  disposeLocationPickers(document.getElementById('modal-root'));
+  if (typeof suggestDropdownState !== 'undefined' && suggestDropdownState.input) closeSuggestions(suggestDropdownState.input);
   document.getElementById('modal-root').innerHTML = '';
   setModalBackgroundInert(false);
   document.body.classList.remove('has-modal');
@@ -2249,7 +2317,11 @@ function closeModal() {
   pendingConfirm = null;
   var restore = modalReturnFocus;
   modalReturnFocus = null;
-  if (restore && restore.isConnected) requestAnimationFrame(function () { restore.focus(); });
+  requestAnimationFrame(function () {
+    // Saving replaces the main panel, so the original opener may be detached.
+    var target = restore && restore.isConnected ? restore : document.querySelector('#trip-panel h2, [data-page-heading], #main-content');
+    if (target) { if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1'); target.focus(); }
+  });
 }
 
 /* ---------- 6. Generic form-field schemas & modal builder ----------
@@ -2530,7 +2602,10 @@ function fieldHtml(field, value, trip, allValues) {
         ' placeholder="' + esc(field.placeholder || '') + '">';
       break;
     case 'number':
-      inputHtml = '<input type="number" step="0.01" name="' + field.key + '" value="' + esc(val) + '" ' + req + '>';
+      // FX rates need more precision than currency amounts (JPY → GBP, for
+      // example, is often less than 0.01). Validate positivity on submission.
+      var rateField = field.key === 'costRate' || field.key === 'rateOverride';
+      inputHtml = '<input type="number" step="' + (rateField ? 'any' : '0.01') + '" name="' + field.key + '" value="' + esc(val) + '" ' + req + '>';
       break;
     case 'date':
       inputHtml = '<input type="date" name="' + field.key + '" value="' + esc(val) + '" ' + req + '>';
@@ -2753,6 +2828,7 @@ function openForm(opts) {
   // keeping everything else typed.
   window.__formConfig = opts;
   var root = document.getElementById('modal-root');
+  disposeLocationPickers(root);
   var initial = opts.initial || {};
   root.innerHTML =
     '<div class="modal-backdrop" data-action="close-modal">' +
@@ -3560,6 +3636,30 @@ function mergeFlightLookupNotes(existingNotes, detailLines) {
   return notes ? (notes + '\n\n' + block) : block;
 }
 
+// Preserve a reviewed pin for the same airport; changed airports must update
+// the label and hidden coordinates together, never retain the previous pin.
+function applyFlightAirport(input, airport) {
+  var wrapper = input.closest('[data-location-picker]');
+  if (!wrapper) { input.value = airportDisplay(airport); return; }
+  var prefix = wrapper.dataset.locationPrefix;
+  var priorCode = /^([A-Z]{3})\b/i.exec(input.value.trim());
+  var priorLat = (pickerInput(wrapper, prefix + 'Lat') || {}).value;
+  var priorLng = (pickerInput(wrapper, prefix + 'Lng') || {}).value;
+  var stale = (pickerInput(wrapper, prefix + 'LocationStale') || {}).value === 'true';
+  if (!stale && priorCode && priorCode[1].toUpperCase() === airport.code && priorLat !== '' && priorLat != null && priorLng !== '' && priorLng != null) return;
+  var coords = airportCoordsForCode(airport.code) || airport.location;
+  selectLocationResult(wrapper, {
+    name: airportDisplay(airport), lat: coords ? coords.lat : '', lng: coords ? coords.lng : '',
+    locationRef: /^[A-Z]{3}$/.test(airport.code || '') && coords ? 'local:airport:' + airport.code : '',
+    granularity: coords ? 'airport' : 'unknown', kindLabel: coords ? 'Airport' : ''
+  });
+  if (!coords) {
+    var summary = wrapper.querySelector('[data-location-summary]');
+    if (summary) summary.hidden = true;
+    pickerHint(wrapper, 'Airport details updated. Find the location or set a pin to map it.');
+  }
+}
+
 function performFlightLookup(button) {
   var form = document.getElementById('entity-form');
   if (!form) return;
@@ -3595,6 +3695,10 @@ function performFlightLookup(button) {
       // touching anything.
       var currentForm = document.getElementById('entity-form');
       if (!currentForm || currentForm !== form) return;
+      var liveFlight = currentForm.querySelector('[name="flightNumber"]');
+      var liveLookupDate = document.getElementById('flight-lookup-date');
+      var liveDepartDate = currentForm.querySelector('[name="departDate"]');
+      if (!liveFlight || liveFlight.value.trim() !== flightNumber || ((liveLookupDate && liveLookupDate.value) || (liveDepartDate && liveDepartDate.value) || '') !== departDate) return;
       var currentStatusEl = document.getElementById('flight-lookup-status');
 
       if (!result.ok) {
@@ -3615,8 +3719,8 @@ function performFlightLookup(button) {
       var arriveDateField = currentForm.querySelector('[name="arriveDate"]');
       var arriveTimeField = currentForm.querySelector('[name="arriveTime"]');
       if (carrierInput && data.airline) carrierInput.value = data.airline;
-      if (fromInput && data.origin) fromInput.value = airportDisplay(data.origin);
-      if (toInput && data.destination) toInput.value = airportDisplay(data.destination);
+      if (fromInput && data.origin) applyFlightAirport(fromInput, data.origin);
+      if (toInput && data.destination) applyFlightAirport(toInput, data.destination);
       // See this function's opening comment, and lastFlightLookupCoords'
       // own comment (near airportCoordsFromText()) — this is the "even
       // for an airport too minor to be in COMMON_AIRPORTS" fallback
@@ -3675,6 +3779,7 @@ function performFlightLookup(button) {
       }
     })
     .catch(function () {
+      if (document.getElementById('entity-form') !== form || !button.isConnected) return;
       var currentStatusEl = document.getElementById('flight-lookup-status');
       if (currentStatusEl) {
         currentStatusEl.textContent = 'Couldn\'t reach the flight lookup service — check your connection and try again.';
@@ -3682,8 +3787,7 @@ function performFlightLookup(button) {
       }
     })
     .finally(function () {
-      var currentButton = document.querySelector('[data-action="lookup-flight"]');
-      if (currentButton) currentButton.disabled = false;
+      if (button.isConnected) button.disabled = false;
     });
 }
 
@@ -3910,6 +4014,7 @@ function isSuggestInput(el) {
 }
 
 function closeSuggestions(input) {
+  clearTimeout(suggestDebounce);
   var el = suggestListEl(input);
   if (el) { el.classList.remove('is-open'); el.innerHTML = ''; }
   if (input) {
@@ -3963,6 +4068,9 @@ function selectSuggestion(input, item) {
   // via a click/keyboard selection, same as it already does on typed
   // input (see the 'input' listener below).
   if (input.getAttribute('data-suggest-type') === 'airport') updateAirportResolveHint(input);
+  // Programmatic choices must notify Journey captions and validation just as
+  // typed changes do, without reopening the suggestion list.
+  input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 // Debounced so a fast typist doesn't trigger a dropdown rebuild on
@@ -3976,7 +4084,7 @@ document.addEventListener('input', function (e) {
   var input = e.target;
   if (input.getAttribute('data-suggest-type') === 'airport') updateAirportResolveHint(input);
   clearTimeout(suggestDebounce);
-  suggestDebounce = setTimeout(function () { openSuggestions(input); }, 120);
+  suggestDebounce = setTimeout(function () { if (input.isConnected && document.activeElement === input) openSuggestions(input); }, 120);
 });
 
 // Opens with whatever's already there (the field's default list, on an
@@ -4034,7 +4142,6 @@ document.addEventListener('keydown', function (e) {
 /* ---- Shared location-picker behaviour -------------------------------- */
 
 var locationPickerResults = {};
-var locationPickerBoundaries = {};
 
 function pickerInput(wrapper, name) {
   return wrapper.querySelector('input[name="' + name + '"]');
@@ -4068,6 +4175,41 @@ function abortLocationSearch(wrapper) {
     wrapper._locationSearchController.abort();
     wrapper._locationSearchController = null;
   }
+  // An aborted request no longer owns its finally block. Restore the controls
+  // here as well, otherwise typing during a request leaves Find disabled.
+  var button = wrapper.querySelector('[data-action="search-location"]');
+  if (button) button.disabled = false;
+  var region = wrapper.querySelector('[data-location-results]');
+  if (region) region.setAttribute('aria-busy', 'false');
+}
+
+function clearPickerMap(wrapper) {
+  var holder = wrapper.querySelector('[data-location-pin-map]');
+  if (!holder) return;
+  if (holder._waypointMap) holder._waypointMap.remove();
+  holder._waypointMap = null;
+  holder.classList.remove('is-open');
+}
+
+function invalidatePickerBoundary(wrapper, clearStored) {
+  if (wrapper._boundaryController) wrapper._boundaryController.abort();
+  wrapper._boundaryController = null;
+  wrapper._boundary = null;
+  var prefix = wrapper.dataset.boundaryPrefix;
+  if (prefix && clearStored) {
+    pickerSet(wrapper, prefix + 'Ref', '');
+    pickerSet(wrapper, prefix + 'Quality', 'none');
+    pickerSet(wrapper, prefix + 'Bbox', '');
+  }
+}
+
+function disposeLocationPickers(scope) {
+  if (!scope) return;
+  Array.prototype.forEach.call(scope.querySelectorAll('[data-location-picker]'), function (wrapper) {
+    abortLocationSearch(wrapper);
+    invalidatePickerBoundary(wrapper, false);
+    clearPickerMap(wrapper);
+  });
 }
 
 function localAirportLocationResults(query) {
@@ -4104,6 +4246,7 @@ function renderLocationResults(wrapper, results) {
 }
 
 async function searchLocationPicker(wrapper) {
+  abortLocationSearch(wrapper);
   var query = wrapper.querySelector('[data-location-query]');
   if (!query) return;
   var text = query.value.trim();
@@ -4112,7 +4255,6 @@ async function searchLocationPicker(wrapper) {
   var kind = wrapper.dataset.locationKind || 'point';
   var local = context === 'airport' ? localAirportLocationResults(text) : [];
   if (local.length) { renderLocationResults(wrapper, local); pickerHint(wrapper, 'Airport results are from Waypoint’s local airport data.'); return; }
-  abortLocationSearch(wrapper);
   var controller = new AbortController();
   wrapper._locationSearchController = controller;
   var resultsRegion = wrapper.querySelector('[data-location-results]');
@@ -4155,6 +4297,9 @@ async function searchLocationPicker(wrapper) {
 }
 
 function selectLocationResult(wrapper, result) {
+  abortLocationSearch(wrapper);
+  invalidatePickerBoundary(wrapper, true);
+  clearPickerMap(wrapper);
   var prefix = wrapper.dataset.locationPrefix;
   var query = wrapper.querySelector('[data-location-query]');
   if (query) query.value = wrapper.dataset.locationValue === 'address' ? (result.formattedAddress || result.name || '') : (result.name || result.formattedAddress || '');
@@ -4175,22 +4320,28 @@ function selectLocationResult(wrapper, result) {
     actions.insertAdjacentHTML('beforeend', '<button type="button" class="btn btn-ghost" data-action="preview-location">View on map</button>');
   }
   pickerHint(wrapper, 'Location selected.');
+  if (query) { query.dispatchEvent(new Event('change', { bubbles: true })); query.focus(); }
   if (wrapper.dataset.boundaryPrefix && result.boundaryRef) loadLocationBoundary(wrapper, result.boundaryRef);
 }
 
 async function loadLocationBoundary(wrapper, ref) {
   var prefix = wrapper.dataset.boundaryPrefix;
+  invalidatePickerBoundary(wrapper, false);
+  var controller = new AbortController();
+  wrapper._boundaryController = controller;
   pickerHint(wrapper, 'Loading destination area…');
   try {
-    var response = await fetch('/WayPoint/api/location-boundary?ref=' + encodeURIComponent(ref));
+    var response = await fetch('/WayPoint/api/location-boundary?ref=' + encodeURIComponent(ref), { signal: controller.signal });
     var data = await response.json();
+    if (wrapper._boundaryController !== controller || !wrapper.isConnected) return;
     if (!response.ok) throw new Error(data.error || 'No destination boundary available.');
-    locationPickerBoundaries[wrapper.dataset.locationPrefix] = data;
+    wrapper._boundary = data;
     pickerSet(wrapper, prefix + 'Ref', ref);
     pickerSet(wrapper, prefix + 'Quality', data.geometryQuality || 'none');
     pickerSet(wrapper, prefix + 'Bbox', JSON.stringify(data.bbox || []));
     pickerHint(wrapper, data.geometry ? 'Destination area ready — view it on the map to check it.' : 'Destination saved as a point.');
   } catch (err) {
+    if (wrapper._boundaryController !== controller || !wrapper.isConnected || err.name === 'AbortError') return;
     pickerSet(wrapper, prefix + 'Ref', ''); pickerSet(wrapper, prefix + 'Quality', 'none'); pickerSet(wrapper, prefix + 'Bbox', '');
     pickerHint(wrapper, err.message || 'No area boundary is available; this destination will use a point.', false);
   }
@@ -4199,12 +4350,19 @@ async function loadLocationBoundary(wrapper, ref) {
 function openLocationPickerMap(wrapper, allowPlacement) {
   var holder = wrapper.querySelector('[data-location-pin-map]');
   if (!holder) return;
+  if (holder._waypointMap && holder._allowPlacement === allowPlacement) { holder._waypointMap.invalidateSize(); return; }
+  // Rebuild when switching between preview and editing: the old event closure
+  // intentionally did not allow placement, so reusing it would do nothing.
+  clearPickerMap(wrapper);
   holder.classList.add('is-open');
-  if (holder._waypointMap) { holder._waypointMap.invalidateSize(); return; }
+  holder._allowPlacement = allowPlacement;
   var prefix = wrapper.dataset.locationPrefix;
-  var lat = Number((pickerInput(wrapper, prefix + 'Lat') || {}).value);
-  var lng = Number((pickerInput(wrapper, prefix + 'Lng') || {}).value);
-  var map = L.map(holder, { scrollWheelZoom: true }).setView([Number.isFinite(lat) ? lat : 20, Number.isFinite(lng) ? lng : 0], Number.isFinite(lat) ? 13 : 2);
+  var rawLat = (pickerInput(wrapper, prefix + 'Lat') || {}).value;
+  var rawLng = (pickerInput(wrapper, prefix + 'Lng') || {}).value;
+  var lat = rawLat === '' || rawLat == null ? NaN : Number(rawLat);
+  var lng = rawLng === '' || rawLng == null ? NaN : Number(rawLng);
+  var mapped = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  var map = L.map(holder, { scrollWheelZoom: true }).setView(mapped ? [lat, lng] : [20, 0], mapped ? 13 : 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors' }).addTo(map);
   holder._waypointMap = map;
   var marker = null;
@@ -4213,7 +4371,9 @@ function openLocationPickerMap(wrapper, allowPlacement) {
       marker = L.marker(point, { draggable: allowPlacement }).addTo(map);
       if (allowPlacement) marker.on('dragend', function () { setMarker(marker.getLatLng(), true); });
     }
-    if (allowPlacement) {
+    if (allowPlacement && manual && editingAvailable()) {
+      abortLocationSearch(wrapper);
+      invalidatePickerBoundary(wrapper, true);
       pickerSet(wrapper, prefix + 'Lat', point.lat); pickerSet(wrapper, prefix + 'Lng', point.lng);
       pickerSet(wrapper, prefix + 'LocationRef', ''); pickerSet(wrapper, prefix + 'LocationMethod', 'manual');
       pickerSet(wrapper, prefix + 'LocationGranularity', 'unknown'); pickerSet(wrapper, prefix + 'LocationKindLabel', ''); pickerSet(wrapper, prefix + 'LocationStale', 'false');
@@ -4224,8 +4384,9 @@ function openLocationPickerMap(wrapper, allowPlacement) {
       pickerSummary(wrapper, 'Manual pin', false); pickerHint(wrapper, 'Pin set. Drag it or click the map to adjust.');
     }
   };
-  if (Number.isFinite(lat) && Number.isFinite(lng)) setMarker(L.latLng(lat, lng), false);
-  var boundary = locationPickerBoundaries[prefix];
+  if (mapped) setMarker(L.latLng(lat, lng), false);
+  if (allowPlacement) pickerHint(wrapper, 'Click the map or drag the pin to choose a location. Opening the map does not change your saved location.');
+  var boundary = wrapper._boundary;
   if (boundary && boundary.geometry) {
     var destinationColor = cssToken('--wp-map-destination');
     var layer = L.geoJSON(boundary.geometry, { style: { color: destinationColor, weight: 2, fillColor: destinationColor, fillOpacity: 0.18 } }).addTo(map);
@@ -4234,7 +4395,7 @@ function openLocationPickerMap(wrapper, allowPlacement) {
   if (allowPlacement) {
     map.on('click', function (event) { setMarker(event.latlng, true); });
   }
-  setTimeout(function () { map.invalidateSize(); }, 0);
+  setTimeout(function () { if (holder._waypointMap === map) map.invalidateSize(); }, 0);
 }
 
 document.addEventListener('input', function (e) {
@@ -4242,6 +4403,7 @@ document.addEventListener('input', function (e) {
   var wrapper = e.target.closest('[data-location-picker]');
   if (!wrapper) return;
   abortLocationSearch(wrapper);
+  invalidatePickerBoundary(wrapper, false);
   var oldResults = wrapper.querySelector('[data-location-results]');
   if (oldResults) { oldResults.hidden = true; oldResults.innerHTML = ''; }
   var prefix = wrapper.dataset.locationPrefix;
@@ -4813,16 +4975,16 @@ function deleteTrip(id) {
 function allCostLines(trip) {
   var lines = [];
   trip.activities.forEach(function (a) {
-    if (a.costAmount) lines.push({ date: activityStartDate(a), type: 'Activity', desc: a.title, amount: a.costAmount, currency: a.costCurrency, rateOverride: a.costRate, receiptRef: a.receiptRef, bookingRef: a.bookingRef, category: 'Activities' });
+    if (a.costAmount) lines.push({ date: activityStartDate(a), type: 'Activity', section: 'activity', item: a, desc: a.title, amount: a.costAmount, currency: a.costCurrency, rateOverride: a.costRate, receiptRef: a.receiptRef, bookingRef: a.bookingRef, category: 'Activities' });
   });
   trip.transport.forEach(function (t) {
-    if (t.costAmount) lines.push({ date: dateOnly(t.departDateTime), type: 'Transport', desc: transportLabel(t), amount: t.costAmount, currency: t.costCurrency, rateOverride: t.costRate, receiptRef: t.receiptRef, bookingRef: t.bookingRef, category: 'Transport' });
+    if (t.costAmount) lines.push({ date: dateOnly(t.departDateTime), type: 'Transport', section: 'transport', item: t, desc: transportLabel(t), amount: t.costAmount, currency: t.costCurrency, rateOverride: t.costRate, receiptRef: t.receiptRef, bookingRef: t.bookingRef, category: 'Transport' });
   });
   trip.accommodation.forEach(function (ac) {
-    if (ac.costAmount) lines.push({ date: dateOnly(ac.checkIn), type: 'Accommodation', desc: ac.name, amount: ac.costAmount, currency: ac.costCurrency, rateOverride: ac.costRate, receiptRef: ac.receiptRef, bookingRef: ac.bookingRef, category: 'Accommodation' });
+    if (ac.costAmount) lines.push({ date: dateOnly(ac.checkIn), type: 'Accommodation', section: 'accommodation', item: ac, desc: ac.name, amount: ac.costAmount, currency: ac.costCurrency, rateOverride: ac.costRate, receiptRef: ac.receiptRef, bookingRef: ac.bookingRef, category: 'Accommodation' });
   });
   trip.expenses.forEach(function (e) {
-    lines.push({ date: e.date, type: 'Expense', desc: e.description, amount: e.amount, currency: e.currency, rateOverride: e.rateOverride, receiptRef: e.receiptRef, bookingRef: '', category: e.category || 'Other' });
+    lines.push({ date: e.date, type: 'Expense', section: 'expense', item: e, desc: e.description, amount: e.amount, currency: e.currency, rateOverride: e.rateOverride, receiptRef: e.receiptRef, bookingRef: '', category: e.category || 'Other' });
   });
   lines.sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); });
   return lines;
@@ -6398,6 +6560,14 @@ function renderTimelineTab(trip) {
 
 /* ---------- 21. Render: Expenses tab ---------------------------------------- */
 
+function expenseActionsHtml(trip, line) {
+  if (!canFullyEditTrip(trip) || !line.item) return '';
+  // Linked costs are edited at their source. Only standalone expenses expose
+  // Delete here, so deleting a ledger cost cannot delete an entire itinerary.
+  if (line.section === 'expense') return rowActions(trip, 'expense', line.item);
+  return '<button type="button" class="btn btn-icon btn-ghost" data-action="edit-' + line.section + '" data-id="' + esc(line.item[ENTITY_ID_FIELDS[line.section]]) + '" aria-label="Edit ' + esc(line.type.toLowerCase()) + ' cost" title="Edit source record">' + icon('edit') + '</button>';
+}
+
 function renderExpensesTab(trip) {
   var lines = allCostLines(trip);
   var spend = tripSpend(trip);
@@ -6427,7 +6597,7 @@ function renderExpensesTab(trip) {
     return '<tr><td>' + formatDateShort(l.date) + '</td><td>' + esc(l.type) + '</td><td>' + esc(l.desc) +
       (l.receiptRef ? '<div class="item-sub">' + esc(l.receiptRef) + '</div>' : '') + '</td>' +
       '<td class="num">' + money(l.amount, l.currency) + '</td>' +
-      '<td class="num">' + (hv.known ? money(hv.value, trip.homeCurrency) : '<span class="rate-missing">rate needed</span>') + '</td></tr>';
+      '<td class="num">' + (hv.known ? money(hv.value, trip.homeCurrency) : '<span class="rate-missing">rate needed</span>') + '</td><td>' + expenseActionsHtml(trip, l) + '</td></tr>';
   }).join('');
 
   // The compact ledger is deliberately newest-first and grouped by date so a
@@ -6449,7 +6619,7 @@ function renderExpensesTab(trip) {
         '<div class="expense-ledger-amounts">' +
           '<div class="expense-ledger-amount"><span class="expense-ledger-amount-label">Native</span><span class="expense-ledger-amount-value">' + money(line.amount, line.currency) + '</span></div>' +
           '<div class="expense-ledger-amount"><span class="expense-ledger-amount-label">Home · ' + esc(trip.homeCurrency) + '</span><span class="expense-ledger-amount-value">' + (home.known ? money(home.value, trip.homeCurrency) : '<span class="rate-missing">rate needed</span>') + '</span></div>' +
-        '</div></article>';
+        '</div><div class="card-actions">' + expenseActionsHtml(trip, line) + '</div></article>';
     }).join('');
     return '<section class="expense-ledger-day"><h3 class="expense-ledger-date">' + esc(date ? formatDateHeading(date) : 'Date not set') + '</h3><div class="expense-ledger-list">' + items + '</div></section>';
   }).join('');
@@ -6457,7 +6627,7 @@ function renderExpensesTab(trip) {
   return head +
     '<div class="stat-row"><div class="stat-tile"><div class="stat-label">Total (' + trip.homeCurrency + ')</div><div class="stat-value">' + money(spend.known, trip.homeCurrency) + '</div></div>' + catTiles + '</div>' +
     (spend.unknownCount ? '<div class="intro-note expense-rate-warning"><strong>' + spend.unknownCount + ' item(s)</strong> are in a currency with no exchange rate set — <button class="warn-link" data-action="switch-tab" data-tab="settings">set one in Settings</button> to include them in the total.</div>' : '') +
-    '<div class="table-wrap expense-table"><table><caption class="sr-only">Expenses for ' + esc(trip.name) + '</caption><thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Description</th><th scope="col" class="num">Amount</th><th scope="col" class="num">' + esc(trip.homeCurrency) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    '<div class="table-wrap expense-table"><table><caption class="sr-only">Expenses for ' + esc(trip.name) + '</caption><thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Description</th><th scope="col" class="num">Amount</th><th scope="col" class="num">' + esc(trip.homeCurrency) + '</th><th scope="col">Actions</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     '<div class="expense-ledger" aria-label="Expenses grouped by date, newest first">' + ledger + '</div>';
 }
 
@@ -6466,16 +6636,17 @@ function renderExpensesTab(trip) {
 function renderSettingsTab(trip) {
   var currencies = usedCurrencies(trip);
   var canEdit = canFullyEditTrip(trip);
+  var generalSection = canEdit ? '<section class="settings-section"><div class="settings-section-head"><div><h3>Trip details</h3><p>Name, dates and notes. These controls remain available on phone screens.</p></div></div><button class="btn" data-action="edit-trip" data-id="' + esc(trip.tripId) + '">' + icon('edit') + ' Edit trip details</button></section>' : '';
   var rateRows = currencies.map(function (cur) {
     var rate = trip.currencyRates[cur];
     return '<div class="field-row"><div class="field"><label>1 ' + esc(cur) + ' =</label>' +
-      '<input type="number" step="0.0001" name="rate_' + cur + '" value="' + (rate !== undefined ? esc(rate) : '') + '" placeholder="e.g. 0.79"' + (canEdit ? '' : ' disabled') + '></div>' +
+      '<input type="number" step="any" name="rate_' + cur + '" value="' + (rate !== undefined ? esc(rate) : '') + '" placeholder="e.g. 0.79"' + (canEdit ? '' : ' disabled') + '></div>' +
       '<div class="field"><label>&nbsp;</label><div class="field-hint settings-inline-hint">' + esc(trip.homeCurrency) + ' per 1 ' + esc(cur) + '</div></div></div>';
   }).join('');
   var currencySection = '<form id="rates-form"><section class="settings-section"><div class="settings-section-head"><div><h3>Currency</h3><p>Home currency and fixed exchange rates used for trip totals.</p></div>' + (!canEdit ? tripAccessBadgeHtml(trip) : '') + '</div>' +
-    '<div class="field"><label>Home currency</label><div class="suggest-input-wrap settings-currency-input">' +
-      '<input class="settings-uppercase" type="text" autocomplete="off" data-suggest-type="currency" maxlength="6" name="homeCurrency" value="' + esc(trip.homeCurrency) + '"' + (canEdit ? '' : ' disabled') + '>' +
-      '<div class="suggest-list" id="homeCurrency-suggest"></div></div><div class="field-hint">Every total on this trip converts into this currency.</div></div>' +
+    '<div class="field"><label>Home currency</label><div class="settings-currency-input">' +
+      suggestInputHtml({ key: 'homeCurrency' }, trip.homeCurrency, canEdit ? 'required' : 'disabled', 'currency', 'maxlength="3" class="settings-uppercase"', 'GBP') +
+      '</div><div class="field-hint">Every total on this trip converts into this currency.</div></div>' +
     (currencies.length
       ? '<div class="field"><label>Fixed exchange rates for this trip</label><div class="field-hint settings-rate-intro">Used whenever an item in that currency does not have its own rate override.</div><div class="rate-table">' + rateRows + '</div></div>'
       : '<p class="field-hint">No foreign-currency costs logged yet — rates will appear here once you add one.</p>') +
@@ -6487,8 +6658,30 @@ function renderSettingsTab(trip) {
   var accessSection = '<section class="settings-section"><div class="settings-section-head"><div><h3>Access</h3><p>Who can see and edit this trip.</p></div></div>' + accessContent + '</section>';
   var dangerSection = canEdit ? '<section class="settings-section settings-section-danger"><div class="settings-section-head"><div><h3>Danger zone</h3><p>Permanently remove this trip and every record stored inside it.</p></div></div><button class="btn btn-danger" data-action="delete-trip" data-id="' + trip.tripId + '">' + icon('delete') + ' Delete this trip</button></section>' : '';
   return (
-    '<div class="tab-panel-head"><h2>Settings</h2></div><div class="settings-stack">' + currencySection + accessSection + dangerSection + '</div>'
+    '<div class="tab-panel-head"><h2>Settings</h2></div><div class="settings-stack">' + generalSection + currencySection + accessSection + dangerSection + renderDependencyDisclosure() + '</div>'
   );
+}
+
+// Inventory of direct runtime/build dependencies, not an exhaustive list of
+// transitive npm packages. All entries describe what is actually on main.
+function renderDependencyDisclosure() {
+  var dependencies = [
+    ['Leaflet', 'Local map renderer: markers, route lines and area overlays.'],
+    ['OpenStreetMap', 'Base-map tiles and geographic data attribution.'],
+    ['LocationIQ', 'Place search and destination boundary lookup, through the Worker.'],
+    ['AeroDataBox / RapidAPI', 'Flight-number and date lookup: schedules, airports and terminal details.'],
+    ['Cloudflare Workers / Assets', 'Application API, authentication and static website hosting.'],
+    ['Cloudflare KV', 'Stored trips, accounts, sessions and cached destination boundaries.'],
+    ['Web Crypto / Intl', 'Built-in browser/platform cryptography and date, timezone and currency formatting.'],
+    ['Google Fonts', 'Fraunces, Work Sans and IBM Plex Mono font delivery.'],
+    ['Local reference assets', 'Airport coordinates, cities, countries, currencies, timezone names, avatars and semantic SVG icons.'],
+    ['Wrangler', 'Development and deployment tools for Cloudflare.'],
+    ['Playwright', 'Browser interaction and responsive regression tests (development only).'],
+    ['Node.js', 'Local mock server and automated regression test runner (development only).']
+  ];
+  return '<details class="settings-section settings-dependencies"><summary>Dependencies and services</summary><p class="field-hint">Direct dependencies and what they do. This list contains no API keys or account details.</p><dl>' + dependencies.map(function (entry) {
+    return '<div class="dependency-row"><dt>' + esc(entry[0]) + '</dt><dd>' + esc(entry[1]) + '</dd></div>';
+  }).join('') + '</dl></details>';
 }
 
 /* ---------- 23. Top-level render dispatcher ------------------------------------ */
@@ -6714,6 +6907,13 @@ document.addEventListener('click', function (e) {
   if (action === 'use-typed-location') {
     var typedPicker = el.closest('[data-location-picker]');
     if (typedPicker) {
+      abortLocationSearch(typedPicker);
+      invalidatePickerBoundary(typedPicker, true);
+      clearPickerMap(typedPicker);
+      var previewButton = typedPicker.querySelector('[data-action="preview-location"]');
+      if (previewButton) previewButton.remove();
+      var typedResults = typedPicker.querySelector('[data-location-results]');
+      if (typedResults) { typedResults.hidden = true; typedResults.innerHTML = ''; }
       var typedPrefix = typedPicker.dataset.locationPrefix;
       ['Lat', 'Lng', 'LocationRef', 'LocationMethod', 'LocationGranularity', 'LocationKindLabel'].forEach(function (suffix) { pickerSet(typedPicker, typedPrefix + suffix, ''); });
       pickerSet(typedPicker, typedPrefix + 'LocationStale', 'false');
@@ -6916,6 +7116,23 @@ function validateJourneyFields(form) {
   return true;
 }
 
+// Catch invalid values before the optimistic save. A malformed currency or
+// whitespace-only name otherwise reaches the server and locks the whole app
+// as a failed save instead of keeping a correctable error beside the field.
+function validateEditableFields(form) {
+  var controls = Array.prototype.slice.call(form.querySelectorAll('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'));
+  for (var i = 0; i < controls.length; i += 1) {
+    var control = controls[i], value = control.value.trim(), message = '';
+    if (control.required && !value) message = 'Enter a value — spaces alone cannot be saved.';
+    else if (/^(homeCurrency|costCurrency|currency)$/.test(control.name) && value && !/^[A-Za-z]{3}$/.test(value)) message = 'Use a three-letter currency code, for example GBP, USD or JPY.';
+    else if ((/^(costRate|rateOverride)$/.test(control.name) || /^rate_/.test(control.name)) && value && (!Number.isFinite(Number(value)) || Number(value) <= 0)) message = 'Enter an exchange rate greater than zero, or leave it blank.';
+    else if (control.dataset.suggestType === 'timezone' && value && !tzOffsetLabel(value)) message = 'Choose a recognised timezone, for example Asia/Tokyo.';
+    if (message) { showFormError(form, message, control); return false; }
+    if (/^(homeCurrency|costCurrency|currency)$/.test(control.name)) control.value = value.toUpperCase();
+  }
+  return true;
+}
+
 document.addEventListener('change', function (e) {
   var form = e.target.closest('#entity-form');
   var journey = form && e.target.closest('[data-journey]');
@@ -6950,6 +7167,7 @@ document.addEventListener('change', function (e) {
   var activeName = document.activeElement && document.activeElement.name;
   var container = document.getElementById('modal-fields');
   if (container) {
+    disposeLocationPickers(container);
     container.innerHTML = formFieldsHtml(cfg, values);
     enhanceAccessibility(container);
     Array.prototype.forEach.call(container.querySelectorAll('details'), function (details) {
@@ -6980,6 +7198,7 @@ document.addEventListener('submit', function (e) {
     updateSystemFeedback();
     return;
   }
+  if (!validateEditableFields(e.target)) return;
   if (e.target.id === 'user-form') {
     e.preventDefault();
     var fdUser = new FormData(e.target);
@@ -7089,6 +7308,11 @@ window.addEventListener('online', function () {
    page for the first time. */
 
 (async function init() {
+  if (typeof ResizeObserver !== 'undefined') {
+    var shellObserver = new ResizeObserver(updateStickyShellOffsets);
+    shellObserver.observe(document.querySelector('.topbar'));
+    shellObserver.observe(document.getElementById('system-banner'));
+  }
   // Find out who (if anyone) is already logged in on this browser, then
   // hand off to renderBoot() to decide what to actually show — the login
   // screen, or (once state is loaded) the normal app. See section 4b,

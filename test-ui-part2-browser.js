@@ -110,8 +110,40 @@ async function runEngine(engineName, browserType) {
       if (!(await page.locator('#entity-form .journey').count())) throw new Error(action + ' did not use Journey');
       await page.click('#entity-form button[type="submit"]');
       await page.waitForSelector('#entity-form .field-error');
-      await page.click('[data-action="close-modal"]');
+      await page.click('.modal-head [data-action="close-modal"]');
     }
+
+    // Editors must work on populated records, not just empty create forms.
+    // Long/realistic values expose intrinsic-width bugs that static checks miss.
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      for (const theme of ['light', 'dark']) {
+        for (const [tab, action] of [['destinations','edit-destination'], ['transport','edit-transport'], ['accommodation','edit-accommodation'], ['activities','edit-activity']]) {
+          await seedView(page, 'superuser', tab, theme);
+          await page.locator('[data-action="' + action + '"]').first().click();
+          await page.waitForSelector('#entity-form');
+          await assertNoOverflow(page, engineName + ' ' + action + ' ' + viewport.width + ' ' + theme);
+          const dialog = await page.locator('.modal').boundingBox();
+          const save = await page.locator('#entity-form button[type="submit"]').boundingBox();
+          if (!save || save.y + save.height > viewport.height || save.y + save.height > dialog.y + dialog.height + 1) throw new Error(action + ' Save is clipped');
+          await page.click('.modal-head [data-action="close-modal"]');
+        }
+      }
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedView(page, 'superuser', 'destinations', 'light');
+    await page.locator('[data-action="edit-destination"]').first().click();
+    await page.locator('input[name="timezone"]').focus();
+    await page.keyboard.press('Escape');
+    if (!(await page.locator('#entity-form').count())) throw new Error('Escape dismissed the form instead of suggestions');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#entity-form', { state: 'detached' });
+
+    await seedView(page, 'superuser', 'expenses', 'dark');
+    if (!(await page.locator('.expense-ledger [data-action="edit-expense"]').count())) throw new Error('Mobile expense editor missing');
+    await seedView(page, 'superuser', 'settings', 'dark');
+    if (!(await page.locator('#trip-panel [data-action="edit-trip"]').isVisible())) throw new Error('Mobile Settings lost trip editor');
+    if (await page.locator('.settings-dependencies').evaluate(el => el.open)) throw new Error('Dependency section starts expanded');
 
     await seedView(page, 'viewer', 'settings', 'light');
     if (!(await page.locator('.empty-state.is-permission').count())) throw new Error('permission-restricted state missing');
