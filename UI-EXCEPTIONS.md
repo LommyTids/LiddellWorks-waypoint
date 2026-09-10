@@ -14,6 +14,10 @@ The remaining inline styles are intentional data-driven exceptions:
   outside the normal component render tree.
 - Transport-arrow rotation is computed from projected map geometry at the
   current zoom, so it remains a runtime transform.
+- Timeline trip progress is the live percentage of the trip elapsed today. It
+  is passed to CSS as the `--wp-timeline-progress` custom property on the
+  toolbar's fill element, the same mechanism the map range controls use; no
+  fixed token can express a value that changes with the date.
 
 Any new exception should be added here with the reason it cannot use a shared
 class or semantic token. Static spacing, sizing, colour, and typography styles
