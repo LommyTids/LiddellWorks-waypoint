@@ -3,7 +3,7 @@
 const assert = require('assert');
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
-const { loginAsAdmin, waitForSaveToSettle } = require('./test-helpers');
+const { loginAsAdmin, waitForSaveToSettle, openPeopleSection, openDayAddMenu } = require('./test-helpers');
 
 const PORT = 8816;
 const SUPERUSER_PARTICIPANT_ID = '__trip_superuser__';
@@ -25,7 +25,7 @@ function waitForServer(url, tries) {
   let browser;
   try {
     await waitForServer('http://localhost:' + PORT + '/WayPoint');
-    browser = await chromium.launch({ executablePath: chromium.executablePath(), args: ['--no-sandbox'] });
+    browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
     const page = await browser.newPage();
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -49,6 +49,7 @@ function waitForServer(url, tries) {
 
     await page.click('[data-action="switch-tab"][data-tab="destinations"]');
     await page.click('[data-action="new-destination"]');
+    await openPeopleSection(page);
     const ownerChoice = page.locator('.tag-picker-item', { hasText: 'admin' });
     assert.strictEqual(await ownerChoice.count(), 1, 'trip owner should appear once in the destination People picker');
     assert.match(await ownerChoice.textContent(), /Trip Owner/, 'trip owner should be explicitly labelled Trip Owner');
@@ -70,6 +71,7 @@ function waitForServer(url, tries) {
 
     await page.click('[data-action="switch-tab"][data-tab="activities"]');
     await page.click('[data-action="new-activity"]');
+    await openPeopleSection(page);
     const ownerActivityCheckbox = page.locator('input[data-tag-person-id="' + SUPERUSER_PARTICIPANT_ID + '"]');
     const sarahActivityCheckbox = page.locator('input[data-tag-person-id="' + sarahId + '"]');
     assert.strictEqual(await ownerActivityCheckbox.isChecked(), false, 'new activity starts without guesses before an area is selected');
@@ -92,7 +94,7 @@ function waitForServer(url, tries) {
     // that destination as a seed, so its People defaults must be checked
     // on the first render without waiting for a change event.
     await page.click('[data-action="switch-tab"][data-tab="timeline"]');
-    await page.locator('[data-action="timeline-add-activity"][data-day="2028-04-04"]').click();
+    await (await openDayAddMenu(page, '2028-04-04', 'timeline-add-activity')).click();
     assert.strictEqual(await page.locator('select[name="destinationId"]').inputValue(), destination.destinationId, 'timeline quick-add should seed its active destination');
     assert.strictEqual(await page.locator('input[data-tag-person-id="' + SUPERUSER_PARTICIPANT_ID + '"]').isChecked(), true, 'seeded activity should inherit the Trip Owner on first render');
     assert.strictEqual(await page.locator('input[data-tag-person-id="' + sarahId + '"]').isChecked(), true, 'seeded activity should inherit companions on first render');
