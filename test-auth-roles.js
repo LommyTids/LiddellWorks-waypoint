@@ -22,7 +22,7 @@
 // since they don't care about the bootstrap flow itself.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
-const { loginAs, waitForSaveToSettle, waitForModalToClose } = require('./test-helpers');
+const { loginAs, waitForSaveToSettle, waitForModalToClose, openPeopleSection } = require('./test-helpers');
 
 const PORT = 8809;
 const SETUP_KEY = 'setup-key-for-tests'; // matches mock-server.js's SETUP_KEY
@@ -110,6 +110,7 @@ function waitForServer(url, tries) {
     // D1 tagged Sarah only; D2 tagged Mike only.
     await page.click('[data-action="switch-tab"][data-tab="destinations"]');
     await page.click('[data-action="new-destination"]');
+    await openPeopleSection(page);
     await page.fill('input[name="name"]', 'Sarah Only Place');
     await page.fill('input[name="arriveDate"]', '2028-01-02');
     await page.fill('input[name="departDate"]', '2028-01-04');
@@ -117,6 +118,7 @@ function waitForServer(url, tries) {
     await page.click('#entity-form button[type="submit"]');
     await waitForSaveToSettle(page);
     await page.click('[data-action="new-destination"]');
+    await openPeopleSection(page);
     await page.fill('input[name="name"]', 'Mike Only Place');
     await page.fill('input[name="arriveDate"]', '2028-01-05');
     await page.fill('input[name="departDate"]', '2028-01-07');
@@ -127,8 +129,9 @@ function waitForServer(url, tries) {
     // Activity tagged Mike only.
     await page.click('[data-action="switch-tab"][data-tab="activities"]');
     await page.click('[data-action="new-activity"]');
+    await openPeopleSection(page);
     await page.fill('input[name="title"]', 'Mike\'s solo museum trip');
-    await page.fill('input[name="date"]', '2028-01-06');
+    await page.fill('input[name="startDate"]', '2028-01-06');
     await page.locator('.tag-picker-item', { hasText: 'Mike' }).locator('input[type="checkbox"]').check();
     await page.click('#entity-form button[type="submit"]');
     await waitForSaveToSettle(page);
@@ -136,6 +139,7 @@ function waitForServer(url, tries) {
     // Transport tagged BOTH.
     await page.click('[data-action="switch-tab"][data-tab="transport"]');
     await page.click('[data-action="new-transport"]');
+    await openPeopleSection(page);
     await page.fill('input[name="fromLocation"]', 'LHR');
     await page.fill('input[name="toLocation"]', 'BKK');
     await page.fill('input[name="departDate"]', '2028-01-02');
@@ -159,7 +163,7 @@ function waitForServer(url, tries) {
     // ================= 3. Manage accounts (site owner only) — logins only,
     // no role/links here anymore (that all moved to the Share panel). ====
     await page.click('[data-action="open-manage-users"]');
-    await page.waitForSelector('.tab-panel-head h2:has-text("Manage accounts")', { timeout: 5000 });
+    await page.waitForSelector('.tab-panel-head h1:has-text("Manage accounts")', { timeout: 5000 });
     console.log('6. Manage accounts screen has no role selector anymore (roles are per-trip now):', (await page.locator('select[name="role"]').count()) === 0);
 
     for (const acct of [['admin1', 'adminpass1'], ['sarah1', 'sarahpass1'], ['viewer1', 'viewerpass1'], ['outsider1', 'outsiderpass1'], ['replacement1', 'replacementpass1']]) {
@@ -379,7 +383,8 @@ function waitForServer(url, tries) {
     // canShareTrip() this trip.
     await page.click('[data-action="switch-tab"][data-tab="settings"]');
     console.log('16. Settings only points at the Companions tab for sharing, rather than hosting a panel itself:',
-      (await page.locator('[data-action="switch-tab"][data-tab="companions"]', { hasText: 'Companions tab' }).count()) === 1);
+      (await page.locator('#trip-panel [data-action="switch-tab"][data-tab="companions"]', { hasText: 'Manage trip access' }).count()) === 1 &&
+      (await page.locator('#trip-panel #companion-link-form, #trip-panel select[name="role"]').count()) === 0);
     await page.click('[data-action="switch-tab"][data-tab="companions"]');
     await page.click('[data-action="new-linked-companion"]');
     await page.waitForSelector('#add-linked-companion-form', { timeout: 5000 });

@@ -73,4 +73,31 @@ async function waitForModalToClose(page, formSelector, timeoutMs) {
   await page.waitForSelector(formSelector, { state: 'detached', timeout: timeoutMs || 10000 });
 }
 
-module.exports = { DEFAULT_ADMIN, loginAsAdmin, loginAs, waitForSaveToSettle, waitForModalToClose };
+// The People picker lives inside the "People and notes" form section,
+// which is a collapsible <details> and starts closed. Everything inside a
+// closed <details> is display:none, so Playwright will refuse to click it
+// ("element is not visible") -- open the section first, exactly as a
+// person filling in the form would. Idempotent: already-open is a no-op.
+async function openPeopleSection(page) {
+  const summary = page.locator('#entity-form summary', { hasText: 'People and notes' });
+  if (await summary.count() === 0) return;            // Form has no collapsible People section.
+  const section = summary.locator('xpath=..');
+  if (await section.evaluate((el) => el.open)) return; // Already open.
+  await summary.click();
+  await page.locator('#entity-form .tag-picker').first().waitFor({ state: 'visible' });
+}
+
+// Each Timeline day carries ONE "Add" control rather than three separate
+// buttons (see timelineDayActionsHtml() -- a fortnight used to render 42 of
+// them). It is a native <details>, so its Activity/Stay/Travel items are
+// display:none until the menu is opened. Opens the menu for `day` and
+// returns the item locator, ready to click.
+async function openDayAddMenu(page, day, action) {
+  const menu = page.locator('details.day-add:has([data-day="' + day + '"])');
+  await menu.locator('summary').click();
+  const item = page.locator('[data-action="' + action + '"][data-day="' + day + '"]');
+  await item.waitFor({ state: 'visible' });
+  return item;
+}
+
+module.exports = { DEFAULT_ADMIN, loginAsAdmin, loginAs, waitForSaveToSettle, waitForModalToClose, openPeopleSection, openDayAddMenu };

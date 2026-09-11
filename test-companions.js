@@ -10,7 +10,7 @@
 // session, not the permissions layer.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
-const { loginAsAdmin, waitForSaveToSettle, waitForModalToClose } = require('./test-helpers');
+const { loginAsAdmin, waitForSaveToSettle, waitForModalToClose, openPeopleSection } = require('./test-helpers');
 
 const PORT = 8808;
 
@@ -62,36 +62,39 @@ function waitForServer(url, tries) {
     const companionRows = await page.locator('.item-list .item-row').count();
     console.log('2. Both companions listed:', companionRows === 2, companionRows);
 
-    // ---- Destination form offers the explicit Superuser plus both
+    // ---- Destination form offers the explicit Trip Owner plus both
     // companions as People choices; tag just Sarah. ----
     await page.click('[data-action="switch-tab"][data-tab="destinations"]');
     await page.click('[data-action="new-destination"]');
+    await openPeopleSection(page);
     const pickerOptionCount = await page.locator('.tag-picker .tag-picker-item').count();
-    const superuserChoiceText = await page.locator('.tag-picker-item', { hasText: 'admin' }).textContent();
-    console.log('3. Destination form\'s People picker offers the Superuser and both companions:', pickerOptionCount === 3 && /Superuser/.test(superuserChoiceText), { pickerOptionCount, superuserChoiceText });
+    const ownerChoiceText = await page.locator('.tag-picker-item', { hasText: 'admin' }).textContent();
+    console.log('3. Destination form\'s People picker offers the Trip Owner and both companions:', pickerOptionCount === 3 && /Trip Owner/.test(ownerChoiceText), { pickerOptionCount, ownerChoiceText });
     await page.fill('input[name="name"]', 'Chiang Mai');
     await page.fill('input[name="arriveDate"]', '2027-11-02');
     await page.fill('input[name="departDate"]', '2027-11-05');
     await page.locator('.tag-picker-item', { hasText: 'Sarah' }).locator('input[type="checkbox"]').check();
     await page.click('#entity-form button[type="submit"]');
     await waitForSaveToSettle(page);
-    const destTagText = await page.locator('.item-row .item-tags').first().textContent();
+    const destTagText = await page.locator('.item-row .item-people').first().textContent();
     console.log('4. Destination row shows the "Sarah" tag:', /Sarah/.test(destTagText) && !/Mike/.test(destTagText), destTagText);
 
     // ---- Activity: tag Mike only. ----
     await page.click('[data-action="switch-tab"][data-tab="activities"]');
     await page.click('[data-action="new-activity"]');
+    await openPeopleSection(page);
     await page.fill('input[name="title"]', 'Cooking class');
     await page.fill('input[name="startDate"]', '2027-11-03');
     await page.locator('.tag-picker-item', { hasText: 'Mike' }).locator('input[type="checkbox"]').check();
     await page.click('#entity-form button[type="submit"]');
     await waitForSaveToSettle(page);
-    const activityTagText = await page.locator('.item-row .item-tags').first().textContent();
+    const activityTagText = await page.locator('.item-row .item-people').first().textContent();
     console.log('5. Activity row shows the "Mike" tag:', /Mike/.test(activityTagText) && !/Sarah/.test(activityTagText), activityTagText);
 
     // ---- Transport: tag BOTH. ----
     await page.click('[data-action="switch-tab"][data-tab="transport"]');
     await page.click('[data-action="new-transport"]');
+    await openPeopleSection(page);
     await page.fill('input[name="fromLocation"]', 'LHR');
     await page.fill('input[name="toLocation"]', 'CNX');
     await page.fill('input[name="departDate"]', '2027-11-02');
@@ -100,13 +103,14 @@ function waitForServer(url, tries) {
     await page.locator('.tag-picker-item', { hasText: 'Mike' }).locator('input[type="checkbox"]').check();
     await page.click('#entity-form button[type="submit"]');
     await waitForSaveToSettle(page);
-    const transportTagText = await page.locator('.item-row .item-tags').first().textContent();
+    const transportTagText = await page.locator('.item-row .item-people').first().textContent();
     console.log('6. Transport row shows BOTH tags:', /Sarah/.test(transportTagText) && /Mike/.test(transportTagText), transportTagText);
 
     // ---- Accommodation: tag Sarah, then edit and confirm the checkbox
     // comes back pre-checked (round-trips correctly). ----
     await page.click('[data-action="switch-tab"][data-tab="accommodation"]');
     await page.click('[data-action="new-accommodation"]');
+    await openPeopleSection(page);
     await page.fill('input[name="name"]', 'Riverside Guesthouse');
     await page.fill('input[name="checkInDate"]', '2027-11-02');
     await page.fill('input[name="checkOutDate"]', '2027-11-05');
@@ -129,7 +133,7 @@ function waitForServer(url, tries) {
     await page.click('#entity-form button[type="submit"]');
     await waitForSaveToSettle(page);
     await page.click('[data-action="switch-tab"][data-tab="destinations"]');
-    const renamedTagText = await page.locator('.item-row .item-tags').first().textContent();
+    const renamedTagText = await page.locator('.item-row .item-people').first().textContent();
     console.log('8. Renaming a companion updates their tag everywhere:', /Sarah T\./.test(renamedTagText), renamedTagText);
 
     // ---- Deleting a companion doesn't break the items that were tagged
@@ -140,8 +144,18 @@ function waitForServer(url, tries) {
     await page.click('[data-action="confirm-yes"]');
     await waitForSaveToSettle(page);
     await page.click('[data-action="switch-tab"][data-tab="activities"]');
-    const activityTagAfterDelete = await page.locator('.item-row .item-tags').first().textContent();
-    console.log('9. Deleting a tagged companion leaves the item intact, tag just gone:', activityTagAfterDelete.trim() === '', JSON.stringify(activityTagAfterDelete));
+    // The shared card drops a line whose slots are all empty (see
+    // ITEM_CARD_LAYOUTS and test-card-system.js), so once the only tagged
+    // person is deleted the people line is ABSENT rather than present and
+    // blank. The point of the check is unchanged: the item itself survives
+    // and shows no stale reference to the deleted companion.
+    const activityRowAfterDelete = page.locator('.item-row').first();
+    await activityRowAfterDelete.waitFor({ state: 'attached' });
+    const activityPeopleAfterDelete = await activityRowAfterDelete.locator('.item-people').count();
+    const activityTextAfterDelete = await activityRowAfterDelete.textContent();
+    console.log('9. Deleting a tagged companion leaves the item intact, tag just gone:',
+      activityPeopleAfterDelete === 0 && !/Mike/.test(activityTextAfterDelete),
+      { peopleLines: activityPeopleAfterDelete });
 
     // ================= Companions & Avatars: smiley colour, account
     // linking, and the accountId-protection guarantees around it. Uses a
@@ -297,11 +311,11 @@ function waitForServer(url, tries) {
     // itself does a full state reload on success (see
     // submitAddLinkedCompanion()'s own comment) -- so give it more room
     // than the usual single-save wait.
-    await page.waitForSelector('.item-row:has-text("Diego") .tag:has-text("Super")', { timeout: 5000 });
+    await page.waitForSelector('.item-row:has-text("Diego") .tag:has-text("Owner")', { timeout: 5000 });
     const diegoTags = await page.locator('.item-row', { hasText: 'Diego' }).locator('.tag').allTextContents();
     const diegoMarkerGlyph = (await page.locator('.item-row', { hasText: 'Diego' }).locator('.avatar-marker').first().textContent() || '').trim();
-    console.log('18. "Add companion" creates Diego already linked -- resolved access level "Super", not a plain "Guest":',
-      diegoTags.includes('Super') && !diegoTags.includes('Guest'), diegoTags);
+    console.log('18. "Add companion" creates Diego already linked -- resolved access level "Owner", not a plain "Guest":',
+      diegoTags.includes('Owner') && !diegoTags.includes('Guest'), diegoTags);
     console.log('    ...and Diego\'s marker is already the linked account\'s own animal, never the generic smiley:', diegoMarkerGlyph !== '☺' && diegoMarkerGlyph !== '', diegoMarkerGlyph);
     // Confirm it happened server-side too, not just optimistically --
     // Diego really is a new companion, really linked to the uber-user's
@@ -315,6 +329,11 @@ function waitForServer(url, tries) {
     // quick-add box on the trip-CREATION form itself, so companions can
     // be typed in right when a trip is first set up, not only
     // afterwards from the Companions tab. =================================
+    // KNOWN PRE-EXISTING FAILURE FROM HERE. The #add-linked-companion-form
+    // modal never closes after a successful add-and-link, so its backdrop
+    // swallows this click. Reproduces identically on main with this file's
+    // other fixes applied, so it is not part of the visibility/naming work
+    // -- checks 1-18 above all pass. Worth its own fix.
     await page.click('[data-action="back-to-dashboard"]');
     await page.click('[data-action="new-trip"]');
     const companionBoxOnNewTrip = await page.locator('textarea[name="companionNames"]').count();
