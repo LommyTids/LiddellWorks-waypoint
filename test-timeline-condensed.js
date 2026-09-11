@@ -31,7 +31,18 @@ assert(!timelineRenderer.includes('day-areas'), 'Timeline day headings still ren
 // The Timeline's own share of the card contract. The stacked structure and
 // the category stripes are now generic to every context and are covered by
 // test-card-system.js; what stays here is what only the Timeline does.
-assert(/\.item-row--timeline \.item-supporting\s*\{[^}]*line-clamp:\s*3/.test(style), 'Timeline detail is not clamped to three lines');
+assert(/\.item-row--timeline \.item-supporting\s*\{[^}]*line-clamp:\s*2/.test(style), 'Timeline detail is not clamped to two lines');
+// Pressing a clamped card opens the rest in place, and pressing again closes it.
+assert(/\.item-row--timeline\.is-expanded \.item-supporting\s*\{[^}]*line-clamp:\s*none/.test(style), 'An expanded card still clamps its note');
+assert(source.includes("action === 'toggle-card-text'"), 'Pressing a card does not open its note');
+assert(source.includes("e.target.closest('.item-people, .item-meta-more, .copy-btn, a')"), 'Pressing the people scroller or a copy button would open the note');
+assert(source.includes('function markTruncatedNotes()'), 'Nothing measures which notes are actually cut off');
+// The shared card must not learn about the Timeline to do this: the Timeline
+// declares the capability on its model, the card only honours it.
+assert(eventRenderer.includes('model.expandableNote = true;'), 'The Timeline no longer opts its notes into expanding');
+assert(/\.item-row--timeline\[data-truncated="true"\] \.item-more/.test(style), 'The open control shows on cards whose note is not truncated');
+const coarseNote = (style.match(/@media \(pointer: coarse\)\s*\{([\s\S]*?)\n\}/) || [])[1] || '';
+assert(coarseNote.includes('.item-more'), 'The note control is below the coarse-pointer minimum');
 
 const layouts = (source.match(/var ITEM_CARD_LAYOUTS = \{([\s\S]*?)\n\};/) || [])[1] || '';
 const timelineLayout = (layouts.match(/timeline:\s*(\[.*\])/) || [])[1] || '';
@@ -130,7 +141,8 @@ const helpers = {
   allCostLines: (trip) => trip.costLines
 };
 vm.createContext(helpers);
-['daysBetween', 'timelineDayFlag', 'areasForDay', 'timelineDayAreaLabel', 'timelineDetail', 'timelineEventCarriesCost', 'recordCostLabel', 'timelineSpendByDay']
+['daysBetween', 'timelineDayFlag', 'areasForDay', 'timelineDayAreaLabel', 'timelineDetail', 'timelineEventCarriesCost', 'recordCostLabel', 'timelineSpendByDay',
+ 'transportEndpointLabel', 'timelineTransportTitle', 'timelineArrivalTitle', 'tripFocusDay']
   .forEach((name) => vm.runInContext(fnSource(name), helpers));
 
 assert.strictEqual(helpers.daysBetween('2026-09-07', '2026-09-19'), 12, 'daysBetween is off');
@@ -180,6 +192,26 @@ assert.strictEqual(converted.known, true, 'A convertible cost should be marked k
 const unrated = helpers.recordCostLabel(trip, { costAmount: 5000, costCurrency: 'KRW' });
 assert.strictEqual(unrated.known, false, 'A cost with no rate should be marked unknown');
 assert(unrated.text.includes('rate needed'), 'A cost with no rate should say so');
+
+// Flights read as codes on the Timeline; anything that is not a leading IATA
+// code, and any mode that is not a flight, is left exactly as typed.
+const flight = { mode: 'Flight', flightNumber: 'BA005', fromLocation: 'LHR — London Heathrow', toLocation: 'HND — Tokyo Haneda' };
+assert.strictEqual(helpers.transportEndpointLabel(flight, flight.fromLocation), 'LHR', 'A flight endpoint should shorten to its code');
+assert.strictEqual(helpers.timelineTransportTitle(flight), 'Flight BA005: LHR → HND', 'The flight title is wrong');
+assert.strictEqual(helpers.timelineArrivalTitle(flight), 'Arrive: HND (from LHR)', 'The arrival title is wrong');
+const rail = { mode: 'Rail', fromLocation: 'Tokyo Station', toLocation: 'Kyoto Station' };
+assert.strictEqual(helpers.transportEndpointLabel(rail, rail.fromLocation), 'Tokyo Station', 'A rail endpoint must not be shortened');
+assert.strictEqual(helpers.timelineTransportTitle(rail), 'Rail: Tokyo Station → Kyoto Station', 'The rail title changed');
+assert.strictEqual(helpers.transportEndpointLabel({ mode: 'Flight', fromLocation: 'Luton' }, 'Luton'), 'Luton', 'A flight endpoint with no code should be left alone');
+
+// Both the Timeline and the Map open on today while a trip is under way.
+const tripDays = ['2026-09-07', '2026-09-08', '2026-09-09'];
+assert.strictEqual(helpers.tripFocusDay(tripDays, '2026-09-08'), '2026-09-08', 'A trip under way should open on today');
+assert.strictEqual(helpers.tripFocusDay([]), '', 'An empty trip has no opening day');
+assert(source.includes('mapState.rangeStart = tripFocusDay(days)'), 'The Map no longer opens on today');
+assert(source.includes('function focusTimelineOpeningDay(trip)'), 'The Timeline does not open on a chosen day');
+assert(/if \(target === days\[0\]\) \{ window\.scrollTo\(0, 0\); return; \}/.test(source),
+  'A trip that is not under way should open at the top, not wherever the last tab was scrolled to');
 
 const spend = helpers.timelineSpendByDay({
   homeCurrency: 'GBP',

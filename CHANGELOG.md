@@ -1,5 +1,80 @@
 # Changelog
 
+## 2026-09-11 — Timeline notes, flight labels, and opening on today
+
+### What changed
+
+- Timeline notes clamp to **two** lines rather than three.
+- Pressing a Timeline card opens its full note in place; pressing again closes
+  it. Only cards whose note is actually cut off get the control.
+- Flights read as airport codes on the Timeline — `Flight BA005: LHR → HND`
+  instead of the full airport names.
+- The Timeline opens on today while a trip is under way, and at the start
+  otherwise.
+- The Map's range now starts on today while a trip is under way, and shows the
+  whole trip otherwise. **Reset** returns to that same view.
+- A Map popup with a long note is bounded and scrolls, with a fade that stays
+  visible to say the text continues.
+
+### Technical details
+
+Expandable notes are a model capability, not context knowledge in the shared
+card: `eventRowHtml()` sets `model.expandableNote`, and the card only honours
+it. A `context === 'timeline'` check in the renderer would have undone the
+layout table that replaced exactly that, and `test-card-system.js` fails on one.
+
+`markTruncatedNotes()` measures after layout, because CSS cannot report whether
+a clamp bit. Only a note that is really cut off gets a control, so a short one
+never advertises an action that would do nothing.
+
+The whole card is pressable through one delegated action. The nearest
+`[data-action]` wins, so the edit, delete and add controls inside are
+unaffected; the handler additionally ignores presses on the people scroller,
+the metadata disclosure, a copy button or a link, each of which is its own
+gesture.
+
+`transportEndpointLabel()` shortens a flight endpoint to a leading IATA code
+and leaves everything else alone: a rail or ferry endpoint is a place name, not
+a code. This applies to the Timeline only — the Transport tab still shows full
+airport names, where there is room and where you are checking details.
+
+`tripFocusDay()` is shared by both views and takes an injectable `today`, for
+the same reason `timelineDayExpanded()` does: a date-dependent default is only
+testable if the date can be supplied. Opening at the start scrolls to the top
+of the page rather than to the first day card — arriving from a scrolled tab
+would otherwise leave the reader part-way down, and scrolling the card itself
+into view hides the trip header.
+
+Map popups take a bounded `maxHeight`, which is what gives Leaflet a scroll
+region at all; before this a long note simply grew the popup past the height of
+a phone. The affordance, not the scrolling, was the missing part: touch
+platforms draw overlay scrollbars that appear only while a scroll is already
+under way, so a styled scrollbar is invisible at rest. The cue is a sticky
+fade inside the scroller — no `:has()`, and independent of Leaflet's own inline
+sizing. `overscroll-behavior: contain` keeps the gesture in the note instead of
+panning the map underneath.
+
+### Verification
+
+- `npm test` — passes, 12 suites. `test-map-route-arcs.js` was only in the
+  merge gate and is now in the default suite.
+- Rendered in Chromium at 390px with touch emulation, both halves of each rule:
+  - Under way: Timeline opens with today centred (scrollY 357), Map range
+    starts on today.
+  - Not under way: Timeline opens at the top (scrollY 0), Map shows the whole
+    trip.
+  - Notes clamp at 2; pressing a card takes it 135px → 342px and back, with the
+    control reading More then Less and `aria-expanded` following.
+  - Pressing Edit still opens the editor and does **not** toggle the note.
+  - A popup with a long note scrolls (398px of content in a 279px box) and
+    contains its own overscroll.
+
+### Not verified
+
+`npm run test:merge-gate` still needs Playwright Chromium **and** WebKit. The
+popup fade and the card press are both touch behaviours worth confirming on a
+real iPad.
+
 ## 2026-09-11 — One card component for every list
 
 ### What changed
