@@ -12,12 +12,12 @@
 //      written before this field existed has no dates at all, so absent
 //      must read as present-throughout or existing trips would start
 //      claiming everybody was away.
+const { loadAppSources } = require('./test-source');
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
-const source = fs.readFileSync('public/WayPoint/index.html', 'utf8');
-const style = (source.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+const { source, style } = loadAppSources();
 const worker = fs.readFileSync('src/worker.js', 'utf8');
 
 /* ---- executable: the date helpers --------------------------------------- */

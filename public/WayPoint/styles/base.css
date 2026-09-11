@@ -1,0 +1,358 @@
+
+[hidden] { display: none !important; }
+/* ============================================================
+   WAYPOINT — a multi-trip travel planner
+   ------------------------------------------------------------
+   This stylesheet is organised top-to-bottom as:
+     1. Design tokens (colors/type/spacing) for light + dark mode
+     2. Reset & base element styles
+     3. Layout shell (top bar, page container)
+     4. Components (cards, tabs, timeline, forms, modal, toast)
+   ============================================================ */
+
+/* ---- 1. Design tokens --------------------------------------- */
+:root {
+  /* Primitive interface palette. Avatar data colours and translucent
+     shadow/overlay effects are documented exceptions. */
+  --wp-color-mist-100: #eef0ec;
+  --wp-color-paper-0: #ffffff;
+  --wp-color-mist-200: #e3e6dd;
+  --wp-color-ink-900: #1a2233;
+  --wp-color-ink-600: #56607a;
+  --wp-color-ink-500: #5c6676;
+  --wp-color-ink-400: #838d9e;
+  --wp-color-line-300: #d5d9cd;
+  --wp-color-brass-600: #a6752b;
+  --wp-color-brass-700: #966820;
+  --wp-color-brass-100: #f3e6d2;
+  --wp-color-teal-700: #1f6f63;
+  --wp-color-teal-100: #dcefe9;
+  --wp-color-red-700: #b24444;
+  --wp-color-red-100: #f6e1df;
+  --wp-color-green-700: #2f7d4f;
+  --wp-color-green-100: #dff0e3;
+  --wp-color-night-950: #12161c;
+  --wp-color-night-900: #1b212b;
+  --wp-color-night-800: #232b37;
+  --wp-color-night-line: #2c3542;
+  --wp-color-paper-50: #edefea;
+  --wp-color-slate-300: #a2acbe;
+  --wp-color-slate-400: #8c97aa;
+  --wp-color-slate-500: #6e788c;
+  --wp-color-brass-400: #d9a24b;
+  --wp-color-brass-900: #3a2d15;
+  --wp-color-teal-400: #4fbfae;
+  --wp-color-teal-900: #16302c;
+  --wp-color-red-400: #e08585;
+  --wp-color-red-900: #3a2020;
+  --wp-color-green-400: #6fcb94;
+  --wp-color-green-900: #1c3527;
+  --wp-color-map-blue: #1e88ff;
+  --wp-color-map-pink: #ff2d78;
+  --wp-color-map-orange: #ff8c1a;
+  --wp-color-map-blue-dark: #63adff;
+  --wp-color-map-pink-dark: #ff6aa0;
+  --wp-color-map-orange-dark: #ffad5c;
+
+  /* Semantic colour roles used by application components. */
+  --wp-bg-canvas: var(--wp-color-mist-100);
+  --wp-bg-surface: var(--wp-color-paper-0);
+  --wp-bg-subdued: var(--wp-color-mist-200);
+  --wp-text-primary: var(--wp-color-ink-900);
+  --wp-text-secondary: var(--wp-color-ink-600);
+  --wp-text-muted: var(--wp-color-ink-500);
+  --wp-text-on-strong: var(--wp-color-paper-0);
+  --wp-border-default: var(--wp-color-line-300);
+  --wp-border-strong: var(--wp-color-ink-400);
+  --wp-action-primary: var(--wp-color-ink-900);
+  --wp-action-accent: var(--wp-color-brass-600);
+  --wp-action-accent-strong: var(--wp-color-brass-700);
+  --wp-action-accent-subtle: var(--wp-color-brass-100);
+  --wp-focus-ring: var(--wp-color-teal-700);
+  --wp-context-location: var(--wp-color-teal-700);
+  --wp-context-location-subtle: var(--wp-color-teal-100);
+  --wp-state-danger: var(--wp-color-red-700);
+  --wp-state-danger-subtle: var(--wp-color-red-100);
+  --wp-state-success: var(--wp-color-green-700);
+  --wp-state-success-subtle: var(--wp-color-green-100);
+  --wp-map-destination: var(--wp-context-location);
+  --wp-map-transport: var(--wp-color-map-blue);
+  --wp-map-accommodation: var(--wp-color-map-pink);
+  --wp-map-activity: var(--wp-color-map-orange);
+  --wp-map-destination-subtle: var(--wp-context-location-subtle);
+  --wp-map-transport-subtle: color-mix(in srgb, var(--wp-map-transport) 14%, var(--wp-bg-subdued));
+  --wp-map-accommodation-subtle: color-mix(in srgb, var(--wp-map-accommodation) 14%, var(--wp-bg-subdued));
+  --wp-map-activity-subtle: color-mix(in srgb, var(--wp-map-activity) 14%, var(--wp-bg-subdued));
+  --wp-shadow-surface: 0 1px 2px rgba(26,34,51,.06), 0 8px 24px -12px rgba(26,34,51,.18);
+
+  /* Six approved typography roles. */
+  --wp-font-display: "Fraunces", Georgia, serif;
+  --wp-font-body: "Work Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --wp-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --wp-type-display-size: 36px;
+  --wp-type-display-leading: 42px;
+  --wp-type-heading-size: 24px;
+  --wp-type-heading-leading: 30px;
+  --wp-type-body-size: 16px;
+  --wp-type-body-leading: 24px;
+  --wp-type-label-size: 14px;
+  --wp-type-label-leading: 20px;
+  --wp-type-meta-size: 12px;
+  --wp-type-meta-leading: 18px;
+  --wp-type-micro-size: 11px;
+  --wp-type-micro-leading: 16px;
+  --wp-type-display: 700 var(--wp-type-display-size)/var(--wp-type-display-leading) var(--wp-font-display);
+  --wp-type-heading: 600 var(--wp-type-heading-size)/var(--wp-type-heading-leading) var(--wp-font-display);
+  --wp-type-body: 400 var(--wp-type-body-size)/var(--wp-type-body-leading) var(--wp-font-body);
+  --wp-type-label: 600 var(--wp-type-label-size)/var(--wp-type-label-leading) var(--wp-font-body);
+  --wp-type-meta: 500 var(--wp-type-meta-size)/var(--wp-type-meta-leading) var(--wp-font-mono);
+  --wp-type-micro: 600 var(--wp-type-micro-size)/var(--wp-type-micro-leading) var(--wp-font-body);
+
+  /* Glyphs are visual assets rather than text, but still use named sizes. */
+  --wp-glyph-xs: 12px;
+  --wp-glyph-sm: 14px;
+  --wp-glyph-md: 16px;
+  --wp-glyph-lg: 18px;
+
+  /* SVG artwork uses a separate five-step optical scale. Keeping icons on
+     these sizes prevents the previous accumulation of one-off 11–34px rules. */
+  --wp-icon-xs: 12px;
+  --wp-icon-sm: 16px;
+  --wp-icon-md: 20px;
+  --wp-icon-lg: 24px;
+  --wp-icon-xl: 32px;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --wp-bg-canvas: var(--wp-color-night-950);
+    --wp-bg-surface: var(--wp-color-night-900);
+    --wp-bg-subdued: var(--wp-color-night-800);
+    --wp-text-primary: var(--wp-color-paper-50);
+    --wp-text-secondary: var(--wp-color-slate-300);
+    --wp-text-muted: var(--wp-color-slate-400);
+    --wp-text-on-strong: var(--wp-color-night-950);
+    --wp-border-default: var(--wp-color-night-line);
+    --wp-border-strong: var(--wp-color-slate-500);
+    --wp-action-primary: var(--wp-color-paper-50);
+    --wp-action-accent: var(--wp-color-brass-400);
+    --wp-action-accent-strong: var(--wp-color-brass-400);
+    --wp-action-accent-subtle: var(--wp-color-brass-900);
+    --wp-focus-ring: var(--wp-color-brass-400);
+    --wp-context-location: var(--wp-color-teal-400);
+    --wp-context-location-subtle: var(--wp-color-teal-900);
+    --wp-state-danger: var(--wp-color-red-400);
+    --wp-state-danger-subtle: var(--wp-color-red-900);
+    --wp-state-success: var(--wp-color-green-400);
+    --wp-state-success-subtle: var(--wp-color-green-900);
+    --wp-map-transport: var(--wp-color-map-blue-dark);
+    --wp-map-accommodation: var(--wp-color-map-pink-dark);
+    --wp-map-activity: var(--wp-color-map-orange-dark);
+    --wp-shadow-surface: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"] {
+  --wp-bg-canvas: var(--wp-color-night-950);
+  --wp-bg-surface: var(--wp-color-night-900);
+  --wp-bg-subdued: var(--wp-color-night-800);
+  --wp-text-primary: var(--wp-color-paper-50);
+  --wp-text-secondary: var(--wp-color-slate-300);
+  --wp-text-muted: var(--wp-color-slate-400);
+  --wp-text-on-strong: var(--wp-color-night-950);
+  --wp-border-default: var(--wp-color-night-line);
+  --wp-border-strong: var(--wp-color-slate-500);
+  --wp-action-primary: var(--wp-color-paper-50);
+  --wp-action-accent: var(--wp-color-brass-400);
+  --wp-action-accent-strong: var(--wp-color-brass-400);
+  --wp-action-accent-subtle: var(--wp-color-brass-900);
+  --wp-focus-ring: var(--wp-color-brass-400);
+  --wp-context-location: var(--wp-color-teal-400);
+  --wp-context-location-subtle: var(--wp-color-teal-900);
+  --wp-state-danger: var(--wp-color-red-400);
+  --wp-state-danger-subtle: var(--wp-color-red-900);
+  --wp-state-success: var(--wp-color-green-400);
+  --wp-state-success-subtle: var(--wp-color-green-900);
+  --wp-map-transport: var(--wp-color-map-blue-dark);
+  --wp-map-accommodation: var(--wp-color-map-pink-dark);
+  --wp-map-activity: var(--wp-color-map-orange-dark);
+  --wp-shadow-surface: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+}
+
+/* ---- 2. Reset & base ------------------------------------------ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--wp-bg-canvas);
+  color: var(--wp-text-primary);
+  font: var(--wp-type-body);
+  -webkit-font-smoothing: antialiased;
+}
+h1 { font: var(--wp-type-display); }
+h2, h3, h4 { font: var(--wp-type-heading); }
+h1, h2, h3, h4 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+a { color: var(--wp-context-location); }
+button { font-family: inherit; }
+input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-size); line-height: var(--wp-type-body-leading); }
+.icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); display: inline-block; vertical-align: -0.15em; flex: 0 0 auto; }
+::selection { background: var(--wp-action-accent-subtle); }
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
+:focus-visible { outline: 3px solid var(--wp-focus-ring); outline-offset: 2px; }
+.skip-link { position: fixed; z-index: 1000; top: 8px; left: 8px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--wp-action-primary); color: var(--wp-text-on-strong); transform: translateY(-160%); }
+.skip-link:focus { transform: translateY(0); }
+
+/* ---- 3. Layout shell -------------------------------------------- */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 12px 20px;
+  background: var(--wp-bg-surface); border-bottom: 1px solid var(--wp-border-default);
+}
+.brand { display: flex; align-items: center; gap: 8px; font: var(--wp-type-heading); letter-spacing: .01em; }
+.brand .icon { width: var(--wp-icon-lg); height: var(--wp-icon-lg); color: var(--wp-action-accent); }
+.save-indicator { font: var(--wp-type-meta); color: var(--wp-text-muted); min-width: 90px; text-align: right; }
+.save-indicator[data-kind="saving"] { color: var(--wp-text-secondary); }
+.save-indicator[data-kind="error"] { color: var(--wp-state-danger); }
+.save-indicator[data-kind="readonly"] { color: var(--wp-state-danger); }
+.save-indicator[data-kind="saved"] { color: var(--wp-state-success); }
+.system-banner { display: none; position: sticky; top: var(--wp-shell-bar-height, 61px); z-index: 19; align-items: center; justify-content: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--wp-border-default); background: var(--wp-action-accent-subtle); color: var(--wp-text-primary); font: var(--wp-type-label); }
+.system-banner.is-visible { display: flex; }
+.system-banner[data-kind="offline"], .system-banner[data-kind="error"] { background: var(--wp-state-danger-subtle); }
+.system-banner .icon { color: var(--wp-state-danger); }
+.system-banner-message { min-width: 0; }
+.system-banner .btn { min-height: 32px; padding: 4px 10px; }
+.status-badge { display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 3px 8px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-subdued); color: var(--wp-text-secondary); font: var(--wp-type-meta); white-space: nowrap; }
+.status-badge .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+.status-badge.is-readonly { border-color: var(--wp-border-strong); }
+.status-badge.is-limited { border-color: var(--wp-context-location); background: var(--wp-context-location-subtle); color: var(--wp-text-primary); }
+/* The viewing-lens chip in the trip header. Unlike the two badges above it
+   is a BUTTON -- clicking it clears the lens -- so it needs the pointer and
+   the focus ring the others don't. Deliberately quieter than is-limited:
+   that one reports a permission the viewer cannot change, this one reports
+   a choice they just made and can undo. */
+.status-badge.is-scoped { cursor: pointer; border-color: var(--wp-border-strong); }
+.status-badge.is-scoped:hover { background: var(--wp-bg-surface); color: var(--wp-text-primary); }
+.scope-badge-count { color: var(--wp-text-muted); }
+
+/* Accounts/login: who's signed in, "Manage accounts" (site owner only),
+   Log out — lives in the topbar next to the save indicator. See
+   applyAuthUI(). */
+.account-bar { display: flex; align-items: center; gap: 8px; }
+.account-label { font: var(--wp-type-label); color: var(--wp-text-secondary); margin-right: 2px; white-space: nowrap; }
+.account-label-inline { margin-right: 0; }
+.account-desktop-actions { display: flex; align-items: center; gap: 8px; }
+.account-menu { display: none; position: relative; }
+.account-menu-toggle { padding: 3px; min-width: 38px; min-height: 38px; justify-content: center; }
+.account-popover {
+  position: absolute; z-index: 40; top: calc(100% + 8px); right: 0; width: min(260px, calc(100vw - 24px));
+  padding: 6px; border: 1px solid var(--wp-border-default); border-radius: var(--radius);
+  background: var(--wp-bg-surface); box-shadow: var(--wp-shadow-surface);
+}
+.account-popover-name { padding: 9px 10px 8px; border-bottom: 1px solid var(--wp-border-default); font: var(--wp-type-label); color: var(--wp-text-secondary); overflow: hidden; text-overflow: ellipsis; }
+.account-menu-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-primary); font: var(--wp-type-label); text-align: left; cursor: pointer; }
+.account-menu-item:hover { background: var(--wp-bg-subdued); }
+.account-menu-item .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); color: var(--wp-text-secondary); }
+
+/* ---- Avatars (Companions/Avatars feature) ---------------------------
+   One small circle marker, used in three slightly different contexts:
+   (a) the account-holder swatch button in the topbar (bigger, clickable
+   -- see .account-avatar-btn below), (b) inline next to a name in an
+   item row / trip card / timeline / tag-picker (small, see
+   avatarMarkerHtml() in the JS), and (c) the swatch options inside the
+   avatar-picker modal itself. All three share the same base look so a
+   marker always means the same thing wherever it shows up. Colours are
+   always set inline from avatarColorHex()/AVATAR_GREY_HEX -- see that
+   function's own comment in data/avatars.js for why that's safe (it
+   only ever returns one of a fixed, allowlisted set of hex codes, never
+   a raw stored value) -- never write a raw token into one of these
+   style attributes directly. */
+.avatar-marker {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 20px; height: 20px; border-radius: 50%; font-size: var(--wp-glyph-xs); line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+}
+.avatar-marker-smiley { font-size: var(--wp-glyph-xs); font-weight: 700; }
+.avatar-row { display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+.account-avatar-btn {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; background: none;
+  border-radius: 999px; padding: 3px 8px 3px 3px; cursor: pointer; color: var(--wp-text-primary);
+}
+.account-avatar-btn:hover { border-color: var(--wp-border-default); background: var(--wp-bg-subdued); }
+.account-avatar-btn .avatar-marker { width: 24px; height: 24px; font-size: var(--wp-glyph-sm); }
+.trip-card-avatars { margin-top: -2px; }
+/* Overflow bubble for a trip card with more companions than fit — see
+   MAX_CARD_AVATARS in tripCardAvatarsHtml(). Reuses .avatar-marker's size
+   so it lines up with the real markers beside it, but with a flat neutral
+   background/text instead of an inline avatar colour (it isn't a real
+   person's marker, so it deliberately doesn't look like one). */
+.avatar-marker-overflow { background: var(--wp-bg-subdued); color: var(--wp-text-secondary); font-size: var(--wp-type-micro-size); font-weight: 700; box-shadow: inset 0 0 0 1px var(--wp-border-default); }
+
+/* The avatar-picker modal: two small swatch grids (colours, then
+   animals), each option rendered as its own little circle button --
+   clicking one just updates which is `.is-selected` (client-side only,
+   see openAvatarPicker()'s click handling) until Save actually submits
+   the pair together. */
+.avatar-picker-section { margin-bottom: 16px; }
+.avatar-picker-section h4 { font: var(--wp-type-label); color: var(--wp-text-secondary); margin-bottom: 8px; }
+.avatar-swatch-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.avatar-swatch-btn {
+  width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; font-size: var(--wp-glyph-md);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+  /* This class is used both on the non-interactive <span> the 'avatar-color'
+     form field renders (its background always set inline per swatch -- see
+     fieldHtml()'s 'avatar-color' case) AND on the real <button> elements
+     openAvatarPicker()'s animal grid renders (no inline background there,
+     since an animal swatch's colour is the neutral chip below, not a
+     colour choice itself). padding/font/background here undo the browser's
+     default button chrome so both uses look identical either way. */
+  padding: 0; font-family: inherit; background: var(--wp-bg-subdued);
+}
+.avatar-swatch-btn.is-selected { border-color: var(--wp-text-primary); }
+/* The 'avatar-color' form-field case in fieldHtml() uses real (visually
+   hidden) radio inputs rather than JS click-handling — this is the CSS
+   that actually shows which one is picked. */
+.avatar-swatch-label { position: relative; display: inline-block; cursor: pointer; line-height: 0; }
+.avatar-swatch-radio { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.avatar-swatch-radio:checked + .avatar-swatch-btn { border-color: var(--wp-text-primary); }
+.avatar-swatch-radio:focus-visible + .avatar-swatch-btn { outline: 2px solid var(--wp-action-accent); outline-offset: 2px; }
+.avatar-picker-preview { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding: 10px; background: var(--wp-bg-subdued); border-radius: var(--radius-sm); }
+.avatar-picker-preview .avatar-marker { width: 36px; height: 36px; font-size: var(--wp-glyph-lg); }
+
+/* NOTE: there used to be a single blanket "read-only-mode" body class
+   here that hid every Add/Edit/Delete control at once for a non-Admin
+   account. That doesn't work anymore now that permissions are PER TRIP
+   (and, for a "user" grant, per ITEM within a trip) rather than one
+   global role — see canFullyEditTrip()/canEditItem() in the JS further
+   down. Every Add/Edit/Delete control is now included in a render's HTML
+   string, or left out of it, based on those functions — a plain "is this
+   button even in the page" check, not a CSS toggle. As ever, this is a
+   courtesy for a nicer UI, not the real security boundary: the Worker
+   independently refuses any write it doesn't allow, regardless of what
+   the page shows (see the big "SAVING SAFELY" comment in src/worker.js). */
+/* A small row of buttons that sit right next to each other, e.g. the
+   "Add companion"/"Add guest" pair on the Companions tab (see
+   renderCompanionsTab()) -- without this, two buttons dropped straight
+   into a header that also has `justify-content: space-between` (see
+   .tab-panel-head below) become two SEPARATE flex items and end up
+   pushed apart to fill the row, rather than sitting adjacent to each
+   other the way they visually should. Wrapping them in one of these
+   makes the pair itself a single flex item instead. */
+.head-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+/* A shared heading role inside a tab body, splitting it into named
+   sections -- e.g. "Companions" vs "Guests" on the Companions tab. */
+.section-subhead { font: var(--wp-type-heading); margin-bottom: 8px; }
+.section-subhead:not(:first-child) { margin-top: 28px; }
+
+/* Login / first-run setup screen — shown instead of the normal app
+   whenever there's no valid session (see renderAuthScreen()/renderBoot()). */
+.auth-screen { display: flex; justify-content: center; padding: 60px 20px; }
+.auth-card { width: 100%; max-width: 360px; background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius); padding: 28px; box-shadow: var(--wp-shadow-surface); }
+.auth-card h1 { font: var(--wp-type-heading); margin-bottom: 6px; }
+.auth-card .field-hint { margin-bottom: 16px; }
+.auth-error { background: var(--wp-state-danger-subtle); color: var(--wp-state-danger); border-radius: var(--radius-sm); padding: 8px 10px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); margin-bottom: 14px; }
+
+.page { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
+

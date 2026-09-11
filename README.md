@@ -1,7 +1,7 @@
 # Waypoint — self-hosted on liddellworks.com/WayPoint
 
-This repo holds the whole Waypoint travel planner: a static single-file web
-app (`public/WayPoint/index.html`) plus a small Cloudflare Worker
+This repo holds the whole Waypoint travel planner: a static web app with
+separate HTML, CSS and JavaScript assets plus a Cloudflare Worker
 (`src/worker.js`) that saves your trip data to Cloudflare KV so it's still
 there the next time you visit.
 
@@ -43,12 +43,31 @@ when editing a record that already has data there.
 
 ## How it's put together
 
-- **`public/WayPoint/index.html`** — the entire app: markup, styles, and
-  JavaScript in one file, no build step, no framework. It keeps all your
-  trips in one in-memory `state` object and re-draws the page from that
-  object whenever something changes. On load it fetches your saved data
-  from `/WayPoint/api/data`; every time you add/edit/delete something, it
-  POSTs the updated data back to that same endpoint.
+- **`public/WayPoint/index.html`** — the HTML shell and ordered asset links.
+  All local asset URLs start with `/WayPoint/`, so the application works
+  with and without a trailing slash. There is no build step or framework.
+- **`public/WayPoint/styles/`** — four ordered stylesheets: `base.css`
+  (tokens, reset, shell and accounts), `forms.css` (controls and pickers),
+  `views.css` (dashboard, navigation, cards, timeline, expenses, dialogs and
+  responsive overrides), and `map.css` (map styling and final interaction
+  overrides). Keep this cascade order after Leaflet's stylesheet.
+- **`public/WayPoint/js/`** — application logic split into feature files.
+  Trips still live in one in-memory `state` object; edits redraw the UI and
+  save through `/WayPoint/api/data`. These are classic scripts sharing the
+  existing scope, loaded synchronously in the order listed in `index.html`.
+  `core.js` loads first and `boot.js` starts the app only after every feature
+  has loaded. Do not alphabetize the tags or add `async`, `defer`, or module
+  isolation without revisiting dependencies and the startup tests.
+- **`test-source.js`** — source-test loader that follows local scripts and
+  stylesheets referenced by the HTML shell. It parses every local script
+  and supplies application source to the existing regression checks.
+  `test-script-loading.js` separately executes the actual files in page order
+  to catch initialization errors that concatenating source could conceal.
+  Run `npm test` for those checks, `npm run test:assets` for asset serving,
+  save/reload and map regression checks in Chromium and WebKit, or
+  `npm run test:merge-gate` for these plus the existing responsive UI suite.
+  Browser checks require Playwright's Chromium and WebKit installations
+  (`npx playwright install chromium webkit`).
 - **`public/WayPoint/data/`** — a handful of small `.js` files, each just
   a plain list: `currencies.js`, `timezones.js`, `countries.js`,
   `cities.js`, `airports.js`. These feed the autocomplete suggestions on
@@ -249,6 +268,43 @@ access once granted. A person can be a different companion on different
 trips, or have a completely different role, or no access at all — it's
 all per trip. See "Guests and Companions" below for the full mechanics.
 
+
+### JavaScript ownership
+
+Paths below are relative to `public/WayPoint/js/`. The asset order in
+`index.html` is the loading manifest; no generated bundle is required.
+
+| File | Responsibility |
+| --- | --- |
+| `core.js` | Constants, dates, currency, escaping, icons and avatar helpers |
+| `state.js` | Navigation state, loading, persistence queue and retry feedback |
+| `auth.js` | Login, setup, account administration and authentication UI |
+| `dialogs.js` | Toasts, modal lifecycle, focus and field errors |
+| `forms.js` | Shared field/schema rendering and journey inputs |
+| `form-schemas.js` | Entity schemas and fresh booking/people section factories |
+| `editors.js` | Trip permissions, visibility lens and trip/destination/activity/transport editors |
+| `flights.js` | Flight lookup, airport resolution and airport search |
+| `suggestions.js` | Shared suggestion dropdown and keyboard interactions |
+| `locations.js` | Location search, boundaries, pin selection and related entity editors |
+| `people.js` | Account linking, grants, avatar editing and remaining entity actions |
+| `trip-models.js` | Expenses/CSV, itinerary days and trip statistics |
+| `shell.js` | Dashboard, trip header and desktop/mobile navigation |
+| `cards.js` | Shared ItemRow models, layouts and Plan-list rendering helper |
+| `lists.js` | Plan and People tab rendering, part-trip labels |
+| `map.js` | Leaflet state, geometry, routes, arrows, boundaries and popup sizing |
+| `timeline.js` | Timeline cards, daily disclosure and opening position |
+| `expenses-settings.js` | Expense ledger and trip settings views |
+| `render.js` | Rendering dispatcher and map mount/unmount lifecycle |
+| `events.js` | Delegated actions, map handles, form reactions and connectivity events |
+| `boot.js` | Initial authentication and first render |
+
+Cross-feature calls still use shared globals. In particular, map colors read
+CSS tokens during script evaluation; suggestion initialization references
+airport functions; map listeners remain in `events.js`; and rendering owns
+Leaflet teardown. Keeping these relationships explicit protects map loading
+and arrows while making each source file manageable.
+
+
 ## Companions & Avatars
 
 **Guests and Companions** (Destinations/Activities/Accommodation/
@@ -317,7 +373,7 @@ linking) to keep trip creation itself quick — everything else (colours,
 notes, upgrading someone to a Companion) is still just a trip away on
 the Companions tab. This box only appears when creating a trip, never
 when editing an existing one (see `TRIP_FIELDS_NEW` vs `TRIP_FIELDS`,
-and `parseCompanionNamesBox()`, in `public/WayPoint/index.html`).
+and `parseCompanionNamesBox()`, in `public/WayPoint/js/editors.js`).
 
 A Companion who also has some level of access to THIS trip — because
 they're its owner, the site's uber-user, or hold a grant — gets an

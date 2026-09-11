@@ -1,7 +1,8 @@
+const { loadAppSources } = require('./test-source');
 const fs = require('fs');
 const vm = require('vm');
 
-const html = fs.readFileSync('public/WayPoint/index.html', 'utf8');
+const html = loadAppSources().source;
 const source = fs.readFileSync('public/WayPoint/ui/icons.js', 'utf8');
 const warnings = [];
 const sandbox = { window: {}, console: { warn: (...args) => warnings.push(args.join(' ')) } };

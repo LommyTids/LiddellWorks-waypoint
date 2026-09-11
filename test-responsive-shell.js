@@ -1,6 +1,7 @@
+const { loadAppSources } = require('./test-source');
 const fs = require('fs');
 
-const html = fs.readFileSync('public/WayPoint/index.html', 'utf8');
+const html = loadAppSources().source;
 const icons = fs.readFileSync('public/WayPoint/ui/icons.js', 'utf8');
 
 function requirePattern(pattern, message) {

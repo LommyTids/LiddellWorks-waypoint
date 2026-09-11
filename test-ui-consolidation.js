@@ -1,6 +1,7 @@
+const { loadAppSources } = require('./test-source');
 const fs = require('fs');
 
-const html = fs.readFileSync('public/WayPoint/index.html', 'utf8');
+const html = loadAppSources().source;
 const icons = fs.readFileSync('public/WayPoint/ui/icons.js', 'utf8');
 
 function requirePattern(pattern, message) {
@@ -31,9 +32,9 @@ requirePattern(/openSectionTitles[\s\S]*activeName[\s\S]*details\.open = true[\s
 
 // Plan lists, Timeline and map popups all resolve through one ItemRow adapter.
 requirePattern(/var ITEM_META_ORDER = \['datetime', 'location', 'category', 'people', 'commerce'\]/, 'ItemRow metadata order changed');
-for (const renderer of ['renderDestinationsTab', 'renderActivitiesTab', 'renderTransportTab', 'renderAccommodationTab']) {
-  requirePattern(new RegExp('function ' + renderer + '[\\s\\S]{0,900}itemRowHtml\\('), renderer + ' bypasses ItemRow');
-}
+// The executable list tests verify every Plan wrapper reaches ItemRow with
+// its original sort order, empty state and record adapter.
+require('./test-shared-sections');
 requirePattern(/function eventRowHtml[\s\S]{0,1800}return itemRowHtml\(/, 'Timeline bypasses ItemRow');
 requirePattern(/function routePopupHtml[\s\S]{0,500}itemRowHtml\(/, 'Route popup bypasses ItemRow');
 requirePattern(/function pointPopupHtml[\s\S]{0,500}itemRowHtml\(/, 'Marker popup bypasses ItemRow');

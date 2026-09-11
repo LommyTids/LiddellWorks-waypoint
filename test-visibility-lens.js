@@ -8,12 +8,11 @@
 // return a filtered COPY, but it must return the ORIGINAL OBJECT ITSELF
 // whenever the lens is off, and nothing it returns may share mutated state
 // with what is stored. The first test below is the one that matters.
+const { loadAppSources } = require('./test-source');
 const assert = require('assert');
-const fs = require('fs');
 const vm = require('vm');
 
-const source = fs.readFileSync('public/WayPoint/index.html', 'utf8');
-const style = (source.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+const { source, style } = loadAppSources();
 
 /* ---- executable: the real helpers against stubs ------------------------- */
 

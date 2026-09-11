@@ -1,7 +1,6 @@
-const fs = require('fs');
+const { loadAppSources } = require('./test-source');
 
-const html = fs.readFileSync('public/WayPoint/index.html', 'utf8');
-const style = (html.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+const { source: html, style } = loadAppSources();
 
 function requirePattern(pattern, message) {
   if (!pattern.test(html)) throw new Error(message);

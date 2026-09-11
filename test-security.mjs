@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import testSources from "./test-source.js";
 
 const source = await readFile(new URL("./src/worker.js", import.meta.url), "utf8");
 const worker = (await import("data:text/javascript;base64," + Buffer.from(source + "\n//# sourceURL=waypoint-worker.mjs").toString("base64"))).default;
@@ -190,7 +191,7 @@ assert.equal(reset.status, 200);
 const revoked = await call(env, "/WayPoint/api/data", { headers: { Cookie: ownerCookie } });
 assert.equal(revoked.status, 401);
 
-const html = await readFile(new URL("./public/WayPoint/index.html", import.meta.url), "utf8");
+const html = testSources.loadAppSources().source;
 assert.match(html, /return esc\(currency \|\| ''\)/);
 assert.match(html, /inheritDestinationPeople: !existing/);
 assert.match(html, /applyDestinationPeopleDefaults\(form, cfg\.trip, e\.target\.value\)/);
