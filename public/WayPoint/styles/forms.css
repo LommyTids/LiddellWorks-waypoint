@@ -1,0 +1,144 @@
+/* ---- 4a. Buttons & form controls --------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--wp-border-default); background: var(--wp-bg-surface); color: var(--wp-text-primary);
+  border-radius: 999px; padding: 8px 16px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); font-weight: 600;
+  cursor: pointer; transition: border-color .15s, background .15s;
+}
+.btn:hover { border-color: var(--wp-text-muted); }
+.btn-primary { background: var(--wp-action-primary); color: var(--wp-text-on-strong); border-color: var(--wp-action-primary); }
+.btn-primary:hover { opacity: .9; border-color: var(--wp-action-primary); }
+.btn-accent { background: var(--wp-action-accent-strong); color: var(--wp-text-on-strong); border-color: var(--wp-action-accent-strong); }
+.btn-danger { background: transparent; color: var(--wp-state-danger); border-color: var(--wp-state-danger-subtle); }
+.btn-danger:hover { background: var(--wp-state-danger-subtle); }
+.btn-icon { width: 38px; height: 38px; padding: 0; justify-content: center; border-radius: 8px; }
+.btn-ghost { border-color: transparent; background: transparent; }
+.btn-ghost:hover { background: var(--wp-bg-subdued); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+label { display: block; font: var(--wp-type-label); color: var(--wp-text-secondary); margin-bottom: 4px; }
+input[type="text"], input[type="number"], input[type="date"], input[type="time"], input[type="password"], select, textarea {
+  width: 100%; padding: 9px 10px; border: 1px solid var(--wp-border-strong); border-radius: var(--radius-sm);
+  background: var(--wp-bg-surface); color: var(--wp-text-primary);
+}
+.field-error { margin-top: 4px; color: var(--wp-state-danger); font: var(--wp-type-label); }
+.form-error-summary { margin-bottom: 14px; padding: 10px 12px; border-left: 4px solid var(--wp-state-danger); border-radius: var(--radius-sm); background: var(--wp-state-danger-subtle); color: var(--wp-state-danger); font: var(--wp-type-label); }
+.required-marker { color: var(--wp-state-danger); font-weight: 500; }
+textarea { resize: vertical; min-height: 60px; }
+.field { margin-bottom: 14px; }
+.field-wide { grid-column: 1 / -1; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-hint { font: var(--wp-type-micro); color: var(--wp-text-muted); margin-top: 3px; }
+/* The part-trip warning under a People picker. Advisory, not an error: it
+   uses the location accent rather than the danger colour, because nothing
+   is wrong and the save is not blocked -- somebody may genuinely be joining
+   for one evening. See syncTagPickerAwayWarning(). */
+.tag-picker-away { color: var(--wp-text-primary); background: var(--wp-context-location-subtle); border-left: 2px solid var(--wp-context-location); border-radius: 0 var(--radius) var(--radius) 0; padding: 6px 10px; margin-top: 6px; }
+.form-section + .form-section { border-top: 1px solid var(--wp-border-default); margin-top: 22px; padding-top: 20px; }
+.form-section-head { margin-bottom: 14px; }
+.form-section-head h3 { font: var(--wp-type-label); }
+.form-section-head p { margin-top: 2px; font: var(--wp-type-micro); color: var(--wp-text-muted); }
+.form-details { border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-subdued); margin-top: 12px; }
+.form-details summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; padding: 10px 12px; color: var(--wp-text-primary); font: var(--wp-type-label); }
+.form-details summary::-webkit-details-marker { display: none; }
+.form-details summary .form-details-chevron { color: var(--wp-text-muted); transition: transform .15s; }
+.form-details[open] summary .form-details-chevron { transform: rotate(180deg); }
+.form-details-body { padding: 2px 12px 2px; }
+.form-details-body .field:last-child { margin-bottom: 12px; }
+.checkbox-field { display: flex; align-items: center; gap: 8px; cursor: pointer; font: var(--wp-type-label); }
+.checkbox-field input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--wp-action-accent); }
+.journey { display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0 0 14px; padding: 0; border: 0; }
+.journey > legend { margin-bottom: 0; font: var(--wp-type-label); color: var(--wp-text-secondary); }
+.journey-grid { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 10px; }
+.journey-rail { position: relative; display: flex; flex-direction: column; align-items: center; padding: 25px 0; }
+.journey-rail::before { content: ''; position: absolute; top: 31px; bottom: 31px; width: 2px; background: var(--wp-border-default); }
+.journey-dot { position: relative; z-index: 1; width: 11px; height: 11px; border: 2px solid var(--wp-action-accent); border-radius: 50%; background: var(--wp-bg-surface); }
+.journey-dot:last-child { margin-top: auto; }
+.journey-moments { min-width: 0; }
+.journey-moment-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.journey-moment-head strong { font: var(--wp-type-label); }
+.journey-local-label { font: var(--wp-type-micro); color: var(--wp-text-muted); text-align: right; }
+.journey-date-time-row { display: grid; grid-template-columns: minmax(0,1fr) 126px; gap: 10px; }
+.journey-date-time-row .field { margin: 0; display: grid; grid-template-columns: var(--wp-icon-sm) minmax(0,1fr); grid-template-areas: 'icon label' 'icon input'; column-gap: 8px; align-items: center; min-height: 64px; padding: 8px 10px; border: 1px solid var(--wp-border-strong); border-radius: 10px; background: var(--wp-bg-subdued); }
+.journey-date-time-row .field > .icon { grid-area: icon; color: var(--wp-action-accent); }
+.journey-date-time-row .field label { grid-area: label; margin: 0; font: var(--wp-type-micro); letter-spacing: .06em; text-transform: uppercase; }
+.journey-date-time-row .field input { grid-area: input; min-width: 0; padding: 0; border: 0; background: transparent; font-weight: 600; }
+.journey-duration { display: grid; grid-template-columns: auto minmax(52px,1fr); align-items: center; gap: 10px; min-height: 42px; padding: 7px 0; }
+.journey-duration-label { padding: 5px 9px; border-radius: 999px; background: var(--wp-action-accent-subtle); color: var(--wp-text-primary); font: var(--wp-type-meta); font-weight: 600; white-space: nowrap; }
+.journey-duration-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(5px,1fr); gap: 3px; min-width: 0; }
+.journey-duration-segment { height: 8px; border-radius: 999px; background: var(--wp-border-default); }
+.journey-duration-segment.is-filled { background: var(--wp-action-accent); }
+.journey.is-all-day .journey-time-field { display: none; }
+.journey.is-all-day .journey-date-time-row, .journey.is-date-only .journey-date-time-row { grid-template-columns: 1fr; }
+/* The People "tag-picker" field (see fieldHtml()'s 'tag-picker' case)
+   — a row of small pill-shaped checkboxes for the Trip Owner and each
+   companion, wrapping once there are more than fit on one line. */
+.tag-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-picker-item {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading);
+  padding: 6px 10px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-subdued);
+}
+.tag-picker-item input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--wp-action-accent); }
+.tag-picker-role, .tag-role {
+  color: var(--wp-action-accent); font: var(--wp-type-micro); letter-spacing: .04em; text-transform: uppercase;
+}
+.tag-picker-role { margin-left: 2px; }
+.tag-role { margin-left: 3px; }
+.flight-lookup-row { display: flex; gap: 8px; }
+.flight-lookup-row input { flex: 1; }
+.flight-lookup-code { text-transform: uppercase; }
+.flight-lookup-date { flex: 0 0 150px !important; }
+.flight-lookup-row .btn { flex-shrink: 0; white-space: nowrap; }
+.flight-lookup-status { font: var(--wp-type-micro); color: var(--wp-text-muted); margin-top: 6px; min-height: var(--wp-type-micro-leading); }
+.flight-lookup-status.is-error { color: var(--wp-state-danger); }
+.flight-lookup-status.is-ok { color: var(--wp-text-secondary); }
+.airport-resolve-hint.is-ok { color: var(--wp-state-success); }
+.airport-resolve-hint.is-unresolved { color: var(--wp-text-muted); }
+.location-picker { position: relative; }
+.location-picker-row { display: flex; gap: 8px; }
+.location-picker-row input { flex: 1; }
+.location-picker-row input, .flight-lookup-row input { min-width: 0; }
+.location-picker-row .btn { flex-shrink: 0; white-space: nowrap; }
+.location-results { max-height: 288px; margin-top: 8px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--wp-bg-surface); }
+.location-result { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--wp-border-default); background: transparent; padding: 9px 10px; color: var(--wp-text-primary); cursor: pointer; }
+.location-result:last-child { border-bottom: 0; }
+.location-result:hover, .location-result:focus { background: var(--wp-bg-subdued); }
+.location-result-title { display: flex; justify-content: space-between; gap: 10px; font: var(--wp-type-label); }
+.location-result-kind { font: var(--wp-type-micro); color: var(--wp-text-secondary); white-space: nowrap; }
+.location-result-address { margin-top: 2px; color: var(--wp-text-secondary); font: var(--wp-type-micro); }
+.location-result-title > span:first-child, .location-result-address, .item-notes { overflow-wrap: anywhere; }
+.location-selected { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; margin-top: 8px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-subdued); font: var(--wp-type-meta); }
+.location-selected.is-stale { border-color: var(--wp-state-danger-subtle); }
+.location-selected-status { color: var(--wp-state-success); font-weight: 650; }
+.location-selected.is-stale .location-selected-status { color: var(--wp-state-danger); }
+.location-picker-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 7px; }
+.location-picker-actions .btn { padding: 5px 8px; font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+.location-pin-map { display: none; height: 220px; margin-top: 9px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); overflow: hidden; }
+.location-pin-map.is-open { display: block; }
+/* Leaflet uses large internal z-indices. Contain them below dialogs, sticky
+   navigation and account menus, both on the main map and within forms. */
+.map-shell, .map-canvas, .location-pin-map { isolation: isolate; z-index: 0; position: relative; }
+/* Generic suggestion dropdown — shared by EVERY field with app-managed
+   suggestions (currency, country, city, timezone, airport; see
+   suggestInputHtml() and the "Generic suggestion dropdown" section in
+   the JS further down), so they all look and behave identically. It
+   replaces what used to be a native <datalist> for these fields (a
+   couple of real problems drove that: a native datalist popup can't be
+   repositioned by CSS at all, and rebuilding its options while it's
+   open was interrupting typing on some devices/browsers — see the JS
+   comment for the full story). `.suggest-input-wrap` is the
+   positioning anchor for the dropdown, scoped to just the input so the
+   dropdown's `top: 100%` sits right under the input itself, not under
+   any hint text below it (airport's resolve-hint, timezone's offset
+   hint). */
+.suggest-input-wrap { position: relative; }
+.suggest-list {
+  display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+  background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm);
+  box-shadow: var(--wp-shadow-surface); max-height: 220px; overflow-y: auto; z-index: 50;
+}
+.suggest-list.is-open { display: block; }
+.suggest-item { padding: 8px 10px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); cursor: pointer; }
+.suggest-item.is-active, .suggest-item:hover { background: var(--wp-bg-subdued); }
+.suggest-empty { padding: 8px 10px; font: var(--wp-type-label); color: var(--wp-text-muted); }
+

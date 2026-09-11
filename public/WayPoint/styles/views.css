@@ -1,0 +1,511 @@
+/* ---- 4b. Dashboard ------------------------------------------------ */
+.section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+.section-head h1 { font: var(--wp-type-display); }
+.trip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.trip-card {
+  background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius);
+  padding: 18px; cursor: pointer; box-shadow: var(--wp-shadow-surface); display: flex; flex-direction: column; gap: 10px;
+  transition: transform .12s;
+}
+.trip-card:hover { transform: translateY(-2px); }
+.trip-card:focus-within { border-color: var(--wp-focus-ring); }
+.trip-card-open { width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 10px; }
+.trip-card-title { display: block; font: var(--wp-type-heading); }
+.trip-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.trip-dates { font: var(--wp-type-meta); color: var(--wp-text-secondary); }
+.pill { display: inline-flex; align-items: center; gap: 4px; font: var(--wp-type-micro); padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+.pill-upcoming { background: var(--wp-context-location-subtle); color: var(--wp-context-location); }
+.pill-ongoing { background: var(--wp-action-accent-subtle); color: var(--wp-action-accent); }
+.pill-past { background: var(--wp-bg-subdued); color: var(--wp-text-muted); }
+.trip-stats { display: flex; gap: 14px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-secondary); flex-wrap: wrap; }
+.trip-stats b { color: var(--wp-text-primary); font: var(--wp-type-meta); font-weight: 600; }
+.card-actions { display: flex; gap: 4px; }
+.empty-state { text-align: center; padding: 52px 20px; color: var(--wp-text-secondary); border: 1px dashed var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); }
+.empty-state-mark { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 62px; height: 62px; margin-bottom: 12px; border: 1px solid var(--wp-border-default); border-radius: 50%; color: var(--wp-text-muted); transform: rotate(-2deg); }
+.empty-state-mark::after { content: ""; position: absolute; width: 80px; height: 22px; left: 36px; top: 37px; border-top: 2px dotted var(--wp-border-default); border-radius: 50%; transform: rotate(14deg); pointer-events: none; }
+.empty-state-mark .icon { width: var(--wp-icon-xl); height: var(--wp-icon-xl); }
+.empty-state h3 { margin-bottom: 6px; color: var(--wp-text-primary); }
+.empty-state p { max-width: 440px; margin: 0 auto; font: var(--wp-type-body); }
+.empty-state-actions { display: flex; justify-content: center; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.empty-state.is-error .empty-state-mark, .empty-state.is-offline .empty-state-mark { color: var(--wp-state-danger); border-color: var(--wp-state-danger-subtle); }
+.empty-state.is-permission .empty-state-mark { color: var(--wp-text-secondary); }
+.empty-state.is-compact { padding: 28px 18px; }
+.auth-primary { width: 100%; }
+.auth-footer { margin-top: 14px; }
+.manage-users-intro { margin-bottom: 16px; }
+.form-details-hint { margin: 0 0 12px; }
+.companion-form-intro { margin-bottom: 14px; }
+.item-notes { margin-top: 6px; }
+.intro-note { background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; font: var(--wp-type-label); color: var(--wp-text-secondary); }
+.intro-note strong { color: var(--wp-text-primary); }
+.settings-stack { display: grid; gap: 16px; }
+.settings-section { padding: 20px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); }
+.settings-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.settings-section-head p { margin-top: 4px; color: var(--wp-text-secondary); font: var(--wp-type-label); }
+.settings-section .field:last-child { margin-bottom: 0; }
+.settings-section-danger { border-color: var(--wp-state-danger-subtle); }
+/* "What you see": a two-option segmented control. Wraps rather than
+   squashing on a narrow phone, and the active half is marked by weight and
+   surface rather than colour alone, so it survives a high-contrast or
+   monochrome rendering. aria-pressed carries the same state for a screen
+   reader -- see renderSettingsTab(). */
+.scope-switch { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.scope-option.is-active { border-color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); color: var(--wp-text-primary); font-weight: 600; }
+.settings-dependencies > summary { cursor: pointer; font: var(--wp-type-heading); }
+.settings-dependencies > p { margin-top: 10px; }
+.dependency-row { padding: 10px 0; border-bottom: 1px solid var(--wp-border-default); }
+.dependency-row:last-child { border: 0; }
+.dependency-row dt { font: var(--wp-type-label); }
+.dependency-row dd { margin: 3px 0 0; font: var(--wp-type-label); color: var(--wp-text-secondary); overflow-wrap: anywhere; }
+.settings-inline-hint { margin-top: 11px; }
+.settings-currency-input { max-width: 140px; }
+.settings-uppercase { text-transform: uppercase; }
+.settings-rate-intro { margin-bottom: 10px; }
+.integration-list { display: grid; gap: 10px; }
+.integration-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid var(--wp-border-default); }
+.integration-row:first-child { border-top: 0; padding-top: 0; }
+.integration-copy strong { display: block; }
+.integration-copy span { color: var(--wp-text-secondary); font: var(--wp-type-label); }
+
+/* ---- 4c. Trip header & tabs ---------------------------------------- */
+.trip-header { margin-bottom: 22px; }
+.back-link { display: inline-flex; align-items: center; gap: 4px; font: var(--wp-type-label); color: var(--wp-text-secondary); background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 10px; }
+.back-link .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+.back-label-compact { display: none; }
+.trip-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.trip-heading-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.trip-title-row h1 { font: var(--wp-type-display); }
+.trip-meta { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-secondary); }
+.trip-meta b { font: var(--wp-type-meta); color: var(--wp-text-primary); }
+.warn-link { color: var(--wp-state-danger); cursor: pointer; background: none; border: none; font: var(--wp-type-label); padding: 0; text-decoration: underline; }
+
+/* Navigation is deliberately grouped by the job someone is doing: View
+   (Timeline/Map), Plan, People and Manage. The groups wrap rather than
+   disappear on small screens, so the structure makes the many trip views
+   easier to scan without reintroducing the old hidden-tab problem. */
+.nav-group-label { margin-top: 18px; font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .08em; color: var(--wp-text-muted); }
+/* The two "big picture" views (Timeline, Map) — larger and more prominent
+   than the regular data-entry tabs below, since they're the main thing
+   most people open a trip to look at. */
+.hero-row { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
+.hero-btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 22px; border-radius: var(--radius); border: 1px solid var(--wp-border-default);
+  background: var(--wp-bg-surface); color: var(--wp-text-primary); box-shadow: var(--wp-shadow-surface);
+  font: var(--wp-type-body); font-weight: 600; cursor: pointer;
+  transition: transform .12s, border-color .15s;
+}
+.hero-btn .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); color: var(--wp-action-accent); }
+.hero-btn:hover { transform: translateY(-1px); }
+.hero-btn.active { background: var(--wp-action-primary); color: var(--wp-text-on-strong); border-color: var(--wp-action-primary); }
+.hero-btn.active .icon { color: var(--wp-action-accent); }
+
+/* Each group owns its own short tab row. This keeps related controls
+   together on wide screens and still lets every group wrap in full on a
+   phone, rather than hiding tabs in a horizontal scroll strip. */
+.tabbar { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 20px 0 22px; overflow-x: visible; }
+.tab-group { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tab-group-label { font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .08em; color: var(--wp-text-muted); }
+.tab-group-tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--wp-border-default); }
+.tab-btn {
+  padding: 9px 14px; background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--wp-text-secondary); font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); font-weight: 500; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tab-btn:hover { color: var(--wp-text-primary); }
+.tab-btn.active { color: var(--wp-text-primary); border-bottom-color: var(--wp-action-accent); font-weight: 600; }
+.tab-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
+.tab-panel-head h2 { font: var(--wp-type-heading); }
+
+/* The mobile shell exists alongside, rather than replacing, the complete
+   desktop navigation. CSS chooses one representation at the breakpoint;
+   both call the same switch-tab action and therefore share permissions and
+   panel rendering rather than creating a second navigation state machine. */
+.mobile-trip-shell, .mobile-destination-nav { display: none; }
+.mobile-child-nav { display: flex; gap: 4px; margin: 0 0 18px; padding: 4px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-subdued); overflow-x: auto; scrollbar-width: none; }
+.mobile-child-nav::-webkit-scrollbar { display: none; }
+.mobile-child-btn { flex: 1 0 auto; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 11px; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; color: var(--wp-text-secondary); font: var(--wp-type-label); cursor: pointer; white-space: nowrap; }
+.mobile-child-btn.active { background: var(--wp-bg-surface); color: var(--wp-text-primary); box-shadow: 0 1px 3px rgba(26,34,51,.12); font-weight: 650; }
+.mobile-child-btn .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+.mobile-overview-switch .mobile-child-btn.active .icon { color: var(--wp-action-accent); }
+.mobile-more-list { display: grid; gap: 10px; }
+.mobile-more-card { width: 100%; display: flex; align-items: center; gap: 14px; padding: 16px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); color: var(--wp-text-primary); text-align: left; cursor: pointer; box-shadow: var(--wp-shadow-surface); }
+.mobile-more-card > .icon { width: var(--wp-icon-lg); height: var(--wp-icon-lg); color: var(--wp-action-accent); }
+.mobile-more-card-copy { flex: 1; min-width: 0; }
+.mobile-more-card-title { display: block; font: var(--wp-type-label); font-weight: 650; }
+.mobile-more-card-description { display: block; margin-top: 2px; color: var(--wp-text-secondary); font: var(--wp-type-meta); }
+.mobile-more-card .icon:last-child { width: var(--wp-icon-sm); height: var(--wp-icon-sm); color: var(--wp-text-muted); }
+.mobile-more-return { display: none; }
+
+/* ---- 4d. The card (every list: Plan, Timeline, Map, People) ---------
+   One component, laid out from ITEM_CARD_LAYOUTS. A card is a stack of
+   lines; a line is a row of slots. Context variants below adjust padding
+   and emphasis only -- never the structure, which is the layout table's
+   job. */
+.item-list { display: flex; flex-direction: column; gap: 10px; }
+.item-row {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--wp-border-default); border-left-width: 3px; border-radius: var(--radius-sm);
+  background: var(--wp-bg-surface);
+}
+.item-row-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.item-row-line[data-item-line="title"] { align-items: baseline; flex-wrap: wrap; gap: 8px; }
+/* Pushes everything after it to the right edge. Deliberately not content:
+   a line holding only a spacer does not render. */
+.item-row-spacer { flex: 1 1 auto; }
+
+/* A category stripe in the record's existing Map colour, so a flight and a
+   coffee no longer carry identical weight -- they differed only by a small
+   tinted glyph. Transport gets a little more, a faint tint and a heavier
+   title, because it is the part of a day you cannot be late for. */
+.item-row[data-item-section="activity"] { border-left-color: var(--wp-map-activity); }
+.item-row[data-item-section="accommodation"] { border-left-color: var(--wp-map-accommodation); }
+.item-row[data-item-section="destination"] { border-left-color: var(--wp-context-location); }
+.item-row[data-item-section="transport"] { border-left-color: var(--wp-map-transport); background: color-mix(in srgb, var(--wp-map-transport) 4%, var(--wp-bg-surface)); }
+.item-row[data-item-section="transport"] .item-title { font-weight: 650; }
+
+.item-row .item-icon {
+  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--wp-bg-subdued); color: var(--wp-text-secondary);
+}
+.item-row .item-icon .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+/* The People lists put a person's own marker in the icon slot. */
+.item-row .item-icon.item-icon-avatar { background: none; }
+.item-row .item-icon.item-icon-avatar .avatar-marker { width: 26px; height: 26px; font-size: var(--wp-glyph-sm); }
+.item-row-time { flex: 0 0 auto; color: var(--wp-text-secondary); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.item-title { min-width: 0; font: var(--wp-type-label); overflow-wrap: anywhere; }
+.item-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.item-row-cost { flex: 0 0 auto; color: var(--wp-action-accent-strong); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.item-row-cost.rate-missing { color: var(--wp-state-danger); }
+.item-sub { font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-secondary); margin-top: 2px; }
+
+/* Metadata flows as one wrapping run. It used to be a column of groups,
+   which at 390px collapsed to one chip per line -- twelve chips over
+   fifteen rows, 384px of a 517px card. The groups survive as ordering
+   only. */
+.item-metadata { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; min-width: 0; }
+.item-meta-group { display: contents; }
+.item-meta-group[data-item-meta="datetime"] { order: 1; }
+.item-meta-group[data-item-meta="location"] { order: 2; }
+.item-meta-group[data-item-meta="category"] { order: 3; }
+.item-meta-group[data-item-meta="people"] { order: 4; }
+.item-meta-group[data-item-meta="commerce"] { order: 5; }
+/* Past ITEM_META_CAP chips the rest move behind a native disclosure, so a
+   busy record stays one or two lines tall. */
+.item-meta-more { order: 6; }
+.item-meta-more-btn {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+  border: 1px dashed var(--wp-border-strong); border-radius: 6px;
+  color: var(--wp-text-muted); font: var(--wp-type-meta); cursor: pointer; list-style: none;
+}
+.item-meta-more-btn::-webkit-details-marker { display: none; }
+.item-meta-more-btn:hover { color: var(--wp-text-primary); border-color: var(--wp-text-muted); }
+.item-meta-more-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+.item-meta-more-rest { display: flex; flex-wrap: wrap; gap: 5px 6px; margin-top: 5px; }
+
+/* People get their own line along the bottom and scroll sideways rather
+   than wrapping, so a record with two companions and one with twelve are
+   the same height. Focusable so the run can be panned from the keyboard,
+   and the only part of a card allowed to scroll horizontally. */
+.item-people {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; gap: 6px; flex-wrap: nowrap;
+  margin-top: 3px; padding-top: 7px; padding-bottom: 2px;
+  border-top: 1px solid var(--wp-border-default);
+  overflow-x: auto; overscroll-behavior-x: contain;
+  scrollbar-width: thin; scrollbar-color: var(--wp-border-strong) transparent;
+}
+.item-people::-webkit-scrollbar { height: 6px; }
+.item-people::-webkit-scrollbar-thumb { background: var(--wp-border-strong); border-radius: 999px; }
+.item-people::-webkit-scrollbar-track { background: transparent; }
+.item-people .tag { flex: 0 0 auto; }
+
+.item-supporting { color: var(--wp-text-secondary); font: var(--wp-type-meta); overflow-wrap: anywhere; }
+.item-status { color: var(--wp-state-danger); font: var(--wp-type-meta); display: flex; align-items: center; gap: 5px; }
+.item-status .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+
+/* Timeline: the one context that drops metadata entirely and clamps its
+   supporting line to two, so a day reads as a scan. The text stays in the
+   DOM -- it is only visually shortened, and assistive technology reads it
+   all -- and pressing the card opens the rest in place. */
+.item-row--timeline .item-supporting {
+  display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.item-row--timeline.is-expanded .item-supporting {
+  display: block; -webkit-line-clamp: none; line-clamp: none; overflow: visible;
+}
+/* Only a note that is really cut off gets a control, so a short one does not
+   advertise an action that would do nothing. markTruncatedNotes() measures
+   after layout and sets the attribute. */
+.item-more {
+  display: none; align-self: flex-start;
+  margin-top: 1px; padding: 2px 0;
+  border: 0; background: none;
+  color: var(--wp-action-accent-strong); font: var(--wp-type-meta);
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.item-row--timeline[data-truncated="true"] .item-more,
+.item-row--timeline.is-expanded .item-more { display: inline-flex; }
+.item-row--timeline[data-truncated="true"], .item-row--timeline.is-expanded { cursor: pointer; }
+/* The controls inside keep their own pointer, so the card-wide press never
+   looks like it owns them. */
+.item-row--timeline .item-actions, .item-row--timeline .item-people,
+.item-row--timeline .item-meta-more { cursor: auto; }
+/* Map popovers sit inside Leaflet's own chrome, so they drop the card
+   frame and separate with a rule instead. */
+.item-row--map { padding: 7px 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.item-row--map + .item-row--map { border-top: 1px solid var(--wp-border-default); }
+.item-row--map .item-actions .btn-icon { width: 32px; height: 32px; }
+
+.item-icon.tone-activity { background: var(--wp-map-activity-subtle); color: var(--wp-map-activity); }
+.item-icon.tone-transport { background: var(--wp-map-transport-subtle); color: var(--wp-map-transport); }
+.item-icon.tone-stay { background: var(--wp-map-accommodation-subtle); color: var(--wp-map-accommodation); }
+.item-icon.tone-destination { background: var(--wp-context-location-subtle); color: var(--wp-context-location); }
+.item-tags { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.tag { font: var(--wp-type-meta); color: var(--wp-text-secondary); background: var(--wp-bg-subdued); border-radius: 6px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 4px; }
+.tag .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+.tag-cost { color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); }
+/* "4-11 Jun" beside a companion who is only on the trip for part of it.
+   Rendered only when they have dates, so a trip where everyone is there
+   throughout looks exactly as it did. See companionStayLabel(). */
+.tag-stay { color: var(--wp-text-primary); background: var(--wp-context-location-subtle); }
+/* Companions tab: Guest vs Companion, and a Companion's access-level tag
+   (Owner/Admin/User/Viewer) -- see renderCompanionsTab() and the
+   COMPANIONS & AVATARS comment in src/worker.js's resolveCompanionAccessLevels()
+   for what these mean and who can see them (everyone on the trip, unlike
+   the raw `grants` list itself). Colour is purely a visual hint of
+   "how much this person can do here" -- Owner/Admin get the same warm
+   accent colour already used for cost tags elsewhere (most privileged,
+   most worth noticing at a glance); User/Viewer and Guest stay the plain
+   neutral grey `.tag` already used for everything else, since they're
+   not something you need to specifically notice. */
+/* NB: the class name below is built by concatenation from the STORED role
+   string ("superuser"), not from the label shown to the reader ("Owner") --
+   see renderCompanionsTab()'s `' tag-role-' + accessRole`. The display
+   wording and the stored role deliberately differ; don't "fix" this to
+   match the label or the rule stops matching any element. */
+.tag-role-superuser, .tag-role-admin { color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); }
+.item-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.copy-btn { min-width: 24px; min-height: 24px; align-items: center; justify-content: center; background: none; border: none; color: var(--wp-text-muted); cursor: pointer; padding: 2px; display: inline-flex; }
+.copy-btn:hover { color: var(--wp-text-primary); }
+.copy-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+
+/* ---- 4e. Timeline -------------------------------------------------
+   Three pieces: a toolbar for moving through a long trip, one card per
+   day, and the event cards inside it. A day card is a rail (the spine
+   plus its date badge) beside a body (the heading disclosure, the add
+   menu, and the day's events). */
+
+/* Sticky on desktop only. Below 768px .trip-header is itself sticky and
+   its height is not measured into a custom property, so a second sticky
+   layer there would risk sitting on top of it. */
+.timeline-toolbar {
+  position: sticky; z-index: 15;
+  top: calc(var(--wp-shell-bar-height, 61px) + var(--wp-shell-banner-height, 0px));
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 14px; padding: 8px 0; background: var(--wp-bg-canvas);
+}
+.timeline-progress { display: flex; align-items: center; gap: 9px; margin-right: auto; color: var(--wp-text-secondary); font: var(--wp-type-meta); }
+.timeline-progress strong { color: var(--wp-text-primary); }
+.timeline-progress-track { width: 88px; height: 4px; border-radius: 999px; background: var(--wp-border-default); overflow: hidden; }
+.timeline-progress-fill { display: block; height: 100%; width: var(--wp-timeline-progress, 0%); border-radius: 999px; background: var(--wp-action-accent); }
+.timeline-tool { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 6px 12px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-micro); cursor: pointer; }
+.timeline-tool:hover { border-color: var(--wp-text-muted); color: var(--wp-text-primary); }
+.timeline-tool .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+.timeline-tool.is-today { border-color: var(--wp-action-accent-strong); color: var(--wp-action-accent-strong); }
+
+.day-card { position: relative; display: flex; gap: 14px; margin-bottom: 10px; }
+.day-card:last-child { margin-bottom: 0; }
+.day-rail { position: relative; display: flex; justify-content: center; width: 40px; flex-shrink: 0; }
+/* The spine is absolutely positioned so it cannot collapse. As a flex
+   child it took its height from the day body and measured 0px on every
+   collapsed day, breaking the line exactly where continuity matters. */
+.day-rail::before {
+  content: ""; position: absolute; top: 8px; bottom: -14px; left: 50%;
+  width: 2px; margin-left: -1px;
+  background: color-mix(in srgb, var(--wp-border-strong) 45%, var(--wp-border-default));
+}
+.day-card:last-child .day-rail::before { display: none; }
+/* A date badge, not a control: the disclosure is the whole heading row
+   beside it, which is a far larger target than a 34px circle. */
+.day-num {
+  position: relative; z-index: 1; width: 36px; height: 36px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--wp-bg-canvas); border-radius: 50%;
+  background: var(--wp-action-primary); color: var(--wp-text-on-strong);
+  font: var(--wp-type-meta); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.day-card.is-today .day-num { background: var(--wp-action-accent-strong); box-shadow: 0 0 0 3px var(--wp-action-accent-subtle); }
+.day-card.is-outside .day-num { background: var(--wp-bg-canvas); border: 1px dashed var(--wp-border-strong); color: var(--wp-text-muted); }
+
+.day-body { flex: 1; min-width: 0; padding-bottom: 6px; }
+.day-headrow { display: flex; align-items: center; gap: 8px; }
+.day-head {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 4px 8px 4px 0;
+  border: 0; border-radius: var(--radius-sm); background: transparent;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.day-head:hover { background: var(--wp-bg-subdued); }
+.day-head-copy { flex: 1; min-width: 0; }
+.day-date-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.day-date { font: var(--wp-type-heading); }
+.day-card.is-outside .day-date { color: var(--wp-text-muted); }
+.day-area { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text-secondary); font: var(--wp-type-label); }
+.day-flag { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; background: var(--wp-action-accent-strong); color: var(--wp-text-on-strong); font: var(--wp-type-micro); letter-spacing: .06em; text-transform: uppercase; }
+.day-flag.is-quiet { background: transparent; color: var(--wp-text-muted); border: 1px dashed var(--wp-border-strong); }
+/* The summary is what a collapsed day says about itself. Without it a
+   closed day was 38px of nothing and an empty day looked like a full one. */
+.day-summary { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; color: var(--wp-text-muted); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; }
+.day-summary-spend { color: var(--wp-text-secondary); }
+.day-summary-dot { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .6; }
+.day-chevron { flex: 0 0 auto; color: var(--wp-text-muted); transition: transform .16s ease; }
+.day-chevron .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+.day-card:not(.is-collapsed) .day-chevron { transform: rotate(180deg); }
+
+/* One add control per day rather than three: a fortnight previously carried
+   42 permanently visible buttons competing with the itinerary. This one
+   recedes until the day is hovered or focused -- by dropping its outline
+   rather than its opacity, so it is never an invisible target a pointer can
+   land on or a screen reader can reach ahead of sighted readers. */
+.day-add { position: relative; flex: 0 0 auto; }
+.day-add-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 5px 11px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--wp-text-muted); font: var(--wp-type-micro); cursor: pointer; list-style: none; transition: color .14s ease, border-color .14s ease; }
+.day-card:hover .day-add-btn, .day-card:focus-within .day-add-btn, .day-add[open] .day-add-btn { border-color: var(--wp-border-default); background: var(--wp-bg-surface); color: var(--wp-text-secondary); }
+.day-add-btn::-webkit-details-marker { display: none; }
+.day-add-btn:hover { border-color: var(--wp-action-accent-strong); color: var(--wp-action-accent-strong); }
+.day-add-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+.day-add-menu { position: absolute; z-index: 18; top: calc(100% + 6px); right: 0; min-width: 172px; padding: 6px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); box-shadow: var(--wp-shadow-surface); }
+.day-add-item { width: 100%; display: flex; align-items: center; gap: 9px; min-height: 38px; padding: 8px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-primary); font: var(--wp-type-label); text-align: left; cursor: pointer; }
+.day-add-item:hover { background: var(--wp-bg-subdued); }
+.day-add-item .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); color: var(--wp-text-secondary); }
+
+.day-content { display: flex; flex-direction: column; gap: 7px; padding-top: 4px; }
+.day-events { display: flex; flex-direction: column; gap: 7px; }
+.overnight-note { display: flex; align-items: center; gap: 7px; padding: 4px 0 2px; color: var(--wp-text-muted); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+.overnight-note.is-unbooked { color: var(--wp-state-danger); }
+.overnight-note .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+.no-day-events { display: flex; align-items: center; gap: 8px; padding: 6px 0; color: var(--wp-text-muted); font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); }
+.no-day-events .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+
+@media (max-width: 768px) {
+  .timeline-toolbar { position: static; }
+}
+@media (max-width: 640px) {
+  /* Narrow screens collapse the add control to one plus, kept inline with
+     the date rather than given a full-width row of its own. */
+  .day-add-label { display: none; }
+  .day-add-btn { width: 44px; min-width: 44px; padding: 0; justify-content: center; border-radius: 50%; }
+  .day-add-btn .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); }
+  .day-headrow { gap: 2px; }
+  .day-card { gap: 10px; }
+  .day-rail { width: 36px; }
+  .timeline-progress-track { width: 64px; }
+}
+
+/* ---- 4f. Expenses table ------------------------------------------- */
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 10px; margin-bottom: 18px; }
+.stat-tile { background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); padding: 12px 14px; }
+.stat-tile .stat-label { font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .04em; color: var(--wp-text-muted); }
+.stat-tile .stat-value { font: var(--wp-type-heading); margin-top: 4px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); }
+table { width: 100%; border-collapse: collapse; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); min-width: 640px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--wp-border-default); }
+th { font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .03em; color: var(--wp-text-muted); background: var(--wp-bg-subdued); }
+td.num, th.num { text-align: right; font: var(--wp-type-meta); font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: none; }
+.rate-missing { color: var(--wp-state-danger); font: var(--wp-type-micro); }
+.rate-table label { margin: 0; }
+.rate-table .field-row { grid-template-columns: 1fr 1fr; align-items: end; }
+.expenses-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.expense-rate-warning { border-color: var(--wp-state-danger-subtle); }
+.expense-ledger { display: none; }
+.expense-ledger-day { margin-bottom: 18px; }
+.expense-ledger-date { margin-bottom: 7px; color: var(--wp-text-secondary); font: var(--wp-type-meta); }
+.expense-ledger-list { display: grid; gap: 8px; }
+.expense-ledger-row { padding: 12px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-surface); }
+.expense-ledger-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.expense-ledger-title { min-width: 0; font: var(--wp-type-label); overflow-wrap: anywhere; }
+.expense-ledger-type { flex: 0 0 auto; color: var(--wp-text-muted); font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .04em; }
+.expense-ledger-reference { margin-top: 2px; color: var(--wp-text-secondary); font: var(--wp-type-meta); overflow-wrap: anywhere; }
+.expense-ledger-amounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.expense-ledger-amount { min-width: 0; padding-top: 8px; border-top: 1px solid var(--wp-border-default); }
+.expense-ledger-amount-label { display: block; color: var(--wp-text-muted); font: var(--wp-type-micro); text-transform: uppercase; letter-spacing: .04em; }
+.expense-ledger-amount-value { display: block; margin-top: 2px; color: var(--wp-text-primary); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* ---- 4g. Modal & toast --------------------------------------------- */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(15,18,24,.5); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 100; }
+.modal { display: flex; flex-direction: column; background: var(--wp-bg-surface); border-radius: var(--radius); max-width: 560px; width: 100%; max-height: calc(100dvh - 80px); overflow: hidden; box-shadow: var(--wp-shadow-surface); }
+.modal form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--wp-border-default); }
+.modal-head { flex: 0 0 auto; }
+.modal-head h2 { font: var(--wp-type-heading); min-width: 0; overflow-wrap: anywhere; }
+.modal-body { flex: 1 1 auto; min-height: 0; padding: 18px 20px; overflow-y: auto; }
+.modal-foot { position: sticky; bottom: 0; flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--wp-border-default); background: var(--wp-bg-surface); box-shadow: 0 -5px 16px rgba(26,34,51,.06); }
+.confirm-text { font: var(--wp-type-label); color: var(--wp-text-secondary); }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--wp-action-primary); color: var(--wp-text-on-strong); padding: 10px 18px; border-radius: 999px; font: var(--wp-type-label); box-shadow: var(--wp-shadow-surface); z-index: 200; opacity: 0; transition: opacity .2s; }
+.toast.show { opacity: 1; }
+.toast.toast-error { background: var(--wp-state-danger); color: var(--wp-color-paper-0); border-radius: var(--radius-sm); }
+
+@media (max-width: 640px) {
+  .flight-lookup-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .flight-lookup-row .btn { grid-column: 1 / -1; }
+  .flight-lookup-date { width: 100%; }
+  .journey-date-time-row { grid-template-columns: minmax(0, 1fr); }
+  .journey-moment-head, .journey-duration { display: flex; flex-wrap: wrap; }
+  .journey-duration-strip { flex: 1 1 80px; }
+  .journey-local-label { overflow-wrap: anywhere; text-align: left; }
+  .journey-duration-label { white-space: normal; }
+  .trip-heading-line { min-width: 0; }
+  .trip-heading-line h1 { min-width: 0; }
+  .location-picker-row { flex-wrap: wrap; }
+  .location-picker-row input { flex-basis: 180px; }
+  .modal-backdrop { padding: 12px 8px; }
+  .modal { max-height: calc(100dvh - 24px); }
+  .modal-body { padding: 14px 12px; }
+  .modal-head, .modal-foot { padding: 12px; }
+  .field-row { grid-template-columns: 1fr; }
+  .journey-date-time-row { grid-template-columns: 1fr; }
+  .journey-duration { grid-template-columns: 1fr; }
+  .modal form { max-height: calc(100dvh - 81px); }
+  :root { --wp-type-display-size: 32px; --wp-type-display-leading: 38px; }
+}
+
+@media (max-width: 768px) {
+  .topbar { min-height: 56px; padding: 8px 12px; gap: 8px; }
+  .brand { font-size: var(--wp-type-body-size); }
+  .brand .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); }
+  .save-indicator { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account-desktop-actions { display: none; }
+  .account-menu { display: block; }
+  .account-menu-toggle .avatar-marker { width: 28px; height: 28px; }
+
+  body.is-trip-view .page { padding: 0 16px calc(92px + env(safe-area-inset-bottom)); }
+  .trip-header {
+    position: sticky; z-index: 16; top: calc(var(--wp-shell-bar-height, 56px) + var(--wp-shell-banner-height, 0px)); display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px;
+    margin: 0 -16px 16px; padding: 9px 16px; border-bottom: 1px solid var(--wp-border-default); background: color-mix(in srgb, var(--wp-bg-canvas) 94%, transparent); backdrop-filter: blur(12px);
+  }
+  .back-link { margin: 0; min-height: 40px; padding: 7px 8px 7px 0; }
+  .back-label-wide { display: none; }
+  .back-label-compact { display: inline; }
+  .trip-title-row { display: block; min-width: 0; }
+  .trip-title-row h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--wp-type-heading); }
+  .trip-meta { margin-top: 1px; font: var(--wp-type-meta); }
+  .trip-spend-meta, .trip-header .card-actions { display: none; }
+  .desktop-trip-nav { display: none; }
+  .mobile-trip-shell { display: block; }
+  .mobile-more-return { display: inline-flex; margin-bottom: 12px; }
+
+  .mobile-destination-nav {
+    position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 5px 6px calc(5px + env(safe-area-inset-bottom)); border-top: 1px solid var(--wp-border-default); background: color-mix(in srgb, var(--wp-bg-surface) 96%, transparent); box-shadow: 0 -4px 16px rgba(26,34,51,.08); backdrop-filter: blur(14px);
+  }
+  .mobile-destination-btn { min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px 2px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-muted); font: var(--wp-type-micro); cursor: pointer; }
+  .mobile-destination-btn .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); }
+  .mobile-destination-btn.active { color: var(--wp-text-primary); background: var(--wp-action-accent-subtle); }
+  .mobile-destination-btn.active .icon { color: var(--wp-action-accent); }
+}
+

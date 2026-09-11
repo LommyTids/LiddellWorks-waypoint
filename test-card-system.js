@@ -6,12 +6,11 @@
 // rearranging one is an entry in ITEM_CARD_LAYOUTS; it is never a branch in
 // the renderer, and it is never hand-built markup, which is what Contacts,
 // Companions and Manage accounts had each drifted into.
+const { loadAppSources } = require('./test-source');
 const assert = require('assert');
-const fs = require('fs');
 const vm = require('vm');
 
-const source = fs.readFileSync('public/WayPoint/index.html', 'utf8');
-const style = (source.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+const { source, style } = loadAppSources();
 
 /* ---- nothing hand-builds a card any more -------------------------------- */
 
@@ -27,8 +26,10 @@ function functionSource(name) {
   const next = source.indexOf('\nfunction ', begin + 1);
   return source.slice(begin, next === -1 ? undefined : next);
 }
-['renderDestinationsTab', 'renderActivitiesTab', 'renderTransportTab', 'renderAccommodationTab',
- 'renderContactsTab', 'renderCompanionsTab', 'renderManageUsersView'].forEach(function (name) {
+['renderDestinationsTab', 'renderActivitiesTab', 'renderTransportTab', 'renderAccommodationTab'].forEach(function (name) {
+  assert(functionSource(name).includes('renderItemListTab('), name + ' bypasses the shared Plan list');
+});
+['renderItemListTab', 'renderContactsTab', 'renderCompanionsTab', 'renderManageUsersView'].forEach(function (name) {
   assert(functionSource(name).includes('itemRowHtml('), name + ' bypasses the shared card');
 });
 

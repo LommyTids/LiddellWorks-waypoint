@@ -2,12 +2,10 @@
 // doubles. No credentials, real trip data, browser installation or network.
 // --baseline verifies that these cases actually detect defects on base main.
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const vm = require('node:vm');
-const { execFileSync } = require('node:child_process');
-const html = process.argv.includes('--baseline')
-  ? execFileSync('git', ['show', 'd87eafd:public/WayPoint/index.html'], { encoding: 'utf8' })
-  : fs.readFileSync('public/WayPoint/index.html', 'utf8');
+const { loadAppSources } = require('./test-source');
+const appSources = loadAppSources({ gitRef: process.argv.includes('--baseline') ? 'd87eafd' : undefined });
+const html = appSources.source;
 const cases = [];
 function test(name, fn) { cases.push({ name, fn }); }
 function functions(names, context = {}) {
@@ -53,8 +51,9 @@ function locationEnvironment(extra = {}) {
   for (const name of ['clearPickerMap', 'invalidatePickerBoundary', 'disposeLocationPickers']) if (html.includes('function ' + name + '(')) names.push(name);
   return { ...functions(names, context), maps, markers, context };
 }
-test('all inline scripts parse', () => {
-  for (const match of html.matchAll(/<script(?:\s[^>]*)?>([^]*?)<\/script>/g)) new vm.Script(match[1]);
+test('all referenced local and inline scripts parse', () => {
+  assert(appSources.scripts.length > 0, 'No application scripts were checked');
+  for (const script of appSources.scripts) new vm.Script(script.code, { filename: script.filename });
 });
 test('aborting a search restores Find and aria-busy', () => {
   const env = locationEnvironment(), p = picker();

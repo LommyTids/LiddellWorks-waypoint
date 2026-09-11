@@ -1,10 +1,10 @@
 // Regression test for the production failure where opening any populated trip
 // threw in itemMetadataHtml(), while empty trips appeared to work normally.
+const { loadAppSources } = require('./test-source');
 const assert = require('assert');
-const fs = require('fs');
 const vm = require('vm');
 
-const source = fs.readFileSync('public/WayPoint/index.html', 'utf8');
+const source = loadAppSources().source;
 const start = source.indexOf("var ITEM_META_ORDER =");
 const end = source.indexOf("function recordCostLabel", start);
 assert(start !== -1 && end !== -1, 'Could not locate ItemRow metadata helpers');

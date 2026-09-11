@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — Split frontend features and consolidate shared UI
+
+- Replace the 462 KB inline application with a small HTML shell, 21 ordered
+  classic JavaScript files and four ordered application stylesheets.
+- Keep shared globals, startup sequence, CSS cascade, Cloudflare routing,
+  backend behavior and deferred airport-data execution intact.
+- Move map popup sizing into the map source. Keep route arrows, map range
+  handling and Leaflet teardown connected through existing shared functions.
+- Consolidate booking/contact and people/notes schemas through fresh-object
+  factories, and share the four Plan lists' sorting, empty states and card
+  container. Preserve labels, permissions, entity-specific fields and output.
+- Remove two identical mobile modal CSS declarations without changing the
+  later journey-layout override or reordering responsive rules.
+- Follow actual HTML assets in source tests; separately execute each script
+  in page order for signed-out and signed-in startup. Add behavioral tests for
+  schema mutation isolation and Plan-list output, sorting and permissions.
+- Include HTTP asset checks and a strict Chromium/WebKit browser gate for
+  save/reload, Pacific routes, arrow rotation and map lifecycle in the merge
+  gate. Browser binaries are required; source checks do not replace it.
+- This reduces individual source-file size and duplication. The airport
+  database still downloads at startup; demand-loading and backend
+  consolidation remain separate work.
+
 ## 2026-09-11 — Timeline notes, flight labels, and opening on today
 
 ### What changed

@@ -1,10 +1,10 @@
 // Focused no-browser regression checks for the pure map-route helpers.
 // The broader Map tab test uses Playwright, but these assertions should still
 // run in a minimal local checkout where a browser binary is unavailable.
+const { loadAppSources } = require('./test-source');
 const assert = require('assert');
-const fs = require('fs');
 
-const html = fs.readFileSync('public/WayPoint/index.html', 'utf8');
+const { source: html, style: mapStyle } = loadAppSources();
 const start = html.indexOf('function normalizeLongitude');
 const end = html.indexOf('function routeStyleForMode');
 if (start < 0 || end < 0) throw new Error('Could not locate map route helpers in index.html');
@@ -48,8 +48,7 @@ assert(html.indexOf("'<div class=\"map-actions\">' + mapFiltersHtml(trip)") < ht
 // Added with the "open on today" change: the Map used to open on the trip's
 // first day even mid-trip, and a popup grew to fit a long note with no scroll
 // region at all, which on a phone left nothing to reach the rest of the text.
-const mapSource = require('fs').readFileSync('public/WayPoint/index.html', 'utf8');
-const mapStyle = (mapSource.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+const mapSource = html;
 
 assert(mapSource.includes('mapState.rangeStart = tripFocusDay(days)'), 'The Map does not open on today');
 assert(/var fullRange = !days\.length \|\| \(mapState\.rangeStart === tripFocusDay\(days\)/.test(mapSource),
