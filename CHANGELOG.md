@@ -1,5 +1,77 @@
 # Changelog
 
+## 2026-09-11 — One card component for every list
+
+### What changed
+
+- Every list in the app — the four Plan tabs, the Timeline, the Map popovers,
+  Contacts, Companions and Manage accounts — now renders from one card
+  component driven by a layout table. A context is an entry in
+  `ITEM_CARD_LAYOUTS`, not a branch in the renderer.
+- Cards are stacked lines everywhere, so a title is never squeezed between a
+  fixed icon column and the record actions.
+- Metadata flows as one wrapping run instead of one row per group, and chips
+  past a cap move behind a `+N more` disclosure.
+- People moved to their own line along the bottom of a card, scrolling
+  sideways rather than wrapping.
+- A record's cost moved out of the metadata chips and onto the card's first
+  line, in the trip's home currency.
+- Contacts, Companions and Manage accounts stopped hand-building their own
+  markup, which had drifted: a contact's role was an `.item-sub` where a
+  companion's access level was a tag, and neither list got a category stripe.
+- Category stripes and the heavier transport title, added to the Timeline last
+  week, now apply in every context.
+- Added `package-lock.json`, so `wrangler` and `playwright` resolve to the
+  versions the merge gate was validated against rather than re-resolving on
+  each install.
+
+### Technical details
+
+`ITEM_CARD_LAYOUTS` maps a context to a list of lines, each a list of slot
+names. Two rules let one layout serve a bare record and a fully populated one:
+a slot with nothing to show renders nothing, and a line whose slots are all
+empty does not render. `spacer` pushes what follows to the right edge and never
+keeps a line alive by itself.
+
+A metadata group named anywhere in a layout drops out of the catch-all
+`metadata` slot automatically, which is what lets `people` move to its own line
+without rendering twice and without an exclusion list to keep in sync.
+
+`itemMetaBlockHtml()` is the single metadata renderer; `itemMetadataHtml()` is
+that function with every group and no cap, so its existing signature and
+regression coverage are unchanged. `ITEM_META_ORDER` and the four per-record
+model builders are unchanged in shape — this changes how a model is drawn, not
+how it is built.
+
+Cost is reported by `recordCostLabel()` in the home currency so a column of
+them compares and reconciles with the trip total; an unconvertible amount shows
+its original currency and is flagged. It sits on line one because the metadata
+run is capped, and a price behind `+N more` is worse than no price. The
+Timeline still suppresses it on the days that would bill a record twice.
+
+The people line uses `overscroll-behavior-x: contain` so flicking it on a phone
+does not drag the page, carries `tabindex="0"` with a group label so it can be
+panned from the keyboard, and is the only part of a card allowed to scroll
+horizontally.
+
+### Verification
+
+- `npm test` — passes, 11 suites including a new `test-card-system.js`.
+- `node test-map-route-arcs.js` — passes.
+- Rendered in Chromium across seven tabs at 390px and 1440px in both themes:
+  no page errors, and no horizontal overflow anywhere.
+- Transport card at 390px: **517px → 241px**, of which metadata is **384px →
+  97px**. Desktop 221px → 149px.
+- The people line holds its height at 34px with ten companions forced in
+  (scrollWidth 1222 against a 330px box) and page overflow stays 0.
+
+### Not verified
+
+`npm run test:merge-gate` still needs an environment with Playwright Chromium
+and WebKit. No WebKit, real-device touch, VoiceOver or full WCAG pass is
+claimed — and the horizontal people scroller in particular is worth checking on
+a real iPad.
+
 ## 2026-09-10 — Timeline day context, navigation and card layout
 
 ### What changed

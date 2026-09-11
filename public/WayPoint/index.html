@@ -637,77 +637,108 @@ textarea { resize: vertical; min-height: 60px; }
 .mobile-more-card .icon:last-child { width: var(--wp-icon-sm); height: var(--wp-icon-sm); color: var(--wp-text-muted); }
 .mobile-more-return { display: none; }
 
-/* ---- 4d. Item list rows (destinations/activities/transport/etc) ------ */
+/* ---- 4d. The card (every list: Plan, Timeline, Map, People) ---------
+   One component, laid out from ITEM_CARD_LAYOUTS. A card is a stack of
+   lines; a line is a row of slots. Context variants below adjust padding
+   and emphasis only -- never the structure, which is the layout table's
+   job. */
 .item-list { display: flex; flex-direction: column; gap: 10px; }
 .item-row {
-  background: var(--wp-bg-surface); border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm);
-  padding: 13px 14px; display: flex; gap: 12px; align-items: flex-start;
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--wp-border-default); border-left-width: 3px; border-radius: var(--radius-sm);
+  background: var(--wp-bg-surface);
 }
-.item-row-leading { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.item-row-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.item-row-line[data-item-line="title"] { align-items: baseline; flex-wrap: wrap; gap: 8px; }
+/* Pushes everything after it to the right edge. Deliberately not content:
+   a line holding only a spacer does not render. */
+.item-row-spacer { flex: 1 1 auto; }
+
+/* A category stripe in the record's existing Map colour, so a flight and a
+   coffee no longer carry identical weight -- they differed only by a small
+   tinted glyph. Transport gets a little more, a faint tint and a heavier
+   title, because it is the part of a day you cannot be late for. */
+.item-row[data-item-section="activity"] { border-left-color: var(--wp-map-activity); }
+.item-row[data-item-section="accommodation"] { border-left-color: var(--wp-map-accommodation); }
+.item-row[data-item-section="destination"] { border-left-color: var(--wp-context-location); }
+.item-row[data-item-section="transport"] { border-left-color: var(--wp-map-transport); background: color-mix(in srgb, var(--wp-map-transport) 4%, var(--wp-bg-surface)); }
+.item-row[data-item-section="transport"] .item-title { font-weight: 650; }
+
 .item-row .item-icon {
-  width: 34px; height: 34px; border-radius: 9px; background: var(--wp-bg-subdued); color: var(--wp-text-secondary);
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--wp-bg-subdued); color: var(--wp-text-secondary);
 }
-.item-row .item-icon .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); }
-/* Companions tab: the row's "icon" slot is the person's actual avatar
-   marker instead of a generic SVG glyph -- see renderCompanionsTab(). */
+.item-row .item-icon .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+/* The People lists put a person's own marker in the icon slot. */
 .item-row .item-icon.item-icon-avatar { background: none; }
-.item-row .item-icon.item-icon-avatar .avatar-marker { width: 30px; height: 30px; font-size: var(--wp-glyph-md); }
-.item-main { flex: 1; min-width: 0; }
-.item-title-row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-.item-title { font: var(--wp-type-label); }
+.item-row .item-icon.item-icon-avatar .avatar-marker { width: 26px; height: 26px; font-size: var(--wp-glyph-sm); }
+.item-row-time { flex: 0 0 auto; color: var(--wp-text-secondary); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.item-title { min-width: 0; font: var(--wp-type-label); overflow-wrap: anywhere; }
+.item-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.item-row-cost { flex: 0 0 auto; color: var(--wp-action-accent-strong); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.item-row-cost.rate-missing { color: var(--wp-state-danger); }
 .item-sub { font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-secondary); margin-top: 2px; }
-.item-metadata { display: flex; flex-direction: column; gap: 5px; margin-top: 5px; }
-.item-meta-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* Metadata flows as one wrapping run. It used to be a column of groups,
+   which at 390px collapsed to one chip per line -- twelve chips over
+   fifteen rows, 384px of a 517px card. The groups survive as ordering
+   only. */
+.item-metadata { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; min-width: 0; }
+.item-meta-group { display: contents; }
 .item-meta-group[data-item-meta="datetime"] { order: 1; }
 .item-meta-group[data-item-meta="location"] { order: 2; }
 .item-meta-group[data-item-meta="category"] { order: 3; }
 .item-meta-group[data-item-meta="people"] { order: 4; }
 .item-meta-group[data-item-meta="commerce"] { order: 5; }
-.item-supporting { margin-top: 6px; color: var(--wp-text-secondary); font: var(--wp-type-meta); }
-.item-status { margin-top: 6px; color: var(--wp-state-danger); font: var(--wp-type-meta); display: flex; align-items: center; gap: 5px; }
-.item-status .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
-.item-row-time { width: 44px; flex: 0 0 auto; padding-top: 1px; color: var(--wp-text-secondary); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; }
-/* Timeline context: the same ItemRow model, stacked as three rows instead
-   of one -- a control strip (time, category icon, cost, record actions),
-   then the title at the card's full width, then supporting detail clamped
-   to three lines. The single-row form put the title between a fixed 44px
-   time column and the action buttons, which left it 84px on a 390px phone
-   and wrapped a hotel name over four lines. */
-.item-row--timeline { flex-direction: column; align-items: stretch; gap: 3px; padding: 8px 12px 10px; }
-.item-row--timeline .item-row-head { display: flex; align-items: center; gap: 10px; }
-.item-row--timeline .item-row-time { width: auto; padding-top: 0; white-space: nowrap; }
-.item-row--timeline .item-icon { width: 26px; height: 26px; border-radius: 7px; }
-.item-row--timeline .item-icon .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
-/* A category stripe in the record's existing Map colour, so a flight and a
-   coffee no longer carry identical weight -- previously they differed only by
-   a small tinted glyph. Transport gets a little more of it, a faint tint and a
-   heavier title, because it is the part of a day you cannot be late for. */
-.item-row--timeline { border-left-width: 3px; }
-.item-row--timeline[data-item-section="activity"] { border-left-color: var(--wp-map-activity); }
-.item-row--timeline[data-item-section="accommodation"] { border-left-color: var(--wp-map-accommodation); }
-.item-row--timeline[data-item-section="transport"] { border-left-color: var(--wp-map-transport); background: color-mix(in srgb, var(--wp-map-transport) 4%, var(--wp-bg-surface)); }
-.item-row--timeline[data-item-section="transport"] .item-title { font-weight: 650; }
-/* Cost and the record actions share one trailing container: as two separate
-   margin-left:auto siblings they would split the slack between them rather
-   than both sitting against the edge. */
-.item-row--timeline .item-row-trail { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.item-row--timeline .item-row-cost { color: var(--wp-action-accent-strong); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.item-row--timeline .item-row-cost.rate-missing { color: var(--wp-state-danger); }
-.item-row--timeline .item-title { overflow-wrap: anywhere; }
-.item-row--timeline .item-actions { flex-shrink: 0; }
-/* Row three is clamped so one verbose record cannot dominate a day. The
-   text stays in the DOM, so it is only visually shortened -- assistive
-   technology still reads the whole note. `line-clamp` is the standard
-   property; the -webkit- pair is what actually ships today. */
-.item-row--timeline .item-supporting {
-  margin-top: 0; display: -webkit-box; -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere;
+/* Past ITEM_META_CAP chips the rest move behind a native disclosure, so a
+   busy record stays one or two lines tall. */
+.item-meta-more { order: 6; }
+.item-meta-more-btn {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+  border: 1px dashed var(--wp-border-strong); border-radius: 6px;
+  color: var(--wp-text-muted); font: var(--wp-type-meta); cursor: pointer; list-style: none;
 }
+.item-meta-more-btn::-webkit-details-marker { display: none; }
+.item-meta-more-btn:hover { color: var(--wp-text-primary); border-color: var(--wp-text-muted); }
+.item-meta-more-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+.item-meta-more-rest { display: flex; flex-wrap: wrap; gap: 5px 6px; margin-top: 5px; }
+
+/* People get their own line along the bottom and scroll sideways rather
+   than wrapping, so a record with two companions and one with twelve are
+   the same height. Focusable so the run can be panned from the keyboard,
+   and the only part of a card allowed to scroll horizontally. */
+.item-people {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; gap: 6px; flex-wrap: nowrap;
+  margin-top: 3px; padding-top: 7px; padding-bottom: 2px;
+  border-top: 1px solid var(--wp-border-default);
+  overflow-x: auto; overscroll-behavior-x: contain;
+  scrollbar-width: thin; scrollbar-color: var(--wp-border-strong) transparent;
+}
+.item-people::-webkit-scrollbar { height: 6px; }
+.item-people::-webkit-scrollbar-thumb { background: var(--wp-border-strong); border-radius: 999px; }
+.item-people::-webkit-scrollbar-track { background: transparent; }
+.item-people .tag { flex: 0 0 auto; }
+
+.item-supporting { color: var(--wp-text-secondary); font: var(--wp-type-meta); overflow-wrap: anywhere; }
+.item-status { color: var(--wp-state-danger); font: var(--wp-type-meta); display: flex; align-items: center; gap: 5px; }
+.item-status .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+
+/* Timeline: the one context that drops metadata entirely and clamps its
+   supporting line, so a day reads as a scan. The text stays in the DOM --
+   it is only visually shortened, and assistive technology reads it all. */
+.item-row--timeline .item-supporting {
+  display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
+/* Map popovers sit inside Leaflet's own chrome, so they drop the card
+   frame and separate with a rule instead. */
 .item-row--map { padding: 7px 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 .item-row--map + .item-row--map { border-top: 1px solid var(--wp-border-default); }
-.item-row--map .item-icon { width: 28px; height: 28px; }
 .item-row--map .item-actions .btn-icon { width: 32px; height: 32px; }
+
 .item-icon.tone-activity { background: var(--wp-map-activity-subtle); color: var(--wp-map-activity); }
 .item-icon.tone-transport { background: var(--wp-map-transport-subtle); color: var(--wp-map-transport); }
 .item-icon.tone-stay { background: var(--wp-map-accommodation-subtle); color: var(--wp-map-accommodation); }
@@ -1066,6 +1097,7 @@ tr:last-child td { border-bottom: none; }
   /* The Timeline's own controls were never listed here: the date circle
      measured 34px and each add button 26px. */
   .day-head, .day-add-btn, .day-add-item, .timeline-tool { min-height: 44px; }
+  .item-meta-more-btn { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
@@ -1950,12 +1982,19 @@ async function loadAndRenderManageUsers() {
 
 function renderManageUsersView() {
   var rows = managedUsers.slice().sort(function (a, b) { return a.username.localeCompare(b.username); }).map(function (u) {
-    return '<div class="item-row"><div class="item-icon">' + icon('person') + '</div><div class="item-main">' +
-      '<div class="item-title-row"><span class="item-title">' + esc(u.username) + '</span></div>' +
-      '</div><div class="item-actions">' +
+    // Accounts are not a trip record, so rowActions() has no id field or
+    // permission rule for them -- the two controls are supplied directly
+    // and the card's own action slot is switched off.
+    return itemRowHtml(null, {
+      context: 'person', section: 'account', item: u, icon: 'person',
+      title: u.username,
+      showRecordActions: false,
+      extraActionsHtml: '<div class="item-actions">' +
         '<button class="btn btn-icon btn-ghost" data-action="edit-user" data-id="' + u.id + '" aria-label="Edit account" title="Edit account">' + icon('edit') + '</button>' +
         '<button class="btn btn-icon btn-ghost" data-action="delete-user" data-id="' + u.id + '" aria-label="Delete account" title="Delete account">' + icon('delete') + '</button>' +
-      '</div></div>';
+      '</div>',
+      metadata: {}
+    });
   }).join('');
   return '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + ' All trips</button>' +
     '<div class="tab-panel-head"><h1 data-page-heading tabindex="-1">Manage accounts</h1>' +
@@ -5207,6 +5246,28 @@ function rowActions(trip, section, item) {
 
 var ITEM_META_ORDER = ['datetime', 'location', 'category', 'people', 'commerce'];
 
+// How many metadata chips a card shows before the rest move behind a
+// "+N more" disclosure. One number, tuned in one place; 0 never caps.
+var ITEM_META_CAP = 3;
+
+/* ---------- ItemRow: one card, many layouts -------------------------
+   A card is a stack of lines; a line is a list of slot names. This table
+   is the whole configuration surface -- a new context is an entry here,
+   never a branch in the renderer. Before this, the Plan lists, the
+   Timeline, the Map popovers and the three People lists had each drifted
+   into their own markup for the same thing.
+
+   Two rules let one layout serve a bare record and a fully populated one:
+   a slot with nothing to show renders nothing, and a line whose slots are
+   all empty does not render at all. `spacer` pushes what follows to the
+   right edge and never keeps a line alive by itself. */
+var ITEM_CARD_LAYOUTS = {
+  plan:     [['time', 'icon', 'spacer', 'cost', 'actions'], ['title', 'badges'], ['metadata'], ['supporting'], ['status'], ['people']],
+  timeline: [['time', 'icon', 'spacer', 'cost', 'actions'], ['title', 'badges'], ['supporting'], ['status']],
+  map:      [['icon', 'spacer', 'actions'], ['title', 'badges'], ['datetime', 'location'], ['supporting'], ['people']],
+  person:   [['avatar', 'icon', 'spacer', 'actions'], ['title', 'badges'], ['metadata'], ['supporting'], ['status']]
+};
+
 function itemMetaDescriptorHtml(meta) {
   if (!meta || !meta.text) return '';
   var content = (meta.icon ? icon(meta.icon) : '') + esc(meta.text);
@@ -5215,62 +5276,144 @@ function itemMetaDescriptorHtml(meta) {
   return '<span class="tag' + (meta.tone === 'cost' ? ' tag-cost' : '') + '">' + content + '</span>';
 }
 
-function itemMetadataHtml(trip, metadata) {
-  var groups = ITEM_META_ORDER.map(function (slot) {
-    if (slot === 'people') {
-      var people = metadata.people || [];
-      return people.length ? '<div class="item-meta-group" data-item-meta="people">' + companionTags(trip, people) + '</div>' : '';
-    }
-    var entries = metadata[slot] || [];
-    var html = entries.map(itemMetaDescriptorHtml).join('');
-    return html ? '<div class="item-meta-group" data-item-meta="' + slot + '">' + html + '</div>' : '';
+// The one metadata renderer. `slots` chooses which groups, `cap` how many
+// chips appear before a disclosure takes the rest. itemMetadataHtml() is
+// this with every group and no cap, so there is a single implementation
+// rather than a capped copy alongside an uncapped one.
+function itemMetaBlockHtml(trip, metadata, slots, cap) {
+  var shown = 0;
+  var overflow = [];
+  var groups = slots.map(function (slot) {
+    // companionTags() returns one joined run, so people count as a single
+    // unit here. In the shipped layouts they sit on their own uncapped
+    // line instead, so this only matters to itemMetadataHtml().
+    var chips = slot === 'people'
+      ? [companionTags(trip, metadata.people || [])]
+      : (metadata[slot] || []).map(itemMetaDescriptorHtml);
+    var present = chips.filter(function (chip) { return chip; });
+    if (!present.length) return '';
+    var visible = present.filter(function (chip) {
+      if (cap && shown >= cap) { overflow.push(chip); return false; }
+      shown++;
+      return true;
+    }).join('');
+    return visible ? '<div class="item-meta-group" data-item-meta="' + slot + '">' + visible + '</div>' : '';
   }).join('');
-  // `html` above is scoped to the map callback. Test the joined result here;
-  // otherwise populated trips throw before their first ItemRow can render.
-  return groups ? '<div class="item-metadata">' + groups + '</div>' : '';
+  var more = overflow.length
+    ? '<details class="item-meta-more"><summary class="item-meta-more-btn">' + icon('expand') + '+' + overflow.length + ' more</summary>' +
+      '<div class="item-meta-more-rest">' + overflow.join('') + '</div></details>'
+    : '';
+  // Tested against the joined result, not inside the map callback: an
+  // earlier version referenced a callback-local variable and threw on
+  // every populated trip while empty ones appeared to work.
+  return (groups || more) ? '<div class="item-metadata">' + groups + more + '</div>' : '';
 }
+
+function itemMetadataHtml(trip, metadata) {
+  return itemMetaBlockHtml(trip, metadata, ITEM_META_ORDER, 0);
+}
+
+/* Each slot draws one thing and knows nothing about which context asked
+   for it. The third argument is the set of metadata groups the catch-all
+   `metadata` slot still owns -- see itemRowHtml() below. */
+var ITEM_CARD_SLOTS = {
+  time: function (trip, model) {
+    return model.leadingTime ? '<span class="item-row-time">' + esc(model.leadingTime) + '</span>' : '';
+  },
+  icon: function (trip, model) {
+    if (!model.icon) return '';
+    return '<span class="item-icon tone-' + esc(model.tone || model.section || 'destination') + '">' + icon(model.icon) + '</span>';
+  },
+  // A person's own marker in place of a category glyph, which is how the
+  // Companions rows already differed from every other list.
+  avatar: function (trip, model) {
+    return model.avatarHtml ? '<span class="item-icon item-icon-avatar">' + model.avatarHtml + '</span>' : '';
+  },
+  title: function (trip, model) {
+    return '<span class="item-title">' + esc(model.title) + '</span>';
+  },
+  // Small tags that belong beside the title rather than in the metadata
+  // run: a contact's role, a companion's access level, "Guest".
+  badges: function (trip, model) {
+    return model.badgesHtml ? '<span class="item-badges">' + model.badgesHtml + '</span>' : '';
+  },
+  cost: function (trip, model) {
+    if (!model.cost) return '';
+    return '<span class="item-row-cost' + (model.cost.known ? '' : ' rate-missing') + '">' + model.cost.text + '</span>';
+  },
+  actions: function (trip, model) {
+    var extra = model.extraActionsHtml || '';
+    var own = model.showRecordActions === false ? '' : rowActions(trip, model.section, model.item);
+    return extra + own;
+  },
+  spacer: function () { return '<span class="item-row-spacer"></span>'; },
+  // People scroll sideways rather than wrapping: a record with six
+  // companions otherwise added six rows to every card in the list.
+  // Focusable so the run can be panned from the keyboard.
+  people: function (trip, model) {
+    var tags = companionTags(trip, (model.metadata && model.metadata.people) || []);
+    if (!tags) return '';
+    return '<div class="item-people" tabindex="0" role="group" aria-label="People on this record">' + tags + '</div>';
+  },
+  metadata: function (trip, model, groups) {
+    return itemMetaBlockHtml(trip, model.metadata || {}, groups, ITEM_META_CAP);
+  },
+  supporting: function (trip, model) {
+    return model.supporting ? '<div class="item-supporting">' + esc(model.supporting) + '</div>' : '';
+  },
+  status: function (trip, model) {
+    if (!model.status) return '';
+    return '<div class="item-status">' + icon(model.status.icon || 'warning') + esc(model.status.text) + '</div>';
+  }
+};
+
+// The other four groups can also be placed individually, so a context can
+// spread them across lines (the Map does). `people` is not among them --
+// it has its own scrolling slot above.
+['datetime', 'location', 'category', 'commerce'].forEach(function (metaSlot) {
+  ITEM_CARD_SLOTS[metaSlot] = function (trip, model) {
+    return itemMetaBlockHtml(trip, model.metadata || {}, [metaSlot], 0);
+  };
+});
 
 function itemRowHtml(trip, model) {
-  var itemId = model.item && model.section ? model.item[ENTITY_ID_FIELDS[model.section]] : '';
-  var actions = model.showRecordActions === false ? '' : rowActions(trip, model.section, model.item);
-  var open = '<article class="item-row item-row--' + esc(model.context || 'plan') + '" data-item-section="' + esc(model.section || '') + '"' + (itemId ? ' data-item-id="' + esc(itemId) + '"' : '') + '>';
-  var iconHtml = '<span class="item-icon tone-' + esc(model.tone || model.section || 'destination') + '">' + icon(model.icon) + '</span>';
-  var supportingHtml = model.supporting ? '<div class="item-supporting">' + esc(model.supporting) + '</div>' : '';
-  var statusHtml = model.status ? '<div class="item-status">' + icon(model.status.icon || 'warning') + esc(model.status.text) + '</div>' : '';
+  var layout = ITEM_CARD_LAYOUTS[model.context] || ITEM_CARD_LAYOUTS.plan;
+  // A metadata group named anywhere in this layout drops out of the
+  // catch-all `metadata` slot, so moving `people` onto its own line
+  // cannot render it twice -- and there is no exclusion list to maintain.
+  var placed = {};
+  layout.forEach(function (slots) {
+    slots.forEach(function (slot) { if (ITEM_META_ORDER.indexOf(slot) !== -1) placed[slot] = true; });
+  });
+  var catchAll = ITEM_META_ORDER.filter(function (slot) { return !placed[slot]; });
 
-  // The Timeline renders the same model stacked rather than in one row: a
-  // control strip, the title at full card width, then supporting detail.
-  // money() already escapes its currency code, so the cost is inserted as-is.
-  if (model.context === 'timeline') {
-    return open +
-      '<div class="item-row-head">' +
-        (model.leadingTime ? '<span class="item-row-time">' + esc(model.leadingTime) + '</span>' : '') +
-        iconHtml +
-        '<span class="item-row-trail">' +
-          (model.cost ? '<span class="item-row-cost' + (model.cost.known ? '' : ' rate-missing') + '">' + model.cost.text + '</span>' : '') +
-          actions +
-        '</span>' +
-      '</div>' +
-      '<div class="item-title">' + esc(model.title) + '</div>' +
-      supportingHtml + statusHtml + '</article>';
-  }
+  var lines = layout.map(function (slots) {
+    var filled = false;
+    var html = slots.map(function (slot) {
+      var render = ITEM_CARD_SLOTS[slot];
+      var rendered = render ? render(trip, model, catchAll) : '';
+      if (rendered && slot !== 'spacer') filled = true;
+      return rendered;
+    }).join('');
+    return filled ? '<div class="item-row-line" data-item-line="' + esc(slots[0]) + '">' + html + '</div>' : '';
+  }).join('');
 
-  var leading = '<div class="item-row-leading">' +
-    (model.leadingTime ? '<span class="item-row-time">' + esc(model.leadingTime) + '</span>' : '') +
-    iconHtml + '</div>';
-  return open +
-    leading + '<div class="item-main"><div class="item-title-row"><span class="item-title">' + esc(model.title) + '</span></div>' +
-    itemMetadataHtml(trip, model.metadata || {}) +
-    supportingHtml + statusHtml +
-    '</div>' + actions + '</article>';
+  var itemId = model.item && model.section && ENTITY_ID_FIELDS[model.section] ? model.item[ENTITY_ID_FIELDS[model.section]] : '';
+  return '<article class="item-row item-row--' + esc(model.context || 'plan') + '" data-item-section="' + esc(model.section || '') + '"' +
+    (itemId ? ' data-item-id="' + esc(itemId) + '"' : '') + '>' + lines + '</article>';
 }
 
-function costMetaDescriptor(trip, amount, currency, rateOverride) {
-  if (!amount) return null;
-  var converted = homeValue(trip, amount, currency, rateOverride);
-  var label = money(amount, currency);
-  if (currency && currency !== trip.homeCurrency) label += converted.known ? ' (≈ ' + money(converted.value, trip.homeCurrency) + ')' : ' (rate needed)';
-  return { icon: 'expenses', text: label, tone: 'cost' };
+// A record's cost, for the card's own cost slot. Reported in the trip's home
+// currency so a list of them compares down the column and reconciles with the
+// trip total; when no rate is known the original amount is shown instead and
+// flagged. This lives on row one rather than among the metadata chips because
+// that run is capped -- and a price hidden behind "+N more" is worse than no
+// price at all.
+function recordCostLabel(trip, item) {
+  if (!item || !item.costAmount) return null;
+  var converted = homeValue(trip, item.costAmount, item.costCurrency, item.costRate);
+  if (converted.known) return { text: money(converted.value, trip.homeCurrency), known: true };
+  return { text: money(item.costAmount, item.costCurrency) + ' · rate needed', known: false };
 }
 
 function destinationItemRowModel(trip, destination, context) {
@@ -5285,13 +5428,12 @@ function activityItemRowModel(trip, activity, context) {
   var commerce = [];
   if (activity.bookingRef) commerce.push({ icon: 'booking', text: activity.bookingRef, copyValue: activity.bookingRef, copyLabel: 'booking reference' });
   if (contact) commerce.push({ icon: 'person', text: contact.name });
-  var cost = costMetaDescriptor(trip, activity.costAmount, activity.costCurrency, activity.costRate); if (cost) commerce.push(cost);
   if (activity.receiptRef) commerce.push({ icon: 'receipt', text: activity.receiptRef, copyValue: activity.receiptRef, copyLabel: 'receipt reference' });
   var locations = [];
   if (activity.location) locations.push({ icon: 'location', text: activity.location });
   if (activity.address) locations.push({ icon: 'location', text: activity.address, mapsAddress: activity.address });
   if (destination) locations.push({ icon: 'destination', text: destination.name });
-  return { context: context, section: 'activity', item: activity, icon: activityIsAllDay(activity) ? 'allDay' : 'activity', tone: 'activity', title: activity.title, metadata: { datetime: [{ icon: activityIsAllDay(activity) ? 'allDay' : 'time', text: activityDateTimeLabel(activity) }], location: locations, category: [{ icon: 'category', text: activity.category || 'Other' }], people: activity.companions || [], commerce: commerce }, supporting: activity.notes || '', status: activity.addressLocationStale ? { text: 'Location needs review' } : null };
+  return { context: context, section: 'activity', item: activity, cost: recordCostLabel(trip, activity), icon: activityIsAllDay(activity) ? 'allDay' : 'activity', tone: 'activity', title: activity.title, metadata: { datetime: [{ icon: activityIsAllDay(activity) ? 'allDay' : 'time', text: activityDateTimeLabel(activity) }], location: locations, category: [{ icon: 'category', text: activity.category || 'Other' }], people: activity.companions || [], commerce: commerce }, supporting: activity.notes || '', status: activity.addressLocationStale ? { text: 'Location needs review' } : null };
 }
 
 function transportItemRowModel(trip, transport, context) {
@@ -5305,10 +5447,9 @@ function transportItemRowModel(trip, transport, context) {
   var commerce = [];
   if (transport.bookingRef) commerce.push({ icon: 'booking', text: transport.bookingRef, copyValue: transport.bookingRef, copyLabel: 'booking reference' });
   if (contact) commerce.push({ icon: 'person', text: contact.name });
-  var cost = costMetaDescriptor(trip, transport.costAmount, transport.costCurrency, transport.costRate); if (cost) commerce.push(cost);
   if (transport.pointsAmount) commerce.push({ icon: 'points', text: transport.pointsAmount + (transport.pointsProgram ? ' ' + transport.pointsProgram : ' points') });
   if (transport.receiptRef) commerce.push({ icon: 'receipt', text: transport.receiptRef, copyValue: transport.receiptRef, copyLabel: 'receipt reference' });
-  return { context: context, section: 'transport', item: transport, icon: transportIconKey(transport.mode), tone: 'transport', title: transport.fromLocation + ' → ' + transport.toLocation, metadata: { datetime: [{ icon: 'time', text: formatDateShort(dateOnly(transport.departDateTime)) + ' ' + timeOnly(transport.departDateTime) + ' → ' + formatDateShort(dateOnly(transport.arriveDateTime)) + ' ' + timeOnly(transport.arriveDateTime) }], location: [{ icon: 'location', text: transport.fromLocation + ' → ' + transport.toLocation }], category: category, people: transport.companions || [], commerce: commerce }, supporting: transport.notes || '', status: transport.fromLocationStale || transport.toLocationStale ? { text: 'One or more locations need review' } : null };
+  return { context: context, section: 'transport', item: transport, cost: recordCostLabel(trip, transport), icon: transportIconKey(transport.mode), tone: 'transport', title: transport.fromLocation + ' → ' + transport.toLocation, metadata: { datetime: [{ icon: 'time', text: formatDateShort(dateOnly(transport.departDateTime)) + ' ' + timeOnly(transport.departDateTime) + ' → ' + formatDateShort(dateOnly(transport.arriveDateTime)) + ' ' + timeOnly(transport.arriveDateTime) }], location: [{ icon: 'location', text: transport.fromLocation + ' → ' + transport.toLocation }], category: category, people: transport.companions || [], commerce: commerce }, supporting: transport.notes || '', status: transport.fromLocationStale || transport.toLocationStale ? { text: 'One or more locations need review' } : null };
 }
 
 function accommodationItemRowModel(trip, accommodation, context) {
@@ -5317,12 +5458,11 @@ function accommodationItemRowModel(trip, accommodation, context) {
   var commerce = [];
   if (accommodation.bookingRef) commerce.push({ icon: 'booking', text: accommodation.bookingRef, copyValue: accommodation.bookingRef, copyLabel: 'booking reference' });
   if (contact) commerce.push({ icon: 'person', text: contact.name });
-  var cost = costMetaDescriptor(trip, accommodation.costAmount, accommodation.costCurrency, accommodation.costRate); if (cost) commerce.push(cost);
   if (accommodation.receiptRef) commerce.push({ icon: 'receipt', text: accommodation.receiptRef, copyValue: accommodation.receiptRef, copyLabel: 'receipt reference' });
   var locations = [];
   if (accommodation.address) locations.push({ icon: 'location', text: accommodation.address, mapsAddress: accommodation.address });
   if (destination) locations.push({ icon: 'destination', text: destination.name });
-  return { context: context, section: 'accommodation', item: accommodation, icon: 'stay', tone: 'stay', title: accommodation.name, metadata: { datetime: [{ icon: 'time', text: formatDateShort(dateOnly(accommodation.checkIn)) + ' ' + timeOnly(accommodation.checkIn) + ' → ' + formatDateShort(dateOnly(accommodation.checkOut)) + ' ' + timeOnly(accommodation.checkOut) }], location: locations, category: [{ icon: 'category', text: accommodation.type || 'Other' }], people: accommodation.companions || [], commerce: commerce }, supporting: accommodation.notes || '', status: accommodation.locationStale ? { text: 'Location needs review' } : null };
+  return { context: context, section: 'accommodation', item: accommodation, cost: recordCostLabel(trip, accommodation), icon: 'stay', tone: 'stay', title: accommodation.name, metadata: { datetime: [{ icon: 'time', text: formatDateShort(dateOnly(accommodation.checkIn)) + ' ' + timeOnly(accommodation.checkIn) + ' → ' + formatDateShort(dateOnly(accommodation.checkOut)) + ' ' + timeOnly(accommodation.checkOut) }], location: locations, category: [{ icon: 'category', text: accommodation.type || 'Other' }], people: accommodation.companions || [], commerce: commerce }, supporting: accommodation.notes || '', status: accommodation.locationStale ? { text: 'Location needs review' } : null };
 }
 
 function recordItemRowModel(trip, section, item, context) {
@@ -5388,15 +5528,22 @@ function renderAccommodationTab(trip) {
 function renderContactsTab(trip) {
   if (trip.contacts.length === 0) return emptyTab(trip, 'contacts', 'No contacts yet', 'Hotel front desks, tour operators, guides — save them here to link from activities, transport and accommodation.', 'new-contact', 'Add contact');
   var rows = trip.contacts.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (c) {
-    var tags = [];
-    if (c.phone) tags.push('<span class="tag">' + esc(c.phone) + copyBtn(c.phone, 'phone') + '</span>');
-    if (c.email) tags.push('<span class="tag">' + esc(c.email) + copyBtn(c.email, 'email') + '</span>');
-    return '<div class="item-row"><div class="item-icon">' + icon('person') + '</div><div class="item-main">' +
-      '<div class="item-title-row"><span class="item-title">' + esc(c.name) + '</span>' + (c.role ? '<span class="item-sub">' + esc(c.role) + '</span>' : '') + '</div>' +
-      (c.address ? '<div class="item-sub">' + esc(c.address) + ' ' + mapsLink(c.address) + '</div>' : '') +
-      '<div class="item-tags">' + tags.join('') + '</div>' +
-      (c.notes ? '<div class="item-sub item-notes">' + esc(c.notes) + '</div>' : '') +
-      '</div>' + rowActions(trip, 'contact', c) + '</div>';
+    // Phone and email stay icon-less: the icon set has no glyph for either,
+    // and inventing one would say something the record doesn't.
+    var reach = [];
+    if (c.phone) reach.push({ text: c.phone, copyValue: c.phone, copyLabel: 'phone' });
+    if (c.email) reach.push({ text: c.email, copyValue: c.email, copyLabel: 'email' });
+    return itemRowHtml(trip, {
+      context: 'person', section: 'contact', item: c, icon: 'person',
+      title: c.name,
+      badgesHtml: c.role ? '<span class="tag">' + esc(c.role) + '</span>' : '',
+      metadata: {
+        datetime: [], category: [], people: [],
+        location: c.address ? [{ icon: 'location', text: c.address, mapsAddress: c.address }] : [],
+        commerce: reach
+      },
+      supporting: c.notes || ''
+    });
   }).join('');
   return tabHead(trip, 'Contacts', 'new-contact', 'Add contact') + '<div class="item-list">' + rows + '</div>';
 }
@@ -5505,10 +5652,18 @@ function renderCompanionsTab(trip) {
     var linkAction = canAddLinked
       ? '<div class="item-actions"><button class="btn btn-icon btn-ghost" data-action="link-companion" data-id="' + c.companionId + '" aria-label="' + linkLabel + '" title="' + linkLabel + '">' + icon('companions') + '</button></div>'
       : '';
-    return '<div class="item-row"><div class="item-icon item-icon-avatar">' + companionAvatarHtml(trip, c.companionId, c.name) + '</div><div class="item-main">' +
-      '<div class="item-title-row"><span class="item-title">' + esc(c.name) + '</span>' + accessTag + linkedTag + '</div>' +
-      (c.notes ? '<div class="item-sub">' + esc(c.notes) + '</div>' : '') +
-      '</div>' + linkAction + rowActions(trip, 'companion', c) + '</div>';
+    // Through the shared card like every other list: this row used to be
+    // built by hand and had drifted -- its access level was a tag where a
+    // contact's role was an .item-sub, and neither got a category stripe.
+    return itemRowHtml(trip, {
+      context: 'person', section: 'companion', item: c,
+      avatarHtml: companionAvatarHtml(trip, c.companionId, c.name),
+      title: c.name,
+      badgesHtml: accessTag + linkedTag,
+      extraActionsHtml: linkAction,
+      metadata: {},
+      supporting: c.notes || ''
+    });
   }
 
   var sorted = trip.companions.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
@@ -6262,12 +6417,8 @@ async function initMap(trip) {
 // departure day for a leg, the check-in day for a stay, the start day for an
 // activity. Without that, a return leg or a checkout would show the same money
 // a second time and stop reconciling with the day total in the heading.
-function timelineEventCost(trip, ev) {
-  var carriesCost = ev.kind === 'depart' || ev.kind === 'checkin' || (ev.kind === 'activity' && !ev.continues);
-  if (!carriesCost || !ev.data.costAmount) return null;
-  var converted = homeValue(trip, ev.data.costAmount, ev.data.costCurrency, ev.data.costRate);
-  if (converted.known) return { text: money(converted.value, trip.homeCurrency), known: true };
-  return { text: money(ev.data.costAmount, ev.data.costCurrency) + ' · rate needed', known: false };
+function timelineEventCarriesCost(ev) {
+  return ev.kind === 'depart' || ev.kind === 'checkin' || (ev.kind === 'activity' && !ev.continues);
 }
 
 // Row three of a Timeline card: the event's own context line, then whatever
@@ -6284,7 +6435,8 @@ function eventRowHtml(trip, ev) {
   // Plan lists and Map popovers; omitting it here keeps each event to one clear
   // headline without address, destination, companion or commerce tag pills.
   model.metadata = {};
-  model.cost = timelineEventCost(trip, ev);
+  // Shown only on the day that owns it, so nothing bills twice.
+  if (!timelineEventCarriesCost(ev)) model.cost = null;
   if (ev.kind === 'activity' && ev.continues) { model.title = 'Continues: ' + ev.data.title; model.icon = 'continues'; }
   else if (ev.kind === 'checkin') { model.title = 'Check in: ' + ev.data.name; model.icon = 'checkIn'; }
   else if (ev.kind === 'checkout') { model.title = 'Check out: ' + ev.data.name; model.icon = 'checkOut'; }

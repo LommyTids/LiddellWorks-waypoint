@@ -28,18 +28,17 @@ assert(eventRenderer.includes('model.metadata = {};'), 'Timeline rows still expo
 assert(eventRenderer.includes('return itemRowHtml('), 'Timeline event cards bypass the shared ItemRow');
 assert(!timelineRenderer.includes('day-areas'), 'Timeline day headings still render destination chips');
 
-// Three stacked rows, so the title is never squeezed between a fixed time
-// column and the record actions (84px on a 390px phone before this).
-assert(/\.item-row--timeline\s*\{[^}]*flex-direction:\s*column/.test(style), 'Timeline cards are not stacked rows');
+// The Timeline's own share of the card contract. The stacked structure and
+// the category stripes are now generic to every context and are covered by
+// test-card-system.js; what stays here is what only the Timeline does.
 assert(/\.item-row--timeline \.item-supporting\s*\{[^}]*line-clamp:\s*3/.test(style), 'Timeline detail is not clamped to three lines');
-assert(/\.item-row--timeline \.item-row-trail\s*\{[^}]*margin-left:\s*auto/.test(style), 'Cost and record actions do not share one trailing group');
 
-// A flight and a coffee previously differed only by a small tinted glyph.
-['activity', 'accommodation', 'transport'].forEach(function (section) {
-  assert(new RegExp('\\.item-row--timeline\\[data-item-section="' + section + '"\\]\\s*\\{[^}]*border-left-color').test(style),
-    'Timeline cards carry no category stripe for ' + section);
-});
-assert(/\.item-row--timeline\[data-item-section="transport"\] \.item-title\s*\{[^}]*font-weight/.test(style), 'Transport titles carry no extra weight');
+const layouts = (source.match(/var ITEM_CARD_LAYOUTS = \{([\s\S]*?)\n\};/) || [])[1] || '';
+const timelineLayout = (layouts.match(/timeline:\s*(\[.*\])/) || [])[1] || '';
+assert(timelineLayout, 'The Timeline has no entry in the card layout table');
+assert(!timelineLayout.includes("'metadata'"), 'Timeline cards took the metadata run back');
+assert(!timelineLayout.includes("'people'"), 'Timeline cards took a people line');
+assert(timelineLayout.includes("'cost'"), 'Timeline cards lost their converted cost');
 
 /* ---- the day disclosure ------------------------------------------------ */
 
@@ -131,7 +130,7 @@ const helpers = {
   allCostLines: (trip) => trip.costLines
 };
 vm.createContext(helpers);
-['daysBetween', 'timelineDayFlag', 'areasForDay', 'timelineDayAreaLabel', 'timelineDetail', 'timelineEventCost', 'timelineSpendByDay']
+['daysBetween', 'timelineDayFlag', 'areasForDay', 'timelineDayAreaLabel', 'timelineDetail', 'timelineEventCarriesCost', 'recordCostLabel', 'timelineSpendByDay']
   .forEach((name) => vm.runInContext(fnSource(name), helpers));
 
 assert.strictEqual(helpers.daysBetween('2026-09-07', '2026-09-19'), 12, 'daysBetween is off');
@@ -161,21 +160,24 @@ assert.strictEqual(helpers.timelineDayAreaLabel(trip, '2026-09-06'), '', 'A day 
 assert.strictEqual(helpers.timelineDetail('Arrives 12:45', 'Car 7'), 'Arrives 12:45 · Car 7', 'Detail parts should join');
 assert.strictEqual(helpers.timelineDetail('Arrives 12:45', ''), 'Arrives 12:45', 'Empty detail parts should drop out');
 
-// A leg shows its cost on the departure day only, a stay on check-in only, and
-// a continuing activity not at all — otherwise the same money appears twice and
-// the day totals stop matching the ledger.
-const leg = { costAmount: 90, costCurrency: 'GBP' };
-assert.strictEqual(helpers.timelineEventCost(trip, { kind: 'depart', data: leg }).text, 'GBP 90.00', 'A departure should carry its cost');
-assert.strictEqual(helpers.timelineEventCost(trip, { kind: 'arrive', data: leg }), null, 'An arrival must not repeat the leg cost');
-assert.strictEqual(helpers.timelineEventCost(trip, { kind: 'checkin', data: { costAmount: 400, costCurrency: 'GBP' } }).text, 'GBP 400.00', 'Check-in should carry the stay cost');
-assert.strictEqual(helpers.timelineEventCost(trip, { kind: 'checkout', data: { costAmount: 400, costCurrency: 'GBP' } }), null, 'Check-out must not repeat the stay cost');
-assert.strictEqual(helpers.timelineEventCost(trip, { kind: 'activity', continues: true, data: { costAmount: 20, costCurrency: 'GBP' } }), null, 'A continuing activity must not repeat its cost');
-assert.strictEqual(helpers.timelineEventCost(trip, { kind: 'activity', data: {} }), null, 'A free activity should show no cost');
+// Which day owns a record's cost. The card always carries the figure; the
+// Timeline suppresses it on the days that would bill it a second time, so the
+// day totals keep reconciling with the trip total.
+assert.strictEqual(helpers.timelineEventCarriesCost({ kind: 'depart' }), true, 'A departure should carry the leg cost');
+assert.strictEqual(helpers.timelineEventCarriesCost({ kind: 'arrive' }), false, 'An arrival must not repeat the leg cost');
+assert.strictEqual(helpers.timelineEventCarriesCost({ kind: 'checkin' }), true, 'Check-in should carry the stay cost');
+assert.strictEqual(helpers.timelineEventCarriesCost({ kind: 'checkout' }), false, 'Check-out must not repeat the stay cost');
+assert.strictEqual(helpers.timelineEventCarriesCost({ kind: 'activity' }), true, 'An activity should carry its own cost');
+assert.strictEqual(helpers.timelineEventCarriesCost({ kind: 'activity', continues: true }), false, 'A continuing activity must not repeat its cost');
+assert(source.includes('if (!timelineEventCarriesCost(ev)) model.cost = null;'), 'The Timeline no longer suppresses a repeated cost');
 
-const converted = helpers.timelineEventCost(trip, { kind: 'activity', data: { costAmount: 2000, costCurrency: 'JPY' } });
-assert.strictEqual(converted.text, 'GBP 10.00', 'A foreign cost should show in the home currency');
+// The figure itself: home currency when convertible, flagged when not.
+assert.strictEqual(helpers.recordCostLabel(trip, {}), null, 'A free record should show no cost');
+assert.strictEqual(helpers.recordCostLabel(trip, { costAmount: 90, costCurrency: 'GBP' }).text, 'GBP 90.00', 'A home-currency cost is wrong');
+const converted = helpers.recordCostLabel(trip, { costAmount: 2000, costCurrency: 'JPY' });
+assert.strictEqual(converted.text, 'GBP 10.00', 'A foreign cost should report in the home currency');
 assert.strictEqual(converted.known, true, 'A convertible cost should be marked known');
-const unrated = helpers.timelineEventCost(trip, { kind: 'activity', data: { costAmount: 5000, costCurrency: 'KRW' } });
+const unrated = helpers.recordCostLabel(trip, { costAmount: 5000, costCurrency: 'KRW' });
 assert.strictEqual(unrated.known, false, 'A cost with no rate should be marked unknown');
 assert(unrated.text.includes('rate needed'), 'A cost with no rate should say so');
 
