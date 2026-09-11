@@ -6,7 +6,7 @@ const vm = require('vm');
 
 const source = fs.readFileSync('public/WayPoint/index.html', 'utf8');
 const start = source.indexOf("var ITEM_META_ORDER =");
-const end = source.indexOf("function costMetaDescriptor", start);
+const end = source.indexOf("function recordCostLabel", start);
 assert(start !== -1 && end !== -1, 'Could not locate ItemRow metadata helpers');
 
 const context = {
