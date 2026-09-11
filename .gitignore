@@ -1,0 +1,36 @@
+# Installed by `npm install`, which `npm test` needs. Never committed —
+# devDependencies (wrangler, playwright) are restored from package.json.
+# No trailing slash: that would only match a real directory, and a symlinked
+# node_modules (a shared or cached install) would still show up as untracked.
+node_modules
+
+# Playwright's own output from the browser gate (npm run test:ui-browser).
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# Wrangler's local state and secrets. .dev.vars holds real credentials for
+# `wrangler dev` and must never reach the repository.
+.wrangler/
+.dev.vars
+.dev.vars.*
+
+# Logs from a failed install or run.
+npm-debug.log*
+yarn-error.log*
+.npm/
+
+# Editor and OS noise.
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Scratch files. Anything a contributor (or an agent) leaves behind while
+# measuring or screenshotting the app should use one of these prefixes so a
+# working tree stays clean without each one needing its own rule.
+.wp-*
+scratch/
+*.local.js
