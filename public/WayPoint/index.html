@@ -245,6 +245,14 @@ input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-si
 .status-badge .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
 .status-badge.is-readonly { border-color: var(--wp-border-strong); }
 .status-badge.is-limited { border-color: var(--wp-context-location); background: var(--wp-context-location-subtle); color: var(--wp-text-primary); }
+/* The viewing-lens chip in the trip header. Unlike the two badges above it
+   is a BUTTON -- clicking it clears the lens -- so it needs the pointer and
+   the focus ring the others don't. Deliberately quieter than is-limited:
+   that one reports a permission the viewer cannot change, this one reports
+   a choice they just made and can undo. */
+.status-badge.is-scoped { cursor: pointer; border-color: var(--wp-border-strong); }
+.status-badge.is-scoped:hover { background: var(--wp-bg-surface); color: var(--wp-text-primary); }
+.scope-badge-count { color: var(--wp-text-muted); }
 
 /* Accounts/login: who's signed in, "Manage accounts" (site owner only),
    Log out — lives in the topbar next to the save indicator. See
@@ -551,6 +559,13 @@ textarea { resize: vertical; min-height: 60px; }
 .settings-section-head p { margin-top: 4px; color: var(--wp-text-secondary); font: var(--wp-type-label); }
 .settings-section .field:last-child { margin-bottom: 0; }
 .settings-section-danger { border-color: var(--wp-state-danger-subtle); }
+/* "What you see": a two-option segmented control. Wraps rather than
+   squashing on a narrow phone, and the active half is marked by weight and
+   surface rather than colour alone, so it survives a high-contrast or
+   monochrome rendering. aria-pressed carries the same state for a screen
+   reader -- see renderSettingsTab(). */
+.scope-switch { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.scope-option.is-active { border-color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); color: var(--wp-text-primary); font-weight: 600; }
 .settings-dependencies > summary { cursor: pointer; font: var(--wp-type-heading); }
 .settings-dependencies > p { margin-top: 10px; }
 .dependency-row { padding: 10px 0; border-bottom: 1px solid var(--wp-border-default); }
@@ -1527,6 +1542,14 @@ var accountMenuOpen = false;
 // Timeline disclosure is local viewing state, never trip data. Missing entries
 // use the date-sensitive default: earlier days closed, today/future days open.
 var timelineDayExpansion = {};
+// Which slice of a trip this viewer wants to LOOK AT: 'everything' or
+// 'mine'. Same category as timelineDayExpansion above -- a viewing
+// preference, never trip data, never sent to the server. Keyed by tripId,
+// because "just my items" makes sense on a big group trip and not on a
+// solo one. An absent entry means "use the role's default", so this object
+// starts empty and only ever holds a deliberate choice --
+// see itemScopeFor() and scopedTripForRender() by the permission helpers.
+var itemScopePreference = {};
 // Connection, loading and save feedback are separate axes. Keeping them
 // separate prevents a successful historic load from being mistaken for an
 // editable online session after the browser later loses its connection.
@@ -1743,7 +1766,8 @@ function saveNavigationState() {
       view: currentView,
       tripId: currentTripId,
       tab: currentTab,
-      mobileLastTab: mobileLastTab
+      mobileLastTab: mobileLastTab,
+      itemScope: itemScopePreference
     }));
   } catch (e) { /* Navigation persistence is an enhancement; rendering still works without storage. */ }
 }
@@ -1999,6 +2023,15 @@ async function renderBoot() {
       if (nav.mobileLastTab && typeof nav.mobileLastTab === 'object') {
         ['overview', 'plan', 'people'].forEach(function (destination) {
           if (typeof nav.mobileLastTab[destination] === 'string') mobileLastTab[destination] = nav.mobileLastTab[destination];
+        });
+      }
+      // Restore the viewing lens, keeping only values this build knows.
+      // Anything else is ignored so an old or hand-edited blob can't put
+      // the app into a scope it has no control for.
+      if (nav.itemScope && typeof nav.itemScope === 'object') {
+        Object.keys(nav.itemScope).forEach(function (tripId) {
+          var stored = nav.itemScope[tripId];
+          if (stored === 'mine' || stored === 'everything') itemScopePreference[tripId] = stored;
         });
       }
     }
@@ -3325,6 +3358,160 @@ function canEditItem(trip, item) {
   var g = trip && trip.myGrant;
   if (!g || g.role !== 'user') return false;
   return !!(item && item.companions && item.companions.indexOf(g.companionId) !== -1);
+}
+
+/* ---- Visibility: WHICH items a viewer wants to look at ----------------
+   Everything above this point answers "am I ALLOWED to ___". Everything
+   below answers a different and much weaker question: "of the things I am
+   already allowed to see, which do I want on screen right now?"
+
+   Keep the two apart. This is a decluttering lens, NOT a security
+   boundary. A Trip Owner and an Admin are both sent the whole trip by the
+   Worker (buildVisibleTrip() in src/worker.js), and nothing here changes
+   that -- flipping the lens off shows everything again, instantly, with no
+   round trip. The real boundary for a scoped "user"/"viewer" grant is the
+   Worker's, and it has already happened before any of this runs.
+
+   The default differs by role because the jobs differ: a Trip Owner is
+   looking after the whole trip, so they start on 'everything'; an Admin is
+   usually running their own leg of it, so they start on 'mine'. Either can
+   flip it in Settings (renderSettingsTab()). ------------------------- */
+
+// The participant ids that mean "me" on this trip. Returns an ARRAY
+// because the trip owner can be tagged two different ways: as the virtual
+// owner participant, and (if someone also made them an ordinary companion
+// record) as that companion.
+//
+// How each role finds itself:
+//   Trip Owner -- the reserved SUPERUSER_PARTICIPANT_ID, plus any
+//     companion record linked to their account.
+//   Admin      -- the companion whose accountId matches this login.
+//     `accountId` survives on companions for full-scope roles only; the
+//     Worker strips it for scoped ones (buildVisibleTrip()), which is
+//     fine, because scoped roles never need this function.
+//   user/viewer -- their grant already names the companion they are
+//     scoped to, so reuse myCompanionId() above rather than searching.
+//
+// May legitimately return an empty array -- an Admin nobody has linked to
+// a companion record has no identity on this trip yet. Callers must treat
+// that as "cannot filter", never as "matches nothing"; see itemScopeFor().
+function myParticipantIds(trip) {
+  var g = trip && trip.myGrant;
+  if (!g) return [];
+  if (g.role === 'user' || g.role === 'viewer') {
+    var scopedId = myCompanionId(trip);
+    return scopedId ? [scopedId] : [];
+  }
+  var ids = [];
+  if (g.role === 'superuser') ids.push(SUPERUSER_PARTICIPANT_ID);
+  // Match this login against the companion records. The owner may also
+  // appear as an ordinary companion; an Admin usually only appears that
+  // way, which is the only handle they have on "their own" items.
+  var myAccountId = currentUser && currentUser.id;
+  if (myAccountId) {
+    (trip.companions || []).forEach(function (c) {
+      if (c.accountId && c.accountId === myAccountId && ids.indexOf(c.companionId) === -1) ids.push(c.companionId);
+    });
+  }
+  return ids;
+}
+
+// What this viewer's lens should be BEFORE they express a preference.
+function defaultItemScope(trip) {
+  var g = trip && trip.myGrant;
+  return (g && g.role === 'admin') ? 'mine' : 'everything';
+}
+
+// Can this viewer use the lens at all? Two ways the answer is no:
+//   - a scoped "user"/"viewer" grant: the Worker already filtered their
+//     copy of the trip, so a lens over it would filter nothing and imply
+//     they are seeing more than they are.
+//   - nobody has linked them to a person on this trip, so "mine" has no
+//     meaning yet. Offering a control that cannot work would be the kind
+//     of dishonest UI this codebase avoids elsewhere (see the tag-picker
+//     lock and COMPANION_FIELDS_LIMITED).
+function canScopeToOwnItems(trip) {
+  if (!canFullyEditTrip(trip)) return false;
+  return myParticipantIds(trip).length > 0;
+}
+
+// The lens actually in force: the viewer's stored choice if they made one
+// and can still act on it, otherwise their role's default. Falls back to
+// 'everything' whenever filtering is impossible, so a viewer can never
+// end up staring at a blank trip they have no way to un-blank.
+function itemScopeFor(trip) {
+  if (!canScopeToOwnItems(trip)) return 'everything';
+  var stored = trip && itemScopePreference[trip.tripId];
+  return (stored === 'mine' || stored === 'everything') ? stored : defaultItemScope(trip);
+}
+
+// The trip object to RENDER from.
+//
+// Returns the SAME OBJECT it was given whenever the lens is off. That is a
+// contract, not an accident, and it is what makes this safe: the browser
+// POSTs the whole trip on every save, and a trip's items are deleted by
+// omission (see stateIsTrustworthy()). A filtered copy that reached a save
+// would silently delete everything it had filtered out.
+//
+// Two things keep that from happening. First, only render paths call this
+// -- renderTripView(), the Timeline's opening-day scroll, and the Leaflet
+// mount. Second, every data-action handler re-reads the live trip through
+// currentTrip() rather than closing over whatever was last rendered. If
+// you add a caller, make sure it only ever draws.
+//
+// Only the four taggable lists are filtered. `contacts` stay because items
+// reference them by id; `companions` stay because the People line and the
+// tag picker need everyone; `expenses` stay because that tab is full-scope
+// only anyway.
+function scopedTripForRender(trip) {
+  if (!trip || itemScopeFor(trip) !== 'mine') return trip;
+  var mine = myParticipantIds(trip);
+  if (!mine.length) return trip; // No identity -- nothing sensible to filter by.
+  // An item with NO tags stays visible to everyone. Otherwise an item
+  // nobody thought to tag would vanish for every person using the lens,
+  // which is how a booking gets forgotten.
+  var isMine = function (item) {
+    var tags = (item && item.companions) || [];
+    if (!tags.length) return true;
+    return mine.some(function (id) { return tags.indexOf(id) !== -1; });
+  };
+  return Object.assign({}, trip, {
+    destinations: (trip.destinations || []).filter(isMine),
+    activities: (trip.activities || []).filter(isMine),
+    accommodation: (trip.accommodation || []).filter(isMine),
+    transport: (trip.transport || []).filter(isMine)
+  });
+}
+
+// How many records the lens is currently holding back, so the trip header
+// and the empty states can say so rather than leaving the viewer to wonder
+// where their itinerary went.
+//
+// Deliberately re-resolves the LIVE trip from state by id instead of
+// trusting the object it was handed. Most callers here are render helpers,
+// and a render helper has usually been given the already-filtered copy --
+// counting that against itself would always answer 0. Looking the original
+// up removes the question of which copy the caller happened to hold.
+function itemScopeHiddenCount(trip) {
+  var live = trip && byId(state.trips, trip.tripId, 'tripId');
+  if (!live || itemScopeFor(live) !== 'mine') return 0;
+  var shown = scopedTripForRender(live);
+  if (shown === live) return 0;
+  return ['destinations', 'activities', 'accommodation', 'transport'].reduce(function (total, key) {
+    return total + ((live[key] || []).length - (shown[key] || []).length);
+  }, 0);
+}
+
+// A filter you can't see is how people lose confidence in their own data.
+// Whenever the lens is hiding something, say so in the trip header and
+// make the chip itself the way back out -- one click, no hunting through
+// Settings for the control that caused it.
+function itemScopeIndicatorHtml(trip) {
+  var hidden = itemScopeHiddenCount(trip);
+  if (!hidden) return '';
+  return '<button class="status-badge is-scoped" data-action="set-item-scope" data-scope="everything" ' +
+    'title="Showing only items tagged to you — click to show everything">' +
+    icon('person') + ' Just my items <span class="scope-badge-count">' + hidden + ' hidden</span></button>';
 }
 
 function tripAccessBadgeHtml(trip) {
@@ -5193,6 +5380,18 @@ function renderTripView() {
   // account on this same browser) falls back to the Timeline rather
   // than rendering a panel for a tab that's no longer in the tab bar.
   if (currentTab === 'expenses' && !canFullyEditTrip(trip)) currentTab = 'timeline';
+  // `trip` stays the live object from state.trips and is what every
+  // permission check and trip-level figure below reads. `viewTrip` is the
+  // same trip seen through this viewer's lens, and is the ONLY thing the
+  // item panels are allowed to draw from -- see scopedTripForRender() for
+  // why the distinction matters (a filtered trip reaching a save would
+  // delete the filtered-out items).
+  //
+  // Deliberately unfiltered: the spend total and the trip status. Those
+  // describe the trip itself, like its name and dates. Having the headline
+  // figure drop when you narrow your view would read as money going
+  // missing rather than as a filter being on.
+  var viewTrip = scopedTripForRender(trip);
   var spend = tripSpend(trip);
   var status = tripStatus(trip);
   var heroHtml = HERO_TABS.map(function (t) {
@@ -5208,17 +5407,17 @@ function renderTripView() {
   }).join('');
   var panel;
   switch (currentTab) {
-    case 'destinations': panel = renderDestinationsTab(trip); break;
-    case 'activities': panel = renderActivitiesTab(trip); break;
-    case 'transport': panel = renderTransportTab(trip); break;
-    case 'accommodation': panel = renderAccommodationTab(trip); break;
-    case 'map': panel = renderMapTab(trip); break;
-    case 'contacts': panel = renderContactsTab(trip); break;
-    case 'companions': panel = renderCompanionsTab(trip); break;
-    case 'expenses': panel = renderExpensesTab(trip); break;
-    case 'settings': panel = renderSettingsTab(trip); break;
-    case 'more': panel = renderMobileMoreTab(trip); break;
-    default: panel = renderTimelineTab(trip);
+    case 'destinations': panel = renderDestinationsTab(viewTrip); break;
+    case 'activities': panel = renderActivitiesTab(viewTrip); break;
+    case 'transport': panel = renderTransportTab(viewTrip); break;
+    case 'accommodation': panel = renderAccommodationTab(viewTrip); break;
+    case 'map': panel = renderMapTab(viewTrip); break;
+    case 'contacts': panel = renderContactsTab(viewTrip); break;
+    case 'companions': panel = renderCompanionsTab(viewTrip); break;
+    case 'expenses': panel = renderExpensesTab(viewTrip); break;
+    case 'settings': panel = renderSettingsTab(viewTrip); break;
+    case 'more': panel = renderMobileMoreTab(viewTrip); break;
+    default: panel = renderTimelineTab(viewTrip);
   }
   var headerActions = canFullyEditTrip(trip)
     ? '<div class="card-actions">' +
@@ -5230,7 +5429,7 @@ function renderTripView() {
     '<div class="trip-header">' +
       '<button class="back-link" data-action="back-to-dashboard">' + icon('back') + '<span class="back-label-wide">All trips</span><span class="back-label-compact">Back</span></button>' +
       '<div class="trip-title-row">' +
-        '<div><div class="trip-heading-line"><h1 data-page-heading tabindex="-1">' + esc(trip.name) + '</h1>' + tripAccessBadgeHtml(trip) + '</div>' +
+        '<div><div class="trip-heading-line"><h1 data-page-heading tabindex="-1">' + esc(trip.name) + '</h1>' + tripAccessBadgeHtml(trip) + itemScopeIndicatorHtml(trip) + '</div>' +
           '<div class="trip-meta">' +
             '<span class="trip-date-range">' + (trip.startDate ? formatDateShort(trip.startDate) : '?') + ' – ' + (trip.endDate ? formatDateShort(trip.endDate) : '?') + '</span>' +
             (canFullyEditTrip(trip) ? '<span class="trip-spend-meta"><b>' + money(spend.known, trip.homeCurrency) + '</b> spent so far' +
@@ -5538,6 +5737,16 @@ function recordItemRowModel(trip, section, item, context) {
 // canEditItem()'s comment).
 function emptyTab(trip, iconName, title, body, addAction, addLabel) {
   var action = canFullyEditTrip(trip) ? '<button class="btn btn-accent" data-action="' + addAction + '">' + icon('add') + ' ' + esc(addLabel) + '</button>' : '';
+  // A tab emptied by the viewing lens must not claim the trip is empty.
+  // `trip` here has already been filtered, so ask the live trip how many
+  // records the lens is holding back (see itemScopeHiddenCount()). Offer
+  // the way out in the same breath as the diagnosis.
+  var hidden = itemScopeHiddenCount(trip);
+  if (hidden > 0) {
+    return emptyStateHtml('empty', iconName, 'Nothing here tagged to you',
+      'This trip has ' + hidden + ' record' + (hidden === 1 ? '' : 's') + ' you are not tagged on. You are viewing just your own items.',
+      '<button class="btn" data-action="set-item-scope" data-scope="everything">' + icon('people') + ' Show everything</button>' + action);
+  }
   return emptyStateHtml('empty', iconName, title, body, action);
 }
 
@@ -6840,13 +7049,44 @@ function renderSettingsTab(trip) {
       : '<p class="field-hint">No foreign-currency costs logged yet — rates will appear here once you add one.</p>') +
     (canEdit ? '<button type="submit" class="btn btn-primary">Save currency settings</button>' : '') +
     '</section></form>';
+  // The viewing lens. Unlike everything else in Settings, this is not trip
+  // data -- it changes only what THIS browser draws, and nobody else's view
+  // of the trip moves. The copy has to say so: the word "see" around
+  // permissions means something much stronger, and this is not that.
+  //
+  // Shown only where it can actually work (canScopeToOwnItems()): a scoped
+  // user/viewer grant was already filtered by the Worker, and an Admin
+  // nobody has linked to a person on this trip has no "mine" to show. In
+  // the latter case we still explain why, rather than silently omitting a
+  // section they were told about.
+  var scope = itemScopeFor(trip);
+  var viewSection = '';
+  if (canScopeToOwnItems(trip)) {
+    var hiddenNow = itemScopeHiddenCount(trip);
+    viewSection = '<section class="settings-section"><div class="settings-section-head"><div><h3>What you see</h3>' +
+      '<p>Narrow this trip to the items you are tagged on. This changes your view only — it does not change what anyone can open or edit, and everyone else still sees the whole trip.</p></div></div>' +
+      '<div class="scope-switch" role="group" aria-label="Which items to show">' +
+        '<button class="btn scope-option' + (scope === 'everything' ? ' is-active' : '') + '" data-action="set-item-scope" data-scope="everything"' + (scope === 'everything' ? ' aria-pressed="true"' : ' aria-pressed="false"') + '>' + icon('people') + ' Everything</button>' +
+        '<button class="btn scope-option' + (scope === 'mine' ? ' is-active' : '') + '" data-action="set-item-scope" data-scope="mine"' + (scope === 'mine' ? ' aria-pressed="true"' : ' aria-pressed="false"') + '>' + icon('person') + ' Just my items</button>' +
+      '</div>' +
+      '<div class="field-hint">' + (scope === 'mine'
+        ? (hiddenNow > 0 ? 'Hiding ' + hiddenNow + ' record' + (hiddenNow === 1 ? '' : 's') + ' you are not tagged on. Items tagged to nobody stay visible.' : 'You are tagged on everything in this trip, so nothing is hidden right now.')
+        : 'Showing every record on this trip.') + '</div>' +
+      '</section>';
+  } else if (canFullyEditTrip(trip)) {
+    viewSection = '<section class="settings-section"><div class="settings-section-head"><div><h3>What you see</h3>' +
+      '<p>Narrow this trip to the items you are tagged on.</p></div></div>' +
+      '<div class="field-hint">Nobody on this trip is linked to your account yet, so there are no items to call yours. Link yourself to a person on the Companions tab first.</div>' +
+      '<button class="btn" data-action="switch-tab" data-tab="companions">' + icon('companions') + ' Open Companions</button>' +
+      '</section>';
+  }
   var accessContent = canShareTrip(trip)
     ? '<p class="field-hint">Access is managed alongside each person, so permissions and companion tagging stay connected.</p><button class="btn" data-action="switch-tab" data-tab="companions">' + icon('companions') + ' Manage trip access</button>'
     : emptyStateHtml('permission', 'readonly', 'Permission restricted', 'Your access to this trip is read-only or limited to items tagged to you. Ask the trip owner or an Admin to change it.', '', true);
   var accessSection = '<section class="settings-section"><div class="settings-section-head"><div><h3>Access</h3><p>Who can see and edit this trip.</p></div></div>' + accessContent + '</section>';
   var dangerSection = canEdit ? '<section class="settings-section settings-section-danger"><div class="settings-section-head"><div><h3>Danger zone</h3><p>Permanently remove this trip and every record stored inside it.</p></div></div><button class="btn btn-danger" data-action="delete-trip" data-id="' + trip.tripId + '">' + icon('delete') + ' Delete this trip</button></section>' : '';
   return (
-    '<div class="tab-panel-head"><h2>Settings</h2></div><div class="settings-stack">' + generalSection + currencySection + accessSection + dangerSection + renderDependencyDisclosure() + '</div>'
+    '<div class="tab-panel-head"><h2>Settings</h2></div><div class="settings-stack">' + generalSection + currencySection + viewSection + accessSection + dangerSection + renderDependencyDisclosure() + '</div>'
   );
 }
 
@@ -6898,7 +7138,9 @@ function render() {
   }
 
   if (currentView === 'trip' && currentTab === 'timeline') {
-    var timelineTrip = currentTrip();
+    // Through the same lens the Timeline was just drawn with -- otherwise
+    // this scrolls to a day whose only events the lens filtered out.
+    var timelineTrip = scopedTripForRender(currentTrip());
     if (timelineTrip) {
       requestAnimationFrame(function () {
         markTruncatedNotes();
@@ -6912,7 +7154,10 @@ function render() {
     // just drawn above — mount the actual Leaflet map into it. See the Map
     // section (19b) for why this can't just be part of the HTML string
     // like everything else on the page.
-    var trip = currentTrip();
+    // Same lens as the panel above: Leaflet draws from its own pass over
+    // the trip, so without this the map would show pins for items the
+    // list beside it is hiding.
+    var trip = scopedTripForRender(currentTrip());
     if (trip) initMap(trip);
   } else if (mapState.instance) {
     // Left the Map tab (or the trip): tear down the Leaflet instance
@@ -6988,6 +7233,16 @@ document.addEventListener('click', function (e) {
   if (action === 'open-trip') { currentView = 'trip'; currentTripId = el.dataset.id; currentTab = 'timeline'; rememberMobileChild(currentTab); saveNavigationState(); pendingRenderFocus = '[data-page-heading]'; render(); return; }
   if (action === 'back-to-dashboard') { currentView = 'dashboard'; currentTripId = null; saveNavigationState(); pendingRenderFocus = '[data-page-heading]'; render(); return; }
   if (action === 'switch-tab') { currentTab = el.dataset.tab; rememberMobileChild(currentTab); saveNavigationState(); pendingRenderFocus = '#trip-panel'; render(); return; }
+  // The viewing lens (Settings > What you see, the header chip, and the
+  // way out offered by an emptied tab). Purely a redraw: nothing is sent
+  // to the server, and nobody else's view of this trip changes.
+  if (action === 'set-item-scope') {
+    if (!trip) return;
+    itemScopePreference[trip.tripId] = el.dataset.scope === 'mine' ? 'mine' : 'everything';
+    saveNavigationState();
+    render();
+    return;
+  }
   if (action === 'toggle-card-text') {
     // Scrolling the people line, opening the metadata disclosure, copying a
     // reference or following a link are their own gestures -- none of them is
