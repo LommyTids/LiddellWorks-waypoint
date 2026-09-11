@@ -434,7 +434,7 @@ textarea { resize: vertical; min-height: 60px; }
 .journey.is-all-day .journey-time-field { display: none; }
 .journey.is-all-day .journey-date-time-row, .journey.is-date-only .journey-date-time-row { grid-template-columns: 1fr; }
 /* The People "tag-picker" field (see fieldHtml()'s 'tag-picker' case)
-   — a row of small pill-shaped checkboxes for the trip Superuser and each
+   — a row of small pill-shaped checkboxes for the Trip Owner and each
    companion, wrapping once there are more than fit on one line. */
 .tag-picker { display: flex; flex-wrap: wrap; gap: 8px; }
 .tag-picker-item {
@@ -769,15 +769,20 @@ textarea { resize: vertical; min-height: 60px; }
 .tag .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
 .tag-cost { color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); }
 /* Companions tab: Guest vs Companion, and a Companion's access-level tag
-   (Super/Admin/User/Viewer) -- see renderCompanionsTab() and the
+   (Owner/Admin/User/Viewer) -- see renderCompanionsTab() and the
    COMPANIONS & AVATARS comment in src/worker.js's resolveCompanionAccessLevels()
    for what these mean and who can see them (everyone on the trip, unlike
    the raw `grants` list itself). Colour is purely a visual hint of
-   "how much this person can do here" -- Super/Admin get the same warm
+   "how much this person can do here" -- Owner/Admin get the same warm
    accent colour already used for cost tags elsewhere (most privileged,
    most worth noticing at a glance); User/Viewer and Guest stay the plain
    neutral grey `.tag` already used for everything else, since they're
    not something you need to specifically notice. */
+/* NB: the class name below is built by concatenation from the STORED role
+   string ("superuser"), not from the label shown to the reader ("Owner") --
+   see renderCompanionsTab()'s `' tag-role-' + accessRole`. The display
+   wording and the stored role deliberately differ; don't "fix" this to
+   match the label or the rule stops matching any element. */
 .tag-role-superuser, .tag-role-admin { color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); }
 .item-actions { display: flex; gap: 2px; flex-shrink: 0; }
 .copy-btn { min-width: 24px; min-height: 24px; align-items: center; justify-content: center; background: none; border: none; color: var(--wp-text-muted); cursor: pointer; padding: 2px; display: inline-flex; }
@@ -2710,7 +2715,7 @@ function fieldHtml(field, value, trip, allValues) {
       // `field.locked` (fieldsWithTagPickerLock()) disables every checkbox
       // -- a disabled checkbox is left out of FormData entirely, matching
       // what the Worker enforces server-side.
-      return '<label class="tag-picker-item"><input type="checkbox" name="' + field.key + '__' + c.companionId + '" data-tag-picker-key="' + field.key + '" data-tag-person-id="' + c.companionId + '"' + (checked ? ' checked' : '') + (field.locked ? ' disabled' : '') + '> ' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + (c.isSuperuser ? '<span class="tag-picker-role">Superuser</span>' : '') + '</label>';
+      return '<label class="tag-picker-item"><input type="checkbox" name="' + field.key + '__' + c.companionId + '" data-tag-picker-key="' + field.key + '" data-tag-person-id="' + c.companionId + '"' + (checked ? ' checked' : '') + (field.locked ? ' disabled' : '') + '> ' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + (c.isSuperuser ? '<span class="tag-picker-role">Trip Owner</span>' : '') + '</label>';
     }).join('');
     return '<div class="field' + fullClass + '"><label>' + esc(field.label) + '</label><div class="tag-picker">' + pickerItems + '</div>' +
       (field.locked ? '<div class="field-hint">Who this is tagged to isn\'t something you can change.</div>' : (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '')) +
@@ -5613,7 +5618,7 @@ function companionTags(trip, companionIds) {
   return (companionIds || [])
     .map(function (id) { return taggablePersonById(trip, id); })
     .filter(Boolean)
-    .map(function (c) { return '<span class="tag">' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + (c.isSuperuser ? '<span class="tag-role">Superuser</span>' : '') + '</span>'; })
+    .map(function (c) { return '<span class="tag">' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + (c.isSuperuser ? '<span class="tag-role">Trip Owner</span>' : '') + '</span>'; })
     .join('');
 }
 
@@ -5635,11 +5640,18 @@ function companionTags(trip, companionIds) {
 //     Either action also asks for a privilege level (Admin/User/Viewer,
 //     or "no trip access") in the same form and grants it automatically.
 // A Companion who also has access to this trip gets an extra tag showing
-// that level -- Super/Admin/User/Viewer, from resolveCompanionAccessLevels()
+// that level -- Owner/Admin/User/Viewer, from resolveCompanionAccessLevels()
 // in src/worker.js, sent as `trip.companionAccessLevels`. Unlike raw
 // `grants`, that map goes to every role that can see the trip, so these
-// tags render the same for a Superuser and a scoped Viewer alike.
-var COMPANION_ACCESS_LEVEL_LABELS = { superuser: 'Super', admin: 'Admin', user: 'User', viewer: 'Viewer' };
+// tags render the same for the Trip Owner and a scoped Viewer alike.
+//
+// The KEYS here are the roles as the server stores them; the VALUES are
+// only ever shown to a reader. That split is deliberate: "superuser" is
+// load-bearing in permissionForTrip() (src/worker.js), in every
+// myGrant.role check below, and in a CSS class name built by
+// concatenation -- so the word on screen was changed to "Owner" without
+// touching the stored role anywhere.
+var COMPANION_ACCESS_LEVEL_LABELS = { superuser: 'Owner', admin: 'Admin', user: 'User', viewer: 'Viewer' };
 
 // Reads `trip.companionAvatars[...].type` rather than `c.accountId` to
 // decide Guest vs Companion -- accountId is stripped from a scoped

@@ -1,5 +1,5 @@
 // Regression coverage for destination People tags, the virtual trip-owner
-// Superuser participant, and editable defaults on new activities.
+// Trip Owner participant, and editable defaults on new activities.
 const assert = require('assert');
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
@@ -51,7 +51,7 @@ function waitForServer(url, tries) {
     await page.click('[data-action="new-destination"]');
     const ownerChoice = page.locator('.tag-picker-item', { hasText: 'admin' });
     assert.strictEqual(await ownerChoice.count(), 1, 'trip owner should appear once in the destination People picker');
-    assert.match(await ownerChoice.textContent(), /Superuser/, 'trip owner should be explicitly labelled Superuser');
+    assert.match(await ownerChoice.textContent(), /Trip Owner/, 'trip owner should be explicitly labelled Trip Owner');
     assert.strictEqual(await ownerChoice.locator('.avatar-marker').count(), 1, 'trip owner should use the account avatar');
 
     await page.fill('input[name="name"]', 'Seoul');
@@ -65,7 +65,7 @@ function waitForServer(url, tries) {
     const destination = await page.evaluate(() => currentTrip().destinations[0]);
     assert.deepStrictEqual(new Set(destination.companions), new Set([SUPERUSER_PARTICIPANT_ID, sarahId]), 'destination should persist both people ids');
     const destinationText = await page.locator('.item-row', { hasText: 'Seoul' }).textContent();
-    assert.match(destinationText, /admin.*Superuser/, 'destination row should render the explicit Superuser tag');
+    assert.match(destinationText, /admin.*Trip Owner/, 'destination row should render the explicit Trip Owner tag');
     assert.match(destinationText, /Sarah/, 'destination row should render the companion tag');
 
     await page.click('[data-action="switch-tab"][data-tab="activities"]');
@@ -76,7 +76,7 @@ function waitForServer(url, tries) {
     assert.strictEqual(await sarahActivityCheckbox.isChecked(), false, 'new activity starts without companion guesses before an area is selected');
 
     await page.selectOption('select[name="destinationId"]', destination.destinationId);
-    assert.strictEqual(await ownerActivityCheckbox.isChecked(), true, 'selecting the destination should default the Superuser tag');
+    assert.strictEqual(await ownerActivityCheckbox.isChecked(), true, 'selecting the destination should default the Trip Owner tag');
     assert.strictEqual(await sarahActivityCheckbox.isChecked(), true, 'selecting the destination should default its companion tags');
 
     // Defaults stay editable per activity.
@@ -94,7 +94,7 @@ function waitForServer(url, tries) {
     await page.click('[data-action="switch-tab"][data-tab="timeline"]');
     await page.locator('[data-action="timeline-add-activity"][data-day="2028-04-04"]').click();
     assert.strictEqual(await page.locator('select[name="destinationId"]').inputValue(), destination.destinationId, 'timeline quick-add should seed its active destination');
-    assert.strictEqual(await page.locator('input[data-tag-person-id="' + SUPERUSER_PARTICIPANT_ID + '"]').isChecked(), true, 'seeded activity should inherit the Superuser on first render');
+    assert.strictEqual(await page.locator('input[data-tag-person-id="' + SUPERUSER_PARTICIPANT_ID + '"]').isChecked(), true, 'seeded activity should inherit the Trip Owner on first render');
     assert.strictEqual(await page.locator('input[data-tag-person-id="' + sarahId + '"]').isChecked(), true, 'seeded activity should inherit companions on first render');
     await page.click('.modal-head [data-action="close-modal"]');
 

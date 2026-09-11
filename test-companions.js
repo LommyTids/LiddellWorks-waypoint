@@ -62,13 +62,13 @@ function waitForServer(url, tries) {
     const companionRows = await page.locator('.item-list .item-row').count();
     console.log('2. Both companions listed:', companionRows === 2, companionRows);
 
-    // ---- Destination form offers the explicit Superuser plus both
+    // ---- Destination form offers the explicit Trip Owner plus both
     // companions as People choices; tag just Sarah. ----
     await page.click('[data-action="switch-tab"][data-tab="destinations"]');
     await page.click('[data-action="new-destination"]');
     const pickerOptionCount = await page.locator('.tag-picker .tag-picker-item').count();
-    const superuserChoiceText = await page.locator('.tag-picker-item', { hasText: 'admin' }).textContent();
-    console.log('3. Destination form\'s People picker offers the Superuser and both companions:', pickerOptionCount === 3 && /Superuser/.test(superuserChoiceText), { pickerOptionCount, superuserChoiceText });
+    const ownerChoiceText = await page.locator('.tag-picker-item', { hasText: 'admin' }).textContent();
+    console.log('3. Destination form\'s People picker offers the Trip Owner and both companions:', pickerOptionCount === 3 && /Trip Owner/.test(ownerChoiceText), { pickerOptionCount, ownerChoiceText });
     await page.fill('input[name="name"]', 'Chiang Mai');
     await page.fill('input[name="arriveDate"]', '2027-11-02');
     await page.fill('input[name="departDate"]', '2027-11-05');
@@ -297,11 +297,11 @@ function waitForServer(url, tries) {
     // itself does a full state reload on success (see
     // submitAddLinkedCompanion()'s own comment) -- so give it more room
     // than the usual single-save wait.
-    await page.waitForSelector('.item-row:has-text("Diego") .tag:has-text("Super")', { timeout: 5000 });
+    await page.waitForSelector('.item-row:has-text("Diego") .tag:has-text("Owner")', { timeout: 5000 });
     const diegoTags = await page.locator('.item-row', { hasText: 'Diego' }).locator('.tag').allTextContents();
     const diegoMarkerGlyph = (await page.locator('.item-row', { hasText: 'Diego' }).locator('.avatar-marker').first().textContent() || '').trim();
-    console.log('18. "Add companion" creates Diego already linked -- resolved access level "Super", not a plain "Guest":',
-      diegoTags.includes('Super') && !diegoTags.includes('Guest'), diegoTags);
+    console.log('18. "Add companion" creates Diego already linked -- resolved access level "Owner", not a plain "Guest":',
+      diegoTags.includes('Owner') && !diegoTags.includes('Guest'), diegoTags);
     console.log('    ...and Diego\'s marker is already the linked account\'s own animal, never the generic smiley:', diegoMarkerGlyph !== '☺' && diegoMarkerGlyph !== '', diegoMarkerGlyph);
     // Confirm it happened server-side too, not just optimistically --
     // Diego really is a new companion, really linked to the uber-user's
