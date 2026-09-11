@@ -1,5 +1,84 @@
 # Changelog
 
+## 2026-09-10 — Timeline day context, navigation and card layout
+
+### What changed
+
+- Restored the day spine so it stays continuous across collapsed days; it
+  previously measured 0px on every one of them.
+- Gave collapsed days a summary line — event count, and the day's spend —
+  instead of an empty 38px row that made a packed day look like an empty one.
+- Marked today with an accented date badge and a **Today** flag, and marked
+  days that fall outside the trip's own start and end dates.
+- Named each day's area again, including both areas on a transfer day. This
+  reverses part of the 2026-09-02 condensing, which read well on a one-city
+  trip and left a multi-city trip with no sense of place.
+- Added a per-day spend figure in the home currency, and a converted cost on
+  each event card that carries one.
+- Rebuilt Timeline cards as three rows — a control strip, the title at full
+  card width, then supporting detail clamped to three lines. The title had
+  84px on a 390px phone and wrapped hotel names over four lines.
+- Replaced the three per-day add buttons with one **Add** menu, taking a
+  fortnight's Timeline from 42 permanent controls to 14.
+- Made the whole day heading the disclosure control rather than the 34px date
+  circle, and brought the Timeline's controls up to the 44px coarse-pointer
+  minimum the rest of the app already used.
+- Added a Timeline toolbar with trip progress, **Jump to today** and expand or
+  collapse all, for trips long enough to need navigating.
+- Gave each card a category stripe in its existing map colour, with a faint
+  tint and heavier title on transport.
+
+### Technical details
+
+Timeline event cards remain the shared `ItemRow` component; `itemRowHtml()`
+now selects a stacked layout for the `timeline` context rather than a second
+renderer being introduced. The condensed card still discards ItemRow metadata,
+so addresses, companions and commerce tags stay on the Plan lists and Map
+popovers.
+
+The day spine is an absolutely positioned `.day-rail::before` rather than a
+`flex: 1` sibling, which took its height from the day body and so collapsed to
+nothing whenever a day was closed.
+
+Per-day spend is aggregated once per render from `allCostLines()` — the same
+lines as the Expenses ledger and the trip total — so a day reconciles with the
+header. A record's cost is attributed to exactly one day (departure for a leg,
+check-in for a stay, start for an activity), so a return leg or a checkout
+cannot show the same money twice.
+
+The add menu is a native `<details>`, closed on outside click and on Escape,
+and explicitly closed when one of its items opens a modal so it cannot sit
+behind the dialog and swallow the first Escape. The day disclosure still
+updates in place rather than re-rendering, to keep the reader's scroll
+position; the expand/collapse-all control is resynced alongside it. **Jump to
+today** honours `prefers-reduced-motion` explicitly, since that media query
+governs CSS scrolling rather than `scrollIntoView`'s option.
+
+The add control recedes by dropping its outline rather than its opacity: an
+`opacity: 0` control is a target a pointer can land on without seeing.
+
+### Verification
+
+- `npm test` — passed, including a rewritten `test-timeline-condensed.js`. Two
+  of its assertions encoded the "no destinations in day headings" decision and
+  are deliberately inverted rather than deleted.
+- New executable coverage for day flags, area labels including transfer days,
+  per-day spend aggregation, cost attribution, and `daysBetween`.
+- 16 representative new assertions were confirmed to fail against the previous
+  `public/WayPoint/index.html`, so they are regressions rather than tautologies.
+- `node test-map-route-arcs.js` — passed.
+- Rendered in Chromium against a 14-day, three-city trip at 390px and 1440px in
+  both themes: the spine measures 68px on collapsed days (0px before), phone
+  titles 286px with none wrapping past two lines (84px and up to four before),
+  14 add controls (42 before), the day disclosure 56px tall (34px before), and
+  no horizontal overflow. Dark theme resolves entirely through tokens.
+
+### Not verified
+
+`npm run test:merge-gate` still needs an environment with Playwright Chromium
+and WebKit configured. No WebKit, real-device touch, VoiceOver or full WCAG
+pass is claimed.
+
 ## 2026-09-09 — Astra UI review
 
 - Fixed cancelled location search controls, accidental zero-coordinate pins, preview-to-placement switching, stale destination boundaries and picker cleanup.

@@ -668,9 +668,42 @@ textarea { resize: vertical; min-height: 60px; }
 .item-status { margin-top: 6px; color: var(--wp-state-danger); font: var(--wp-type-meta); display: flex; align-items: center; gap: 5px; }
 .item-status .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
 .item-row-time { width: 44px; flex: 0 0 auto; padding-top: 1px; color: var(--wp-text-secondary); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; }
-.item-row--timeline { padding: 10px 12px; gap: 10px; }
+/* Timeline context: the same ItemRow model, stacked as three rows instead
+   of one -- a control strip (time, category icon, cost, record actions),
+   then the title at the card's full width, then supporting detail clamped
+   to three lines. The single-row form put the title between a fixed 44px
+   time column and the action buttons, which left it 84px on a 390px phone
+   and wrapped a hotel name over four lines. */
+.item-row--timeline { flex-direction: column; align-items: stretch; gap: 3px; padding: 8px 12px 10px; }
+.item-row--timeline .item-row-head { display: flex; align-items: center; gap: 10px; }
+.item-row--timeline .item-row-time { width: auto; padding-top: 0; white-space: nowrap; }
 .item-row--timeline .item-icon { width: 26px; height: 26px; border-radius: 7px; }
 .item-row--timeline .item-icon .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+/* A category stripe in the record's existing Map colour, so a flight and a
+   coffee no longer carry identical weight -- previously they differed only by
+   a small tinted glyph. Transport gets a little more of it, a faint tint and a
+   heavier title, because it is the part of a day you cannot be late for. */
+.item-row--timeline { border-left-width: 3px; }
+.item-row--timeline[data-item-section="activity"] { border-left-color: var(--wp-map-activity); }
+.item-row--timeline[data-item-section="accommodation"] { border-left-color: var(--wp-map-accommodation); }
+.item-row--timeline[data-item-section="transport"] { border-left-color: var(--wp-map-transport); background: color-mix(in srgb, var(--wp-map-transport) 4%, var(--wp-bg-surface)); }
+.item-row--timeline[data-item-section="transport"] .item-title { font-weight: 650; }
+/* Cost and the record actions share one trailing container: as two separate
+   margin-left:auto siblings they would split the slack between them rather
+   than both sitting against the edge. */
+.item-row--timeline .item-row-trail { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.item-row--timeline .item-row-cost { color: var(--wp-action-accent-strong); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.item-row--timeline .item-row-cost.rate-missing { color: var(--wp-state-danger); }
+.item-row--timeline .item-title { overflow-wrap: anywhere; }
+.item-row--timeline .item-actions { flex-shrink: 0; }
+/* Row three is clamped so one verbose record cannot dominate a day. The
+   text stays in the DOM, so it is only visually shortened -- assistive
+   technology still reads the whole note. `line-clamp` is the standard
+   property; the -webkit- pair is what actually ships today. */
+.item-row--timeline .item-supporting {
+  margin-top: 0; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere;
+}
 .item-row--map { padding: 7px 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 .item-row--map + .item-row--map { border-top: 1px solid var(--wp-border-default); }
 .item-row--map .item-icon { width: 28px; height: 28px; }
@@ -699,26 +732,117 @@ textarea { resize: vertical; min-height: 60px; }
 .copy-btn:hover { color: var(--wp-text-primary); }
 .copy-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
 
-/* ---- 4e. Timeline ------------------------------------------------- */
-.day-card { display: flex; gap: 14px; margin-bottom: 22px; }
-.day-rail { display: flex; flex-direction: column; align-items: center; width: 46px; flex-shrink: 0; }
-.day-num { font: var(--wp-type-meta); font-weight: 600; background: var(--wp-action-primary); color: var(--wp-text-on-strong); width: 34px; height: 34px; border: 0; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
-.day-num:hover { background: var(--wp-action-accent); }
-.day-line { flex: 1; width: 2px; background: var(--wp-border-default); margin-top: 4px; }
-.day-body { flex: 1; min-width: 0; padding-bottom: 4px; }
-.day-body.is-collapsed { padding-bottom: 0; }
-.day-body.is-collapsed .day-actions { display: none; }
-.day-heading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
-.day-body.is-collapsed .day-heading { margin-bottom: 0; }
-.day-heading h3 { font: var(--wp-type-heading); }
-.day-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-left: auto; }
-.timeline-add-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-micro); cursor: pointer; }
-.timeline-add-btn:hover { color: var(--wp-text-primary); border-color: var(--wp-text-muted); }
-.timeline-add-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
-.day-events { display: flex; flex-direction: column; gap: 8px; }
-.overnight-note { display: flex; align-items: center; gap: 7px; font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); color: var(--wp-text-muted); margin-top: 8px; padding-left: 2px; }
+/* ---- 4e. Timeline -------------------------------------------------
+   Three pieces: a toolbar for moving through a long trip, one card per
+   day, and the event cards inside it. A day card is a rail (the spine
+   plus its date badge) beside a body (the heading disclosure, the add
+   menu, and the day's events). */
+
+/* Sticky on desktop only. Below 768px .trip-header is itself sticky and
+   its height is not measured into a custom property, so a second sticky
+   layer there would risk sitting on top of it. */
+.timeline-toolbar {
+  position: sticky; z-index: 15;
+  top: calc(var(--wp-shell-bar-height, 61px) + var(--wp-shell-banner-height, 0px));
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 14px; padding: 8px 0; background: var(--wp-bg-canvas);
+}
+.timeline-progress { display: flex; align-items: center; gap: 9px; margin-right: auto; color: var(--wp-text-secondary); font: var(--wp-type-meta); }
+.timeline-progress strong { color: var(--wp-text-primary); }
+.timeline-progress-track { width: 88px; height: 4px; border-radius: 999px; background: var(--wp-border-default); overflow: hidden; }
+.timeline-progress-fill { display: block; height: 100%; width: var(--wp-timeline-progress, 0%); border-radius: 999px; background: var(--wp-action-accent); }
+.timeline-tool { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 6px 12px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-micro); cursor: pointer; }
+.timeline-tool:hover { border-color: var(--wp-text-muted); color: var(--wp-text-primary); }
+.timeline-tool .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+.timeline-tool.is-today { border-color: var(--wp-action-accent-strong); color: var(--wp-action-accent-strong); }
+
+.day-card { position: relative; display: flex; gap: 14px; margin-bottom: 10px; }
+.day-card:last-child { margin-bottom: 0; }
+.day-rail { position: relative; display: flex; justify-content: center; width: 40px; flex-shrink: 0; }
+/* The spine is absolutely positioned so it cannot collapse. As a flex
+   child it took its height from the day body and measured 0px on every
+   collapsed day, breaking the line exactly where continuity matters. */
+.day-rail::before {
+  content: ""; position: absolute; top: 8px; bottom: -14px; left: 50%;
+  width: 2px; margin-left: -1px;
+  background: color-mix(in srgb, var(--wp-border-strong) 45%, var(--wp-border-default));
+}
+.day-card:last-child .day-rail::before { display: none; }
+/* A date badge, not a control: the disclosure is the whole heading row
+   beside it, which is a far larger target than a 34px circle. */
+.day-num {
+  position: relative; z-index: 1; width: 36px; height: 36px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--wp-bg-canvas); border-radius: 50%;
+  background: var(--wp-action-primary); color: var(--wp-text-on-strong);
+  font: var(--wp-type-meta); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.day-card.is-today .day-num { background: var(--wp-action-accent-strong); box-shadow: 0 0 0 3px var(--wp-action-accent-subtle); }
+.day-card.is-outside .day-num { background: var(--wp-bg-canvas); border: 1px dashed var(--wp-border-strong); color: var(--wp-text-muted); }
+
+.day-body { flex: 1; min-width: 0; padding-bottom: 6px; }
+.day-headrow { display: flex; align-items: center; gap: 8px; }
+.day-head {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 4px 8px 4px 0;
+  border: 0; border-radius: var(--radius-sm); background: transparent;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.day-head:hover { background: var(--wp-bg-subdued); }
+.day-head-copy { flex: 1; min-width: 0; }
+.day-date-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.day-date { font: var(--wp-type-heading); }
+.day-card.is-outside .day-date { color: var(--wp-text-muted); }
+.day-area { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text-secondary); font: var(--wp-type-label); }
+.day-flag { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; background: var(--wp-action-accent-strong); color: var(--wp-text-on-strong); font: var(--wp-type-micro); letter-spacing: .06em; text-transform: uppercase; }
+.day-flag.is-quiet { background: transparent; color: var(--wp-text-muted); border: 1px dashed var(--wp-border-strong); }
+/* The summary is what a collapsed day says about itself. Without it a
+   closed day was 38px of nothing and an empty day looked like a full one. */
+.day-summary { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; color: var(--wp-text-muted); font: var(--wp-type-meta); font-variant-numeric: tabular-nums; }
+.day-summary-spend { color: var(--wp-text-secondary); }
+.day-summary-dot { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .6; }
+.day-chevron { flex: 0 0 auto; color: var(--wp-text-muted); transition: transform .16s ease; }
+.day-chevron .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+.day-card:not(.is-collapsed) .day-chevron { transform: rotate(180deg); }
+
+/* One add control per day rather than three: a fortnight previously carried
+   42 permanently visible buttons competing with the itinerary. This one
+   recedes until the day is hovered or focused -- by dropping its outline
+   rather than its opacity, so it is never an invisible target a pointer can
+   land on or a screen reader can reach ahead of sighted readers. */
+.day-add { position: relative; flex: 0 0 auto; }
+.day-add-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 5px 11px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--wp-text-muted); font: var(--wp-type-micro); cursor: pointer; list-style: none; transition: color .14s ease, border-color .14s ease; }
+.day-card:hover .day-add-btn, .day-card:focus-within .day-add-btn, .day-add[open] .day-add-btn { border-color: var(--wp-border-default); background: var(--wp-bg-surface); color: var(--wp-text-secondary); }
+.day-add-btn::-webkit-details-marker { display: none; }
+.day-add-btn:hover { border-color: var(--wp-action-accent-strong); color: var(--wp-action-accent-strong); }
+.day-add-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
+.day-add-menu { position: absolute; z-index: 18; top: calc(100% + 6px); right: 0; min-width: 172px; padding: 6px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); box-shadow: var(--wp-shadow-surface); }
+.day-add-item { width: 100%; display: flex; align-items: center; gap: 9px; min-height: 38px; padding: 8px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-primary); font: var(--wp-type-label); text-align: left; cursor: pointer; }
+.day-add-item:hover { background: var(--wp-bg-subdued); }
+.day-add-item .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); color: var(--wp-text-secondary); }
+
+.day-content { display: flex; flex-direction: column; gap: 7px; padding-top: 4px; }
+.day-events { display: flex; flex-direction: column; gap: 7px; }
+.overnight-note { display: flex; align-items: center; gap: 7px; padding: 4px 0 2px; color: var(--wp-text-muted); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+.overnight-note.is-unbooked { color: var(--wp-state-danger); }
 .overnight-note .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
-.no-day-events { font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); color: var(--wp-text-muted); font-style: italic; padding: 4px 0; }
+.no-day-events { display: flex; align-items: center; gap: 8px; padding: 6px 0; color: var(--wp-text-muted); font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); }
+.no-day-events .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); }
+
+@media (max-width: 768px) {
+  .timeline-toolbar { position: static; }
+}
+@media (max-width: 640px) {
+  /* Narrow screens collapse the add control to one plus, kept inline with
+     the date rather than given a full-width row of its own. */
+  .day-add-label { display: none; }
+  .day-add-btn { width: 44px; min-width: 44px; padding: 0; justify-content: center; border-radius: 50%; }
+  .day-add-btn .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); }
+  .day-headrow { gap: 2px; }
+  .day-card { gap: 10px; }
+  .day-rail { width: 36px; }
+  .timeline-progress-track { width: 64px; }
+}
 
 /* ---- 4f. Expenses table ------------------------------------------- */
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 10px; margin-bottom: 18px; }
@@ -939,6 +1063,9 @@ tr:last-child td { border-bottom: none; }
   .btn-icon { width: 44px; height: 44px; }
   input, select, textarea, .btn { min-height: 44px; }
   .map-filter-chip, .map-reset, .copy-btn, .tag-picker-item, .form-section summary { min-height: 44px; }
+  /* The Timeline's own controls were never listed here: the date circle
+     measured 34px and each add button 26px. */
+  .day-head, .day-add-btn, .day-add-item, .timeline-tool { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
@@ -1087,6 +1214,14 @@ function addDays(dateStr, n) {
   var dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
   dt.setUTCDate(dt.getUTCDate() + n);
   return dt.toISOString().slice(0, 10);
+}
+
+// Whole days between two "YYYY-MM-DD" dates. Built from Date.UTC parts for
+// the same reason as addDays(): a local-timezone parse can shift the result.
+function daysBetween(fromDate, toDate) {
+  var from = fromDate.split('-').map(Number);
+  var to = toDate.split('-').map(Number);
+  return Math.round((Date.UTC(to[0], to[1] - 1, to[2]) - Date.UTC(from[0], from[1] - 1, from[2])) / 86400000);
 }
 
 function formatDateHeading(dateStr) {
@@ -2160,6 +2295,16 @@ document.addEventListener('invalid', function (event) {
 }, true);
 
 document.addEventListener('keydown', function (event) {
+  if (event.key === 'Escape') {
+    var openDayAdd = document.querySelector('.day-add[open]');
+    if (openDayAdd) {
+      event.preventDefault();
+      openDayAdd.removeAttribute('open');
+      var dayAddToggle = openDayAdd.querySelector('.day-add-btn');
+      if (dayAddToggle) dayAddToggle.focus();
+      return;
+    }
+  }
   if (event.key === 'Escape' && accountMenuOpen) {
     event.preventDefault();
     accountMenuOpen = false;
@@ -5088,14 +5233,35 @@ function itemMetadataHtml(trip, metadata) {
 function itemRowHtml(trip, model) {
   var itemId = model.item && model.section ? model.item[ENTITY_ID_FIELDS[model.section]] : '';
   var actions = model.showRecordActions === false ? '' : rowActions(trip, model.section, model.item);
+  var open = '<article class="item-row item-row--' + esc(model.context || 'plan') + '" data-item-section="' + esc(model.section || '') + '"' + (itemId ? ' data-item-id="' + esc(itemId) + '"' : '') + '>';
+  var iconHtml = '<span class="item-icon tone-' + esc(model.tone || model.section || 'destination') + '">' + icon(model.icon) + '</span>';
+  var supportingHtml = model.supporting ? '<div class="item-supporting">' + esc(model.supporting) + '</div>' : '';
+  var statusHtml = model.status ? '<div class="item-status">' + icon(model.status.icon || 'warning') + esc(model.status.text) + '</div>' : '';
+
+  // The Timeline renders the same model stacked rather than in one row: a
+  // control strip, the title at full card width, then supporting detail.
+  // money() already escapes its currency code, so the cost is inserted as-is.
+  if (model.context === 'timeline') {
+    return open +
+      '<div class="item-row-head">' +
+        (model.leadingTime ? '<span class="item-row-time">' + esc(model.leadingTime) + '</span>' : '') +
+        iconHtml +
+        '<span class="item-row-trail">' +
+          (model.cost ? '<span class="item-row-cost' + (model.cost.known ? '' : ' rate-missing') + '">' + model.cost.text + '</span>' : '') +
+          actions +
+        '</span>' +
+      '</div>' +
+      '<div class="item-title">' + esc(model.title) + '</div>' +
+      supportingHtml + statusHtml + '</article>';
+  }
+
   var leading = '<div class="item-row-leading">' +
     (model.leadingTime ? '<span class="item-row-time">' + esc(model.leadingTime) + '</span>' : '') +
-    '<span class="item-icon tone-' + esc(model.tone || model.section || 'destination') + '">' + icon(model.icon) + '</span></div>';
-  return '<article class="item-row item-row--' + esc(model.context || 'plan') + '" data-item-section="' + esc(model.section || '') + '"' + (itemId ? ' data-item-id="' + esc(itemId) + '"' : '') + '>' +
+    iconHtml + '</div>';
+  return open +
     leading + '<div class="item-main"><div class="item-title-row"><span class="item-title">' + esc(model.title) + '</span></div>' +
     itemMetadataHtml(trip, model.metadata || {}) +
-    (model.supporting ? '<div class="item-supporting">' + esc(model.supporting) + '</div>' : '') +
-    (model.status ? '<div class="item-status">' + icon(model.status.icon || 'warning') + esc(model.status.text) + '</div>' : '') +
+    supportingHtml + statusHtml +
     '</div>' + actions + '</article>';
 }
 
@@ -6092,6 +6258,24 @@ async function initMap(trip) {
    and — when relevant — a note about where the night is spent (a
    booked stay, or travelling overnight through to the next day). */
 
+// A record's cost belongs to exactly one day, matching allCostLines(): the
+// departure day for a leg, the check-in day for a stay, the start day for an
+// activity. Without that, a return leg or a checkout would show the same money
+// a second time and stop reconciling with the day total in the heading.
+function timelineEventCost(trip, ev) {
+  var carriesCost = ev.kind === 'depart' || ev.kind === 'checkin' || (ev.kind === 'activity' && !ev.continues);
+  if (!carriesCost || !ev.data.costAmount) return null;
+  var converted = homeValue(trip, ev.data.costAmount, ev.data.costCurrency, ev.data.costRate);
+  if (converted.known) return { text: money(converted.value, trip.homeCurrency), known: true };
+  return { text: money(ev.data.costAmount, ev.data.costCurrency) + ' · rate needed', known: false };
+}
+
+// Row three of a Timeline card: the event's own context line, then whatever
+// was typed into the record's notes. Empty parts drop out.
+function timelineDetail(context, notes) {
+  return [context, notes].filter(function (part) { return part; }).join(' · ');
+}
+
 function eventRowHtml(trip, ev) {
   var section = ev.kind === 'activity' ? 'activity' : ((ev.kind === 'checkin' || ev.kind === 'checkout') ? 'accommodation' : 'transport');
   var model = recordItemRowModel(trip, section, ev.data, 'timeline');
@@ -6100,16 +6284,17 @@ function eventRowHtml(trip, ev) {
   // Plan lists and Map popovers; omitting it here keeps each event to one clear
   // headline without address, destination, companion or commerce tag pills.
   model.metadata = {};
+  model.cost = timelineEventCost(trip, ev);
   if (ev.kind === 'activity' && ev.continues) { model.title = 'Continues: ' + ev.data.title; model.icon = 'continues'; }
   else if (ev.kind === 'checkin') { model.title = 'Check in: ' + ev.data.name; model.icon = 'checkIn'; }
   else if (ev.kind === 'checkout') { model.title = 'Check out: ' + ev.data.name; model.icon = 'checkOut'; }
   else if (ev.kind === 'depart') {
     model.title = transportLabel(ev.data);
     var overnight = dateOnly(ev.data.departDateTime) !== dateOnly(ev.data.arriveDateTime);
-    model.supporting = overnight ? 'Arrives ' + formatDateShort(dateOnly(ev.data.arriveDateTime)) + ' at ' + timeOnly(ev.data.arriveDateTime) : 'Arrives ' + timeOnly(ev.data.arriveDateTime);
+    model.supporting = timelineDetail(overnight ? 'Arrives ' + formatDateShort(dateOnly(ev.data.arriveDateTime)) + ' at ' + timeOnly(ev.data.arriveDateTime) : 'Arrives ' + timeOnly(ev.data.arriveDateTime), ev.data.notes);
   } else if (ev.kind === 'arrive') {
     model.title = 'Arrive: ' + ev.data.toLocation + ' (from ' + ev.data.fromLocation + ')';
-    model.supporting = 'Overnight ' + (ev.data.mode || 'travel') + (ev.data.flightNumber ? ' ' + ev.data.flightNumber : '') + ' from ' + formatDateShort(dateOnly(ev.data.departDateTime));
+    model.supporting = timelineDetail('Overnight ' + (ev.data.mode || 'travel') + (ev.data.flightNumber ? ' ' + ev.data.flightNumber : '') + ' from ' + formatDateShort(dateOnly(ev.data.departDateTime)), ev.data.notes);
   }
   return itemRowHtml(trip, model);
 }
@@ -6121,13 +6306,107 @@ function timelineDaySeed(trip, day) {
   return areas.length === 1 ? { destinationId: areas[0].destinationId } : {};
 }
 
+// Built once per render: summing allCostLines() inside the day loop would
+// rebuild the whole list for every date. These are the same lines the Expenses
+// ledger and the trip total use, so a day's figure always reconciles with the
+// header -- and a multi-night stay counts once, on its check-in day.
+function timelineSpendByDay(trip) {
+  var byDay = {};
+  allCostLines(trip).forEach(function (line) {
+    if (!line.date) return;
+    var entry = byDay[line.date] || (byDay[line.date] = { known: 0, unknown: 0 });
+    var converted = homeValue(trip, line.amount, line.currency, line.rateOverride);
+    if (converted.known) entry.known += converted.value; else entry.unknown++;
+  });
+  return byDay;
+}
+
+// One quiet area name per day. A day spanning two areas names both, in arrival
+// order, rather than going blank -- a transfer day is exactly when the reader
+// most needs to know where they are.
+function timelineDayAreaLabel(trip, day) {
+  var areas = areasForDay(trip, day);
+  if (!areas.length) return '';
+  return areas.slice().sort(function (a, b) {
+    return String(a.arriveDate || '').localeCompare(String(b.arriveDate || ''));
+  }).map(function (area) { return area.name; }).join(' → ');
+}
+
+// tripDayList() spans every record, so an outbound leg the day before the
+// trip's own start date pulls a day into the Timeline that the trip header's
+// range does not cover. Mark it rather than letting it pass as an ordinary day.
+function timelineDayFlag(trip, day, today) {
+  if (day === today) return { label: 'Today', quiet: false };
+  if (trip.startDate && day < trip.startDate) return { label: 'Before trip', quiet: true };
+  if (trip.endDate && day > trip.endDate) return { label: 'After trip', quiet: true };
+  return null;
+}
+
+// What a day says about itself while collapsed -- previously a collapsed day
+// was 38px of nothing, so an empty day and a packed one looked identical. The
+// area is deliberately not repeated here; it already sits beside the date.
+function timelineDaySummaryHtml(trip, eventCount, spend) {
+  var parts = [eventCount ? eventCount + (eventCount === 1 ? ' event' : ' events') : 'Nothing planned'];
+  if (spend && spend.known > 0) parts.push('<span class="day-summary-spend">' + money(spend.known, trip.homeCurrency) + '</span>');
+  if (spend && spend.unknown) parts.push('<span class="rate-missing">' + spend.unknown + ' need rate</span>');
+  return '<span class="day-summary">' + parts.join('<span class="day-summary-dot"></span>') + '</span>';
+}
+
 function timelineDayActionsHtml(trip, day) {
   if (!canFullyEditTrip(trip)) return '';
-  return '<div class="day-actions" aria-label="Add to ' + esc(formatDateHeading(day)) + '">' +
-    '<button class="timeline-add-btn" data-action="timeline-add-activity" data-day="' + esc(day) + '">' + icon('add') + ' Activity</button>' +
-    '<button class="timeline-add-btn" data-action="timeline-add-accommodation" data-day="' + esc(day) + '">' + icon('add') + ' Stay</button>' +
-    '<button class="timeline-add-btn" data-action="timeline-add-transport" data-day="' + esc(day) + '">' + icon('add') + ' Travel</button>' +
+  var heading = esc(formatDateHeading(day));
+  // One control per day instead of three: a fortnight previously carried 42
+  // permanently visible add buttons against the itinerary. A native <details>
+  // keeps the menu keyboard-operable without a bespoke popover, the same way
+  // the Map's locations-needing-attention panel does.
+  return '<details class="day-add"><summary class="day-add-btn" aria-label="Add to ' + heading + '" title="Add to ' + heading + '">' +
+      icon('add') + '<span class="day-add-label">Add</span></summary>' +
+    '<div class="day-add-menu">' +
+      '<button type="button" class="day-add-item" data-action="timeline-add-activity" data-day="' + esc(day) + '">' + icon('activity') + ' Activity</button>' +
+      '<button type="button" class="day-add-item" data-action="timeline-add-accommodation" data-day="' + esc(day) + '">' + icon('stay') + ' Stay</button>' +
+      '<button type="button" class="day-add-item" data-action="timeline-add-transport" data-day="' + esc(day) + '">' + icon('route') + ' Travel</button>' +
+    '</div></details>';
+}
+
+// Where you are in the trip, and how to move through it: a fortnight rendered
+// roughly 3,500px of page with no way to get anywhere in it.
+function timelineToolbarHtml(trip, days, today) {
+  var anyCollapsed = days.some(function (day) { return !timelineDayExpanded(trip.tripId, day, today); });
+  var progress = '';
+  if (trip.startDate && trip.endDate && today >= trip.startDate && today <= trip.endDate) {
+    var total = daysBetween(trip.startDate, trip.endDate) + 1;
+    var current = daysBetween(trip.startDate, today) + 1;
+    // A live percentage computed from real dates, so it reaches CSS as a custom
+    // property -- the same documented exception the Map's range slider uses.
+    progress = '<span class="timeline-progress"><span><strong>Day ' + current + '</strong> of ' + total + '</span>' +
+      '<span class="timeline-progress-track"><span class="timeline-progress-fill" style="--wp-timeline-progress: ' + Math.round((current / total) * 100) + '%"></span></span></span>';
+  }
+  return '<div class="timeline-toolbar">' + progress +
+    (days.indexOf(today) !== -1 ? '<button type="button" class="timeline-tool is-today" data-action="timeline-jump-today">' + icon('date') + ' Jump to today</button>' : '') +
+    '<button type="button" class="timeline-tool" data-action="timeline-toggle-all" data-expand="' + String(anyCollapsed) + '">' +
+      icon(anyCollapsed ? 'expand' : 'collapse') + (anyCollapsed ? ' Expand all' : ' Collapse all') + '</button>' +
   '</div>';
+}
+
+// The Expand/Collapse-all control describes the current state, so a single
+// day's disclosure has to keep it honest. Done in place rather than by
+// re-rendering, which would throw away the reader's scroll position.
+function syncTimelineToolbar(trip) {
+  var control = document.querySelector('[data-action="timeline-toggle-all"]');
+  if (!control) return;
+  var today = timelineLocalTodayStr();
+  var anyCollapsed = tripDayList(trip).some(function (day) { return !timelineDayExpanded(trip.tripId, day, today); });
+  control.dataset.expand = String(anyCollapsed);
+  control.innerHTML = icon(anyCollapsed ? 'expand' : 'collapse') + (anyCollapsed ? ' Expand all' : ' Collapse all');
+}
+
+// The day add menu is a transient popover. Closing it explicitly matters most
+// when one of its items opens a modal: left open, it would still be behind the
+// dialog and would swallow the first Escape.
+function closeDayAddMenus(except) {
+  Array.prototype.forEach.call(document.querySelectorAll('.day-add[open]'), function (menu) {
+    if (menu !== except) menu.removeAttribute('open');
+  });
 }
 
 function renderTimelineTab(trip) {
@@ -6135,30 +6414,45 @@ function renderTimelineTab(trip) {
   if (days.length === 0) {
     return emptyStateHtml('empty', 'timeline', 'Nothing planned yet', 'Add a destination, activity, transport leg or place to stay and this timeline will lay your trip out day by day — including overnight travel and stays that span several days.');
   }
+  var today = timelineLocalTodayStr();
+  var spendByDay = timelineSpendByDay(trip);
   var cards = days.map(function (day, i) {
     var events = eventsForDay(trip, day);
     var stay = overnightStay(trip, day);
     var isLast = i === days.length - 1;
-    var expanded = timelineDayExpanded(trip.tripId, day);
+    var expanded = timelineDayExpanded(trip.tripId, day, today);
     var dayHeading = formatDateHeading(day);
     var contentId = 'timeline-day-' + slug(trip.tripId) + '-' + day;
+    var area = timelineDayAreaLabel(trip, day);
+    var flag = timelineDayFlag(trip, day, today);
     var eventsHtml = events.length
       ? '<div class="day-events">' + events.map(function (ev) { return eventRowHtml(trip, ev); }).join('') + '</div>'
-      : '<div class="no-day-events">Nothing logged for this day.</div>';
+      : '<div class="no-day-events">' + icon('date') + ' Nothing planned for this day.</div>';
     var overnightHtml = '';
     if (!isLast) {
       if (stay && stay.kind === 'stay') overnightHtml = '<div class="overnight-note">' + icon('overnight') + 'Sleeping at ' + esc(stay.data.name) + '</div>';
       else if (stay && stay.kind === 'transit') overnightHtml = '<div class="overnight-note">' + icon('overnight') + 'Overnight ' + esc((stay.data.mode || 'travel').toLowerCase()) + ' to ' + esc(stay.data.toLocation) + '</div>';
-      else overnightHtml = '<div class="overnight-note">' + icon('overnight') + 'No accommodation logged for tonight</div>';
+      else overnightHtml = '<div class="overnight-note is-unbooked">' + icon('overnight') + 'No accommodation logged for tonight</div>';
     }
-    return '<div class="day-card' + (expanded ? '' : ' is-collapsed') + '" data-timeline-day="' + esc(day) + '"><div class="day-rail">' +
-      '<button class="day-num" data-action="toggle-timeline-day" data-day="' + esc(day) + '" aria-expanded="' + String(expanded) + '" aria-controls="' + contentId + '" aria-label="' + (expanded ? 'Collapse ' : 'Expand ') + esc(dayHeading) + '">' + day.slice(8, 10) + '</button>' +
-      (isLast ? '' : '<span class="day-line"></span>') + '</div>' +
-      '<div class="day-body' + (expanded ? '' : ' is-collapsed') + '"><div class="day-heading"><h3>' + dayHeading + '</h3>' +
+    // The date badge is no longer the control: the heading row beside it is,
+    // which gives the disclosure a 44px target instead of a 34px circle and
+    // an accessible name carrying the date, area, flag and day summary.
+    return '<div class="day-card' + (expanded ? '' : ' is-collapsed') + (day === today ? ' is-today' : '') + (flag && flag.quiet ? ' is-outside' : '') + '" data-timeline-day="' + esc(day) + '">' +
+      '<div class="day-rail"><span class="day-num" aria-hidden="true">' + day.slice(8, 10) + '</span></div>' +
+      '<div class="day-body"><div class="day-headrow">' +
+        '<button type="button" class="day-head" data-action="toggle-timeline-day" data-day="' + esc(day) + '" aria-expanded="' + String(expanded) + '" aria-controls="' + contentId + '">' +
+          '<span class="day-head-copy"><span class="day-date-line">' +
+            '<span class="day-date">' + esc(dayHeading) + '</span>' +
+            (area ? '<span class="day-area">' + esc(area) + '</span>' : '') +
+            (flag ? '<span class="day-flag' + (flag.quiet ? ' is-quiet' : '') + '">' + esc(flag.label) + '</span>' : '') +
+          '</span>' + timelineDaySummaryHtml(trip, events.length, spendByDay[day]) + '</span>' +
+          '<span class="day-chevron">' + icon('collapse') + '</span>' +
+        '</button>' +
         timelineDayActionsHtml(trip, day) + '</div>' +
         '<div id="' + contentId + '" class="day-content"' + (expanded ? '' : ' hidden') + '>' + eventsHtml + overnightHtml + '</div></div></div>';
   }).join('');
-  return cards;
+  // A single-day trip has nothing to navigate, so the toolbar would be noise.
+  return (days.length > 1 ? timelineToolbarHtml(trip, days, today) : '') + cards;
 }
 
 /* ---------- 21. Render: Expenses tab ---------------------------------------- */
@@ -6341,6 +6635,13 @@ document.addEventListener('click', function (e) {
     accountMenuOpen = false;
     applyAuthUI();
   }
+  // Same treatment for a day's add menu, except that choosing one of its own
+  // items closes it too -- that item opens a modal, and the menu must not be
+  // left sitting open behind the dialog.
+  if (e.target.closest) {
+    var chosenAddItem = e.target.closest('.day-add-item');
+    closeDayAddMenus(chosenAddItem ? null : e.target.closest('.day-add'));
+  }
   var el = e.target.closest('[data-action]');
   if (!el) return;
   var action = el.dataset.action;
@@ -6390,16 +6691,39 @@ document.addEventListener('click', function (e) {
     var timelineDay = el.dataset.day;
     var nextExpanded = el.getAttribute('aria-expanded') !== 'true';
     timelineDayExpansion[timelineDayKey(trip.tripId, timelineDay)] = nextExpanded;
+    // Updated in place rather than re-rendered: a full render would lose the
+    // reader's scroll position on what can be a very long page. The button's
+    // accessible name comes from its own content, so only the state changes.
     el.setAttribute('aria-expanded', String(nextExpanded));
-    el.setAttribute('aria-label', (nextExpanded ? 'Collapse ' : 'Expand ') + formatDateHeading(timelineDay));
     var timelineCard = el.closest('.day-card');
     var timelineContent = document.getElementById(el.getAttribute('aria-controls'));
-    if (timelineCard) {
-      timelineCard.classList.toggle('is-collapsed', !nextExpanded);
-      var timelineBody = timelineCard.querySelector('.day-body');
-      if (timelineBody) timelineBody.classList.toggle('is-collapsed', !nextExpanded);
-    }
+    if (timelineCard) timelineCard.classList.toggle('is-collapsed', !nextExpanded);
     if (timelineContent) timelineContent.hidden = !nextExpanded;
+    syncTimelineToolbar(trip);
+    return;
+  }
+  if (action === 'timeline-toggle-all' && trip) {
+    var expandAll = el.dataset.expand === 'true';
+    tripDayList(trip).forEach(function (day) {
+      timelineDayExpansion[timelineDayKey(trip.tripId, day)] = expandAll;
+    });
+    render();
+    return;
+  }
+  if (action === 'timeline-jump-today' && trip) {
+    var todayKey = timelineLocalTodayStr();
+    timelineDayExpansion[timelineDayKey(trip.tripId, todayKey)] = true;
+    render();
+    requestAnimationFrame(function () {
+      var todayCard = document.querySelector('[data-timeline-day="' + todayKey + '"]');
+      if (!todayCard) return;
+      // The reduced-motion media query governs CSS scrolling, not this
+      // option, so the preference is honoured explicitly.
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      todayCard.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+      var todayHead = todayCard.querySelector('.day-head');
+      if (todayHead) todayHead.focus({ preventScroll: true });
+    });
     return;
   }
   if (action === 'switch-mobile-destination') {
