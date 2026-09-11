@@ -614,7 +614,12 @@ const ITEM_FIELDS = {
   accommodation: ["accommodationId", "name", "type", "destinationId", "address", "checkIn", "checkOut", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel"],
   contacts: ["contactId", "name", "role", "phone", "email", "address", "notes"],
   expenses: ["expenseId", "description", "category", "date", "amount", "currency", "rateOverride", "receiptRef", "contactId", "notes"],
-  companions: ["companionId", "name", "notes", "avatar", "accountId"],
+  // joinsOn/leavesOn: the dates this person is actually on the trip, for
+  // someone joining late or leaving early. Both optional -- empty means
+  // "the whole trip", which is what every existing companion record has,
+  // so no migration is needed. Advisory only: nothing is filtered or
+  // refused on the strength of them, they inform the people planning.
+  companions: ["companionId", "name", "notes", "avatar", "accountId", "joinsOn", "leavesOn"],
 };
 
 const ITEM_ID_FIELDS = {
@@ -737,6 +742,15 @@ function sanitizeItem(listKey, item) {
       output.type = ACCOMMODATION_TYPE_VALUES.has(type) ? type : "Other";
     }
     else if (key === "companions") output[key] = Array.isArray(value) ? value.slice(0, 100).map(function (id) { return safeId(id, false); }) : [];
+    else if (key === "joinsOn" || key === "leavesOn") {
+      // Deliberately not named *Date, because the /Date$/ branch below is
+      // for fields an item cannot do without. These two are optional by
+      // design; SAFE_DATE_PATTERN admits the empty string, which is how a
+      // companion says "I am here for all of it".
+      const partDate = safeText(value, 10);
+      if (!SAFE_DATE_PATTERN.test(partDate)) throw new Error("Invalid companion date in trip data.");
+      output[key] = partDate;
+    }
     else if (key === "departDateTime" || key === "arriveDateTime" || key === "checkIn" || key === "checkOut") {
       const dateTime = safeText(value, 16);
       if (!SAFE_DATETIME_PATTERN.test(dateTime)) throw new Error("Invalid date/time in trip data.");
@@ -762,6 +776,9 @@ function sanitizeItem(listKey, item) {
       output[key] = safeText(value, key === "notes" ? 5000 : 500);
     }
   });
+  if (listKey === "companions" && output.joinsOn && output.leavesOn && output.leavesOn < output.joinsOn) {
+    throw new Error("A companion cannot leave the trip before they join it.");
+  }
   if (listKey === "activities") {
     const startDate = output.startDate || output.date || "";
     const endDate = output.endDate || startDate;

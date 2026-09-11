@@ -405,6 +405,11 @@ textarea { resize: vertical; min-height: 60px; }
 .field-wide { grid-column: 1 / -1; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-hint { font: var(--wp-type-micro); color: var(--wp-text-muted); margin-top: 3px; }
+/* The part-trip warning under a People picker. Advisory, not an error: it
+   uses the location accent rather than the danger colour, because nothing
+   is wrong and the save is not blocked -- somebody may genuinely be joining
+   for one evening. See syncTagPickerAwayWarning(). */
+.tag-picker-away { color: var(--wp-text-primary); background: var(--wp-context-location-subtle); border-left: 2px solid var(--wp-context-location); border-radius: 0 var(--radius) var(--radius) 0; padding: 6px 10px; margin-top: 6px; }
 .form-section + .form-section { border-top: 1px solid var(--wp-border-default); margin-top: 22px; padding-top: 20px; }
 .form-section-head { margin-bottom: 14px; }
 .form-section-head h3 { font: var(--wp-type-label); }
@@ -783,6 +788,10 @@ textarea { resize: vertical; min-height: 60px; }
 .tag { font: var(--wp-type-meta); color: var(--wp-text-secondary); background: var(--wp-bg-subdued); border-radius: 6px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 4px; }
 .tag .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
 .tag-cost { color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); }
+/* "4-11 Jun" beside a companion who is only on the trip for part of it.
+   Rendered only when they have dates, so a trip where everyone is there
+   throughout looks exactly as it did. See companionStayLabel(). */
+.tag-stay { color: var(--wp-text-primary); background: var(--wp-context-location-subtle); }
 /* Companions tab: Guest vs Companion, and a Companion's access-level tag
    (Owner/Admin/User/Viewer) -- see renderCompanionsTab() and the
    COMPANIONS & AVATARS comment in src/worker.js's resolveCompanionAccessLevels()
@@ -2523,6 +2532,45 @@ function closeModal() {
 // search/display functions to use. `extraAttrs` is a raw attribute
 // string for whatever a field needs beyond the basics; `placeholderFallback`
 // is used only when the field didn't specify its own.
+// The names the FORM gives its start-date input, in the order to try them.
+// These are the journey widget's own keys (the `startDateKey` in each
+// section's journey config), not the fields the record is finally stored
+// under: accommodation's input is `checkInDate` but it saves as `checkIn`,
+// and transport's is `departDate` saving as `departDateTime`. This
+// function reads a live form, so the form's names are the right ones.
+// `date` covers any plain date field not wrapped in a journey.
+var TAG_PICKER_DATE_KEYS = ['date', 'startDate', 'arriveDate', 'checkInDate', 'departDate'];
+
+function formPrimaryDate(form) {
+  for (var i = 0; i < TAG_PICKER_DATE_KEYS.length; i++) {
+    var input = form && form.elements[TAG_PICKER_DATE_KEYS[i]];
+    var value = input && input.value;
+    if (value) return String(value).slice(0, 10);
+  }
+  return '';
+}
+
+// Warns when somebody ticked in the People picker isn't on the trip on the
+// day this item happens -- see the "Part-trip participants" comment by
+// companionStayLabel(). Deliberately a hint and not an error: they may
+// genuinely be joining for one dinner, so this informs rather than blocks,
+// and the save goes through either way.
+function syncTagPickerAwayWarning(form) {
+  var slot = form && form.querySelector('[data-tag-away]');
+  if (!slot) return;
+  var cfg = window.__formConfig;
+  var trip = cfg && cfg.trip;
+  var day = formPrimaryDate(form);
+  var ticked = Array.prototype.filter.call(form.querySelectorAll('[data-tag-person-id]'), function (box) { return box.checked; })
+    .map(function (box) { return box.dataset.tagPersonId; });
+  var away = trip ? companionsAwayFor(trip, ticked, day) : [];
+  if (!away.length) { slot.hidden = true; slot.textContent = ''; return; }
+  var names = away.map(function (person) { return person.name + ' (' + companionStayLabel(person) + ')'; });
+  slot.hidden = false;
+  slot.textContent = (names.length === 1 ? names[0] + ' is' : names.join(', ') + ' are') +
+    ' not on the trip on ' + formatDateShort(day) + '. You can still tag them.';
+}
+
 // Reads a 'tag-picker' field's selections back out of a submitted form's
 // values object. A tag-picker renders one checkbox per companion, each
 // with its own unique name ("<field.key>__<companionId>") rather than
@@ -2751,6 +2799,10 @@ function fieldHtml(field, value, trip, allValues) {
       return '<label class="tag-picker-item"><input type="checkbox" name="' + field.key + '__' + c.companionId + '" data-tag-picker-key="' + field.key + '" data-tag-person-id="' + c.companionId + '"' + (checked ? ' checked' : '') + (field.locked ? ' disabled' : '') + '> ' + companionAvatarHtml(trip, c.companionId, c.name) + esc(c.name) + (c.isSuperuser ? '<span class="tag-picker-role">Trip Owner</span>' : '') + '</label>';
     }).join('');
     return '<div class="field' + fullClass + '"><label>' + esc(field.label) + '</label><div class="tag-picker">' + pickerItems + '</div>' +
+      // Filled in by syncTagPickerAwayWarning() as the form is used --
+      // empty, and hidden, until somebody is tagged into a day they are
+      // not on the trip for. Advisory: it never blocks the save.
+      '<div class="field-hint tag-picker-away" data-tag-away hidden></div>' +
       (field.locked ? '<div class="field-hint">Who this is tagged to isn\'t something you can change.</div>' : (field.hint ? '<div class="field-hint">' + esc(field.hint) + '</div>' : '')) +
       '</div>';
   }
@@ -2983,6 +3035,11 @@ function openForm(opts) {
   // No <datalist> elements to seed here — every suggestible field
   // renders its own app-managed dropdown via suggestInputHtml(), built
   // on demand. See "Generic suggestion dropdown" further down.
+
+  // Evaluate the part-trip warning once on open, so editing a record that
+  // already tags someone into a day they're away reports it straight away
+  // rather than only after the next change.
+  syncTagPickerAwayWarning(root.querySelector('#entity-form'));
 }
 
 /* ---------- 7. Entity field schemas --------------------------------- */
@@ -3196,6 +3253,13 @@ var CONTACT_FIELDS = [
 var COMPANION_FIELDS = [
   { key: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Sarah' },
   { key: 'smileyColor', label: 'Smiley colour', type: 'avatar-color', wide: true, hint: 'Shown on their marker unless they\'re linked to an account, which gives them their own colour + animal instead.' },
+  // Both optional: blank means they are on the whole trip, which is what
+  // every companion added before this existed says. Advisory only --
+  // nothing is hidden or refused on the strength of these dates, they just
+  // let the itinerary warn you when you tag someone into a day they are
+  // not there for (see tagPickerAbsenceWarning()).
+  { key: 'joinsOn', label: 'Joins the trip', type: 'date', hint: 'Leave blank if they are there from the start.' },
+  { key: 'leavesOn', label: 'Leaves the trip', type: 'date', hint: 'Leave blank if they stay to the end.' },
   { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
 ];
 
@@ -4646,6 +4710,10 @@ function openCompanionForm(trip, existing) {
         // undefined for a "user" grant's COMPANION_FIELDS_LIMITED, so
         // this naturally comes out as '' without an extra check.
         rec.notes = v.notes || '';
+        // Same reasoning as notes above: absent from COMPANION_FIELDS_LIMITED,
+        // so these come out '' for a "user" grant without a special case.
+        rec.joinsOn = v.joinsOn || '';
+        rec.leavesOn = v.leavesOn || '';
         if (v.smileyColor) rec.avatar = { smiley: v.smileyColor };
         // Deliberately no `accountId` here, ever -- the Worker reasserts
         // any existing link from its own stored truth regardless (see
@@ -5823,6 +5891,52 @@ function renderContactsTab(trip) {
 // fieldHtml()) — this tab is where you add people, not tag them. No
 // "used on N items" count: that would mean scanning every other list on
 // each render for a number nobody's asked for.
+/* ---- Part-trip participants -------------------------------------------
+   A companion can carry joinsOn/leavesOn -- the days they are actually on
+   the trip. Both optional; blank at either end means "from the start" or
+   "to the end", which is what every record written before this field
+   existed says, so nothing needed migrating.
+
+   These are ADVISORY. Nothing is hidden and no save is refused because of
+   them. Somebody may genuinely be tagged into one dinner on a day they
+   are otherwise not around, and an itinerary that argued with its owner
+   about that would be worse than one that stayed quiet. What they do buy
+   is a warning at the moment you tag someone into a day they are not
+   there for, which is when the information is worth having. ---------- */
+
+// "4–11 Jun", "from 4 Jun", "until 11 Jun", or '' when they're there
+// throughout. Reuses formatDateShort() so this reads like every other date
+// on the page.
+function companionStayLabel(companion) {
+  var from = companion && companion.joinsOn;
+  var to = companion && companion.leavesOn;
+  if (from && to) return formatDateShort(from) + ' – ' + formatDateShort(to);
+  if (from) return 'from ' + formatDateShort(from);
+  if (to) return 'until ' + formatDateShort(to);
+  return '';
+}
+
+// Is `day` (a YYYY-MM-DD string) outside this person's window? False
+// whenever the answer isn't knowable -- no dates, or no day to test --
+// because a warning shown on a guess is worse than no warning at all.
+function companionAwayOn(companion, day) {
+  if (!companion || !day) return false;
+  if (companion.joinsOn && day < companion.joinsOn) return true;
+  if (companion.leavesOn && day > companion.leavesOn) return true;
+  return false;
+}
+
+// The names, if any, tagged on this item who aren't on the trip that day.
+// Takes the ids actually ticked rather than reading the stored record, so
+// the warning tracks the form as it is being filled in.
+function companionsAwayFor(trip, companionIds, day) {
+  if (!day) return [];
+  return (companionIds || []).map(function (id) {
+    var person = (trip && trip.companions || []).find(function (c) { return c.companionId === id; });
+    return companionAwayOn(person, day) ? person : null;
+  }).filter(Boolean);
+}
+
 function companionTags(trip, companionIds) {
   return (companionIds || [])
     .map(function (id) { return taggablePersonById(trip, id); })
@@ -5920,6 +6034,10 @@ function renderCompanionsTab(trip) {
     var accessTag = isLinked
       ? '<span class="tag' + (accessRole ? ' tag-role-' + accessRole : '') + '">' + (accessRole ? esc(COMPANION_ACCESS_LEVEL_LABELS[accessRole] || accessRole) : 'Companion') + '</span>'
       : '<span class="tag">Guest</span>';
+    // Only rendered for somebody who isn't there for all of it -- the
+    // common case stays as uncluttered as it was.
+    var stay = companionStayLabel(c);
+    var stayTag = stay ? '<span class="tag tag-stay" title="On the trip ' + esc(stay) + '">' + icon('calendar') + esc(stay) + '</span>' : '';
     // A separate, second `.item-actions` group rather than trying to
     // merge into rowActions()'s own -- both are just small icon-button
     // clusters, so two side by side reads identically to one, without
@@ -5935,7 +6053,7 @@ function renderCompanionsTab(trip) {
       context: 'person', section: 'companion', item: c,
       avatarHtml: companionAvatarHtml(trip, c.companionId, c.name),
       title: c.name,
-      badgesHtml: accessTag + linkedTag,
+      badgesHtml: accessTag + linkedTag + stayTag,
       extraActionsHtml: linkAction,
       metadata: {},
       supporting: c.notes || ''
@@ -7648,6 +7766,12 @@ document.addEventListener('change', function (e) {
       return e.target.name === candidate.dataset.timezoneKey || e.target.name === candidate.dataset.destinationKey;
     });
     if (relatedJourney) updateJourneyPresentation(form);
+  }
+
+  // Ticking somebody, or moving the item's date, can both change whether
+  // anyone tagged here is away that day.
+  if (form && (e.target.dataset.tagPersonId || TAG_PICKER_DATE_KEYS.indexOf(e.target.name) !== -1)) {
+    syncTagPickerAwayWarning(form);
   }
 
   var cfg = window.__formConfig;
