@@ -43,4 +43,28 @@ assert(html.indexOf("{ key: 'transport'") < html.indexOf("{ key: 'accommodation'
 assert(html.indexOf("{ key: 'accommodation'") < html.indexOf("{ key: 'activities'"), 'accommodation filter should come before activities');
 assert(html.indexOf("'<div class=\"map-actions\">' + mapFiltersHtml(trip)") < html.indexOf('mapRangeControlsHtml(trip) +'), 'filter controls should appear above the date slider');
 
+
+/* ---- the Map opens on today, and its popups scroll ---------------------- */
+// Added with the "open on today" change: the Map used to open on the trip's
+// first day even mid-trip, and a popup grew to fit a long note with no scroll
+// region at all, which on a phone left nothing to reach the rest of the text.
+const mapSource = require('fs').readFileSync('public/WayPoint/index.html', 'utf8');
+const mapStyle = (mapSource.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+
+assert(mapSource.includes('mapState.rangeStart = tripFocusDay(days)'), 'The Map does not open on today');
+assert(/var fullRange = !days\.length \|\| \(mapState\.rangeStart === tripFocusDay\(days\)/.test(mapSource),
+  'Reset does not return the Map to the day it opens on');
+assert(mapSource.includes('function mapPopupOptions()'), 'Map popups have no bounded height');
+assert((mapSource.match(/mapPopupOptions\(\)/g) || []).length >= 4, 'Not every bindPopup call bounds its height');
+assert(/\.leaflet-popup-content\.leaflet-popup-scrolled\s*\{[^}]*overscroll-behavior:\s*contain/.test(mapStyle),
+  'Scrolling a popup can still pan the map underneath it');
+assert(/\.leaflet-popup-content\.leaflet-popup-scrolled::-webkit-scrollbar-thumb/.test(mapStyle),
+  'A scrolled popup shows no scrollbar on a pointer device');
+// Touch platforms draw overlay scrollbars that are invisible at rest, so the
+// scrollbar alone is not the affordance -- a persistent cue has to survive it.
+assert(/\.leaflet-popup-content\.leaflet-popup-scrolled::after\s*\{[^}]*position:\s*sticky/.test(mapStyle),
+  'A scrolled popup has no persistent cue that its text continues');
+assert(/\.leaflet-popup-content\.leaflet-popup-scrolled::after\s*\{[^}]*linear-gradient/.test(mapStyle),
+  'The scroll cue is not a fade');
+
 console.log('map range and route-arc regression checks passed');
