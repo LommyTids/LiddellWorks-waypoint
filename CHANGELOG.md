@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased — Free coordinate and Plus Code entry
+
+- Add a shared Coordinates or code panel to every location picker, with a
+  draft preview and explicit confirmation before changing form coordinates.
+- Parse decimal/DMS coordinates, full Plus Codes, explicitly referenced short
+  codes and supported coordinate links locally. Show an encoded full Plus
+  Code alongside the preview without an API key or conversion quota.
+- Preserve venue names/addresses, clear superseded provider references and
+  destination boundaries, and reject outdated previews before applying them.
+- Keep existing place search and manual pins; explain unsupported shortened
+  Google Maps links and what3words inputs without introducing paid services.
+- Vendor the Apache 2.0 Open Location Code library with its license, and add
+  parser and location-entry behavior tests to the main test command.
+
 ## Unreleased — Split frontend features and consolidate shared UI
 
 - Replace the 462 KB inline application with a small HTML shell, 21 ordered

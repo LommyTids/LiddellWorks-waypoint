@@ -48,7 +48,7 @@ function locationEnvironment(extra = {}) {
     }, ...extra
   };
   const names = ['pickerInput', 'pickerSet', 'abortLocationSearch', 'selectLocationResult', 'loadLocationBoundary', 'openLocationPickerMap'];
-  for (const name of ['clearPickerMap', 'invalidatePickerBoundary', 'disposeLocationPickers']) if (html.includes('function ' + name + '(')) names.push(name);
+  for (const name of ['clearPickerMap', 'invalidatePickerBoundary', 'disposeLocationPickers', 'clearLocationInputPreview']) if (html.includes('function ' + name + '(')) names.push(name);
   return { ...functions(names, context), maps, markers, context };
 }
 test('all referenced local and inline scripts parse', () => {

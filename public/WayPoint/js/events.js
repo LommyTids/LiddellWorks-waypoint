@@ -218,6 +218,15 @@ document.addEventListener('click', function (e) {
   if (action === 'delete-trip') { deleteTrip(el.dataset.id); return; }
   if (action === 'export-csv') { exportCsv(trip); return; }
 
+  if (['toggle-location-input', 'preview-location-input', 'apply-location-input'].indexOf(action) !== -1) {
+    var inputPicker = el.closest('[data-location-picker]');
+    if (inputPicker) {
+      if (action === 'toggle-location-input') toggleLocationInput(inputPicker);
+      else if (action === 'preview-location-input') previewLocationInput(inputPicker);
+      else applyLocationInput(inputPicker);
+    }
+    return;
+  }
   if (action === 'search-location') {
     var searchPicker = el.closest('[data-location-picker]');
     if (searchPicker) searchLocationPicker(searchPicker);
@@ -233,6 +242,7 @@ document.addEventListener('click', function (e) {
   if (action === 'use-typed-location') {
     var typedPicker = el.closest('[data-location-picker]');
     if (typedPicker) {
+      clearLocationInputPreview(typedPicker);
       abortLocationSearch(typedPicker);
       invalidatePickerBoundary(typedPicker, true);
       clearPickerMap(typedPicker);
@@ -628,4 +638,3 @@ window.addEventListener('online', function () {
   // mistaken for confirmed data.
   retryConnection({ silent: false });
 });
-

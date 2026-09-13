@@ -65,6 +65,7 @@ function invalidatePickerBoundary(wrapper, clearStored) {
 function disposeLocationPickers(scope) {
   if (!scope) return;
   Array.prototype.forEach.call(scope.querySelectorAll('[data-location-picker]'), function (wrapper) {
+    clearLocationInputPreview(wrapper);
     abortLocationSearch(wrapper);
     invalidatePickerBoundary(wrapper, false);
     clearPickerMap(wrapper);
@@ -156,6 +157,7 @@ async function searchLocationPicker(wrapper) {
 }
 
 function selectLocationResult(wrapper, result) {
+  clearLocationInputPreview(wrapper);
   abortLocationSearch(wrapper);
   invalidatePickerBoundary(wrapper, true);
   clearPickerMap(wrapper);
@@ -207,6 +209,7 @@ async function loadLocationBoundary(wrapper, ref) {
 }
 
 function openLocationPickerMap(wrapper, allowPlacement) {
+  clearLocationInputPreview(wrapper);
   var holder = wrapper.querySelector('[data-location-pin-map]');
   if (!holder) return;
   if (holder._waypointMap && holder._allowPlacement === allowPlacement) { holder._waypointMap.invalidateSize(); return; }
@@ -231,6 +234,7 @@ function openLocationPickerMap(wrapper, allowPlacement) {
       if (allowPlacement) marker.on('dragend', function () { setMarker(marker.getLatLng(), true); });
     }
     if (allowPlacement && manual && editingAvailable()) {
+      clearLocationInputPreview(wrapper);
       abortLocationSearch(wrapper);
       invalidatePickerBoundary(wrapper, true);
       pickerSet(wrapper, prefix + 'Lat', point.lat); pickerSet(wrapper, prefix + 'Lng', point.lng);
@@ -261,6 +265,7 @@ document.addEventListener('input', function (e) {
   if (!e.target.matches('[data-location-query]')) return;
   var wrapper = e.target.closest('[data-location-picker]');
   if (!wrapper) return;
+  clearLocationInputPreview(wrapper);
   abortLocationSearch(wrapper);
   invalidatePickerBoundary(wrapper, false);
   var oldResults = wrapper.querySelector('[data-location-results]');
@@ -385,4 +390,3 @@ function openCompanionForm(trip, existing) {
     }
   });
 }
-
