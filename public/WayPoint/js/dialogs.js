@@ -180,7 +180,7 @@ function showFormError(form, message, control) {
 function isMutationAction(action) {
   if (!action) return false;
   return /^(new-|edit-|delete-|timeline-add-|link-companion$)/.test(action) ||
-    ['confirm-yes', 'open-avatar-picker', 'set-location-pin', 'use-typed-location', 'review-map-location'].indexOf(action) !== -1;
+    ['confirm-yes', 'open-avatar-picker', 'set-location-pin', 'use-typed-location', 'apply-location-input', 'review-map-location'].indexOf(action) !== -1;
 }
 
 function clearFieldError(event) {
@@ -313,4 +313,3 @@ function closeModal() {
     if (target) { if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1'); target.focus(); }
   });
 }
-

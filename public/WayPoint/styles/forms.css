@@ -112,7 +112,18 @@ textarea { resize: vertical; min-height: 60px; }
 .location-selected-status { color: var(--wp-state-success); font-weight: 650; }
 .location-selected.is-stale .location-selected-status { color: var(--wp-state-danger); }
 .location-picker-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 7px; }
-.location-picker-actions .btn { padding: 5px 8px; font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+.location-picker-actions .btn { min-height: 44px; padding: 5px 8px; font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+.location-input-panel { margin-top: 8px; padding: 12px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-subdued); }
+.location-input-panel input[data-location-input] { min-width: 0; }
+.location-input-panel .field-hint { margin-top: 6px; overflow-wrap: anywhere; }
+.location-input-panel .btn { min-height: 44px; justify-content: center; white-space: normal; }
+.location-input-preview { margin-top: 10px; }
+.location-reference-row { margin-top: 8px; }
+.location-reference-row .checkbox-field { min-height: 44px; margin-bottom: 0; font-weight: 400; }
+.location-reference-row input { flex-shrink: 0; }
+.location-input-candidate { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--wp-border-default); }
+.location-input-candidate-label { font: var(--wp-type-label); overflow-wrap: anywhere; }
+.location-input-candidate > .btn { margin-top: 10px; }
 .location-pin-map { display: none; height: 220px; margin-top: 9px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); overflow: hidden; }
 .location-pin-map.is-open { display: block; }
 /* Leaflet uses large internal z-indices. Contain them below dialogs, sticky
@@ -141,4 +152,3 @@ textarea { resize: vertical; min-height: 60px; }
 .suggest-item { padding: 8px 10px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); cursor: pointer; }
 .suggest-item.is-active, .suggest-item:hover { background: var(--wp-bg-subdued); }
 .suggest-empty { padding: 8px 10px; font: var(--wp-type-label); color: var(--wp-text-muted); }
-

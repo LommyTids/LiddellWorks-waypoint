@@ -135,6 +135,17 @@ function locationPickerHtml(field, val, req, trip, allValues) {
   }
   if (field.addressKey) hidden.push([field.addressKey, values[field.addressKey] || '']);
   var hiddenHtml = hidden.map(function (pair) { return '<input type="hidden" name="' + esc(pair[0]) + '" value="' + esc(pair[1]) + '">'; }).join('');
+  var inputId = 'location-input-' + prefix;
+  var locationInputHtml = '<div class="location-input-panel" data-location-input-panel id="' + esc(inputId + '-panel') + '" hidden>' +
+    '<label for="' + esc(inputId) + '">Coordinates, Plus Code or map link</label>' +
+    '<input type="text" id="' + esc(inputId) + '" data-location-input maxlength="2048" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="' + esc(inputId + '-help') + ' ' + esc(inputId + '-hint') + '" placeholder="51.5074, -0.1278 or 9C3XGV4C+XV">' +
+    '<p class="field-hint" id="' + esc(inputId + '-help') + '">Latitude first, longitude second. Use decimal coordinates, degrees/minutes/seconds, a full Plus Code, or a Google Maps link containing coordinates.</p>' +
+    '<div class="location-reference-row" data-location-reference-row hidden><label class="checkbox-field"><input type="checkbox" data-location-reference><span data-location-reference-label>Use the selected destination as the nearby reference for a short Plus Code</span></label></div>' +
+    '<button type="button" class="btn location-input-preview" data-action="preview-location-input">Preview location</button>' +
+    '<div class="field-hint" id="' + esc(inputId + '-hint') + '" data-location-input-hint role="status" aria-live="polite" aria-atomic="true"></div>' +
+    '<div class="location-input-candidate" data-location-candidate hidden><p class="location-input-candidate-label" data-location-candidate-label></p>' +
+    '<div class="location-pin-map" data-location-candidate-map aria-label="Location preview"></div>' +
+    '<button type="button" class="btn btn-primary" data-action="apply-location-input">Use this location</button></div></div>';
   return '<div class="location-picker" data-location-picker data-location-prefix="' + esc(prefix) + '" data-location-context="' + esc(field.locationContext) + '" data-location-kind="' + esc(field.locationKind || 'point') + '"' +
     (field.addressKey ? ' data-location-address-key="' + esc(field.addressKey) + '"' : '') +
     (field.locationValue ? ' data-location-value="' + esc(field.locationValue) + '"' : '') +
@@ -144,8 +155,9 @@ function locationPickerHtml(field, val, req, trip, allValues) {
     '<button type="button" class="btn" data-action="search-location">Find location</button></div>' +
     hiddenHtml + '<div class="location-results" data-location-results hidden role="region" aria-label="Location search results" aria-live="polite" aria-atomic="true"></div>' + summary +
     '<div class="location-picker-actions"><button type="button" class="btn btn-ghost" data-action="use-typed-location">Use typed location</button>' +
+    '<button type="button" class="btn btn-ghost" data-action="toggle-location-input" aria-expanded="false" aria-controls="' + esc(inputId + '-panel') + '">Coordinates or code</button>' +
     '<button type="button" class="btn btn-ghost" data-action="set-location-pin">Set pin manually</button>' +
-    (mapped ? '<button type="button" class="btn btn-ghost" data-action="preview-location">View on map</button>' : '') + '</div>' +
+    (mapped ? '<button type="button" class="btn btn-ghost" data-action="preview-location">View on map</button>' : '') + '</div>' + locationInputHtml +
     '<div class="location-pin-map" data-location-pin-map></div><div class="field-hint" data-location-hint role="status" aria-live="polite" aria-atomic="true"></div></div>';
 }
 
@@ -521,4 +533,3 @@ function openForm(opts) {
   // rather than only after the next change.
   syncTagPickerAwayWarning(root.querySelector('#entity-form'));
 }
-
