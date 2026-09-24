@@ -1,3 +1,4 @@
+import { setupResponse } from './setup-page.js';
 import legacyWorker from '../worker.js';
 import { APIError, fail, readJSON, mutation } from './protocol.js';
 import { SyncStore } from './store.js';
@@ -19,6 +20,8 @@ export default {
         if (origin && origin!==url.origin) fail(403,'origin_rejected','Cross-origin writes are not allowed.');
         if (request.headers.get('Sec-Fetch-Site')==='cross-site') fail(403,'origin_rejected','Cross-site writes are not allowed.');
       }
+      if (request.method==='GET' && ['/', '/WayPoint', '/WayPoint/', '/WayPoint/setup'].includes(url.pathname)) return setupResponse();
+      if (request.method==='GET' && url.pathname==='/WayPoint/staging.js') return setupResponse(true);
       if (AUTH_PATHS.has(url.pathname)) {
         // Reuse proven auth using a SEPARATE staging KV and signing secret.
         // Size-bound before delegating; production code/route stays untouched.

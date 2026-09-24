@@ -18,4 +18,6 @@ jobs:
       - run: npm ci
       - run: npm run test:backend
       - run: npm run test:backend:runtime
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:backend:browser
       - run: npm test

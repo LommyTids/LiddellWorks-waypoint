@@ -13,7 +13,8 @@
     "test:security": "node test-security.mjs",
     "test:backend": "node --test tests/backend-v1/backend.test.mjs",
     "test:backend:runtime": "node --test tests/backend-v1/runtime.test.mjs",
-    "backend:staging-config": "node scripts/backend-v1/staging-config.mjs"
+    "backend:staging-config": "node scripts/backend-v1/staging-config.mjs",
+    "test:backend:browser": "node --test tests/backend-v1/setup-browser.test.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.1",
