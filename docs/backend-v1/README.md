@@ -84,9 +84,8 @@ until cutover validation and rollback planning are complete.
 4. In that new Worker's settings add `WAYPOINT_SESSION_SECRET` and
    `WAYPOINT_PASSWORD` as secrets. Requests fail closed until configured. These
    secrets stay in Cloudflare across later deploys.
-5. Use an API client or a browser-based GitHub Codespace to create a synthetic
-   staging account and exercise the API. There is no staging web UI in this
-   change. No Xcode or macOS is required for backend deployment or testing.
+5. Open the staging Worker URL in Safari to create a synthetic
+   staging account and exercise the API. The staging root URL now provides the setup and test page described below. No Xcode or macOS is required for backend deployment or testing.
 
 If Cloudflare's existing GitHub build integration is configured to build feature
 branches, verify it does not deploy this branch onto the production Worker.
@@ -233,3 +232,23 @@ in KV. Account credentials are not inserted into the new D1 tables.
 
 Keep production gated until these pass. GitHub sync here means source control
 and deployment; personal trip data synchronizes through Cloudflare, not GitHub.
+
+## iPad staging setup and test page
+
+After deploying this change, open the staging Worker's root URL in Safari. It
+shows account setup when no accounts exist, otherwise sign-in. Enter the private
+`WAYPOINT_PASSWORD` value as the setup key and choose a separate username/login
+password. Never enter the signing secret. Credentials are posted to the same
+Worker and cleared from the form after submission; the page uses no browser
+storage for them and loads no third-party scripts.
+
+Once signed in, tap **Run dummy-trip tests**. This explicitly creates a uniquely
+named dummy trip and activity, reads the snapshot, edits/retries the activity,
+checks stale-revision rejection and incremental sync, and deletes the dummy
+trip. Sync history retains tombstones and receipts. Failed cleanup reports the
+specific test-trip ID for follow-up. Existing trips are not edited. Send the
+visible pass/fail results back; secrets are never displayed in test results.
+
+The page exists only in the staging Worker. Deployment and production migration
+remain separate actions. This test checks server round-trips and replay behavior,
+not real-device offline reconnection or production migration correctness.
