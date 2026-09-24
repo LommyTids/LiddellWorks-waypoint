@@ -3,6 +3,10 @@
 # No trailing slash: that would only match a real directory, and a symlinked
 # node_modules (a shared or cached install) would still show up as untracked.
 node_modules
+wrangler.backend-staging.generated.json
+private-migration/
+*.kv-export.private.json
+*.d1-plan.private.json
 
 # Playwright's own output from the browser gate (npm run test:ui-browser).
 test-results/

@@ -2566,6 +2566,10 @@ async function handleUsersDelete(request, env) {
   return new Response(JSON.stringify({ status: "ok" }), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
+// The isolated D1 staging service reuses the established validation rules.
+// Named exports add no routes and do not change the production storage path.
+export { sanitizeItem, sanitizeTripContent, ITEM_FIELDS, ITEM_ID_FIELDS };
+
 function jsonError(status, message) {
   return new Response(JSON.stringify({ error: message }), {
     status,

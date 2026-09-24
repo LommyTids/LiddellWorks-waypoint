@@ -10,9 +10,14 @@
     "test:ui-browser": "node test-ui-part2-browser.js",
     "test:assets": "node test-asset-loading.js",
     "test:merge-gate": "npm test && npm run test:assets && npm run test:ui-browser",
-    "test:security": "node test-security.mjs"
+    "test:security": "node test-security.mjs",
+    "test:backend": "node --test tests/backend-v1/backend.test.mjs",
+    "test:backend:runtime": "node --test tests/backend-v1/runtime.test.mjs",
+    "backend:staging-config": "node scripts/backend-v1/staging-config.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.28.1",
+    "miniflare": "5.20260910.0-alpha",
     "playwright": "^1.62.1",
     "wrangler": "^4.0.0"
   }
