@@ -11,7 +11,7 @@
     "test:assets": "node test-asset-loading.js",
     "test:merge-gate": "npm test && npm run test:assets && npm run test:ui-browser",
     "test:security": "node test-security.mjs",
-    "test:backend": "node --test tests/backend-v1/backend.test.mjs",
+    "test:backend": "node --test tests/backend-v1/backend.test.mjs tests/backend-v1/web.test.mjs",
     "test:backend:runtime": "node --test tests/backend-v1/runtime.test.mjs",
     "backend:staging-config": "node scripts/backend-v1/staging-config.mjs",
     "test:backend:browser": "node --test tests/backend-v1/setup-browser.test.mjs"

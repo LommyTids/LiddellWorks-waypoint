@@ -2568,7 +2568,7 @@ async function handleUsersDelete(request, env) {
 
 // The isolated D1 staging service reuses the established validation rules.
 // Named exports add no routes and do not change the production storage path.
-export { sanitizeItem, sanitizeTripContent, ITEM_FIELDS, ITEM_ID_FIELDS };
+export { sanitizeItem, sanitizeTripContent, ITEM_FIELDS, ITEM_ID_FIELDS, buildVisibleTrip };
 
 function jsonError(status, message) {
   return new Response(JSON.stringify({ error: message }), {

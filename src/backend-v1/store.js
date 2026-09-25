@@ -137,7 +137,7 @@ export class SyncStore {
     const references=[];
     if (data && change.kind!=='trip') {
       for (const [field,kind] of [['contactId','contact'],['destinationId','destination']]) {
-        if (change.kind!==kind && data[field]) references.push([kind,id(data[field])]);
+        if (change.kind!==kind && data[field] && (!current || JSON.parse(current.payload_json)[field]!==data[field])) references.push([kind,id(data[field])]);
       }
       for (const companion of data.companions||[]) if (companion!=='__trip_superuser__') references.push(['companion',id(companion)]);
       for (const [kind,recordId] of references) {

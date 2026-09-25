@@ -1,10 +1,13 @@
+import { presentation, setAccess } from './web.js';
+import { ITEM_FIELDS } from '../worker.js';
+import { KINDS, META_FIELDS } from './protocol.js';
 import { setupResponse } from './setup-page.js';
 import legacyWorker from '../worker.js';
 import { APIError, fail, readJSON, mutation } from './protocol.js';
 import { SyncStore } from './store.js';
 
 const PREFIX='/WayPoint/api/v1';
-const AUTH_PATHS=new Set(['/WayPoint/api/login','/WayPoint/api/logout','/WayPoint/api/whoami','/WayPoint/api/setup','/WayPoint/api/users','/WayPoint/api/users/delete']);
+const AUTH_PATHS=new Set(['/WayPoint/api/login','/WayPoint/api/logout','/WayPoint/api/whoami','/WayPoint/api/setup','/WayPoint/api/users','/WayPoint/api/users/delete','/WayPoint/api/account/avatar','/WayPoint/api/site-status','/WayPoint/api/flight-lookup','/WayPoint/api/location-search','/WayPoint/api/location-boundary','/WayPoint/api/location-boundaries']);
 function json(value,status=200) {
   return new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'}});
 }
@@ -20,12 +23,21 @@ export default {
         if (origin && origin!==url.origin) fail(403,'origin_rejected','Cross-origin writes are not allowed.');
         if (request.headers.get('Sec-Fetch-Site')==='cross-site') fail(403,'origin_rejected','Cross-site writes are not allowed.');
       }
+      if(request.method==='GET' && url.pathname==='/WayPoint/d1-schema.js') return new Response('window.WAYPOINT_D1_SCHEMA='+JSON.stringify({kinds:KINDS,fields:ITEM_FIELDS,metadata:META_FIELDS})+';', {headers:{'Content-Type':'text/javascript','Cache-Control':'no-store'}});
+      if(request.method==='GET' && url.pathname==='/WayPoint/app'){
+        if(!env.ASSETS)fail(503,'assets_missing','Redeploy staging with the web assets binding.');
+        const asset=await env.ASSETS.fetch(new Request(url.origin+'/WayPoint/index.html'));
+        if(!asset.ok)fail(503,'assets_missing','The web app assets could not be loaded.');
+        const html=(await asset.text()).replace('<title>Waypoint</title>','<title>Waypoint · D1 staging</title>').replace('<body>', '<body><div style="padding:10px;text-align:center;background:#e6f0ea;color:#17332f">Staging · Test trips only · <a href="/WayPoint/setup">Setup and tests</a></div>').replace('<script src="/WayPoint/js/boot.js"></script>','<script src="/WayPoint/d1-schema.js"></script><script src="/WayPoint/staging/d1-client.js"></script><script src="/WayPoint/js/boot.js"></script>');
+        return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY'}});
+      }
+      if(request.method==='GET' && /^\/WayPoint\/(js|styles|data|vendor|ui|staging)\//.test(url.pathname) && env.ASSETS) return env.ASSETS.fetch(request);
       if (request.method==='GET' && ['/', '/WayPoint', '/WayPoint/', '/WayPoint/setup'].includes(url.pathname)) return setupResponse();
       if (request.method==='GET' && url.pathname==='/WayPoint/staging.js') return setupResponse(true);
       if (AUTH_PATHS.has(url.pathname)) {
         // Reuse proven auth using a SEPARATE staging KV and signing secret.
         // Size-bound before delegating; production code/route stays untouched.
-        if (request.method==='POST') {
+        if (request.method==='POST' && url.pathname!=='/WayPoint/api/logout') {
           const body=await readJSON(request,16384);
           request=new Request(request.url,{method:'POST',headers:request.headers,body:JSON.stringify(body)});
         }
@@ -40,6 +52,8 @@ export default {
       if (!user.loggedIn) fail(401,'unauthorized','Sign in to continue.');
       const store=new SyncStore(env.WAYPOINT_DB,user,env.WAYPOINT_SESSION_SECRET);
       const path=url.pathname.slice(PREFIX.length);
+      if(path==='/web/presentation' && request.method==='GET') return json(await presentation(store,JSON.parse(await env.WAYPOINT_KV.get('users')||'{"users":[]}'),url.searchParams.get('cursor')));
+      if(path==='/web/access' && request.method==='POST') return json(await setAccess(store,await readJSON(request,16384),JSON.parse(await env.WAYPOINT_KV.get('users')||'{"users":[]}')));
       if (path==='/sync/capabilities' && request.method==='GET') return json({protocolVersion:1,environment:'staging',recordRevisions:true,maxMutationBatch:20,maxPageSize:100,productionReady:false,legacyTripRevisionsAccepted:false});
       if (path==='/trips' && request.method==='GET') return json(await store.trips(url));
       if (path==='/trips' && request.method==='POST') {

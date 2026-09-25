@@ -13,6 +13,7 @@ const production=await readFile(new URL('../../wrangler.toml',import.meta.url),'
 if (production.toLowerCase().includes(kv.toLowerCase()) || production.toLowerCase().includes(db.toLowerCase())) throw new Error('Staging must not use a production resource ID.');
 await writeFile(new URL('../../wrangler.backend-staging.generated.json',import.meta.url),JSON.stringify({
   name:'waypoint-backend-staging',account_id:account,main:'src/backend-v1/worker.js',compatibility_date:'2026-08-27',workers_dev:true,
+  assets:{directory:'./public',binding:'ASSETS',run_worker_first:true,html_handling:'none'},
   vars:{WAYPOINT_ENV:'staging'},kv_namespaces:[{binding:'WAYPOINT_KV',id:kv}],
   d1_databases:[{binding:'WAYPOINT_DB',database_name:'waypoint-backend-staging',database_id:db,migrations_dir:'migrations/backend-v1'}],
 },null,2)+'\n');
