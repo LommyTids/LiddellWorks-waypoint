@@ -252,3 +252,46 @@ visible pass/fail results back; secrets are never displayed in test results.
 The page exists only in the staging Worker. Deployment and production migration
 remain separate actions. This test checks server round-trips and replay behavior,
 not real-device offline reconnection or production migration correctness.
+
+## Web app connected to D1 (staging)
+
+Deploy the staging workflow, then open `/WayPoint/app` on the staging Worker.
+The setup page now links there. Use the same staging login created during setup.
+The main production domain continues to use KV. No real trips are imported by
+this change; add test trips to staging.
+
+The staging Worker serves the existing web assets and injects a staging-only
+persistence adapter before app startup. It loads a complete authorized v1
+snapshot plus presentation metadata at the same database sequence. On save it
+diffs against its last successful snapshot and sends only changed fields and
+record IDs with their base revisions. It never posts `/api/data` and never
+writes a KV trip snapshot. Successful saves reload canonical server values.
+
+Writes are serialized and controls lock during a save. Reference records are
+created first. Each record change is atomic, but a UI operation touching several
+records is not one transaction: on any failure the page explicitly reports that
+some earlier records may have saved, clears stale state and requires a refresh.
+Transport retries reuse the exact mutation ID and payload. Idle pages refresh
+other-device changes every 30 seconds and on focus, except while a form or save
+is active. Offline editing remains locked, matching the existing browser policy;
+this does not implement a persistent offline outbox.
+
+Participant account links and sharing are handled together in a guarded D1
+transaction. Staging owners can link existing staging usernames and assign
+admin/user/viewer access. Admins can edit trips but sharing remains owner-only.
+Users can edit existing tagged itinerary records; viewers cannot write. The
+browser cannot add companions with a scoped user role. A participant referenced
+by tags/grants must be untagged/unshared before deletion. Raw grants and account
+IDs are withheld from scoped users. Accounts/passwords and provider caches
+remain in isolated staging KV.
+
+Avatar, location-search/boundary, flight-lookup and integration-status routes
+reuse the existing authenticated helpers against staging configuration. Optional
+`LOCATIONIQ_API_KEY` and `AERODATABOX_API_KEY` must be configured separately on
+the staging Worker for provider lookups; manual locations and coordinates work
+without those keys. This change does not copy production secrets.
+
+Validation includes two independent web clients, concurrent edits, lost-response
+retry, explicit partial failure, scoped visibility, sharing rollback, and a real
+browser creating/reloading a trip and activity without any KV trip-data request.
+Production cutover and the private import executor are still separate work.
