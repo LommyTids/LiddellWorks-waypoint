@@ -14,7 +14,9 @@
     "test:backend": "node --test tests/backend-v1/backend.test.mjs tests/backend-v1/web.test.mjs",
     "test:backend:runtime": "node --test tests/backend-v1/runtime.test.mjs",
     "backend:staging-config": "node scripts/backend-v1/staging-config.mjs",
-    "test:backend:browser": "node --test tests/backend-v1/setup-browser.test.mjs"
+    "test:backend:browser": "node --test tests/backend-v1/setup-browser.test.mjs",
+    "test:rehearsal": "node --test tests/backend-v1/rehearsal.test.mjs",
+    "backend:rehearse": "node scripts/backend-v1/rehearse.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.1",
