@@ -29,6 +29,7 @@ export function buildImport(snapshot) {
     const metadata=Object.fromEntries(META_FIELDS.filter(k=>Object.hasOwn(content,k)).map(k=>[k,content[k]]));
     const extras=Object.fromEntries(Object.entries(content).filter(([k])=>!META_FIELDS.includes(k)&&!Object.values(KINDS).includes(k)));
     // Preserve index extensions as well; no private grant fields enter API metadata.
+    if (Object.hasOwn(extras,'_legacyIndex')) throw new Error('Reserved source field needs explicit mapping before migration.');
     extras._legacyIndex=entry;
     statements.push({sql:'INSERT INTO trips(id,owner_id,metadata_json,legacy_extras_json,revision,updated_at) VALUES(?,?,?,?,1,?)',params:[tripId,ownerId,canonical(metadata),canonical(extras),timestamp]});
     counts.trips++;
@@ -78,7 +79,7 @@ export function buildImport(snapshot) {
   if (extraTripKeys.length) throw new Error('Unindexed trip keys exist. Review them before migration; do not silently discard them.');
   statements.push({sql:'INSERT INTO import_manifest(id,source_hash,imported_at) VALUES(1,?,?)',params:[sourceHash,timestamp]});
   return {format:'waypoint-d1-import-plan-v1',sourceHash,counts,statements,
-    requirements:['Empty destination database with 0001 schema applied','All source writers paused for final export','Execute import transactionally; this planner does not apply it','Verify reconstructed payloads before cutover'],
+    requirements:['Empty destination database with 0001 schema applied','All source writers paused for final export','Use guarded resumable batches in an isolated destination; this planner does not apply it','Verify reconstructed payloads before cutover'],
     retainedInKV:['Account password hashes and session versions','Location/provider caches and boundary objects'],
     warning:'Private trip data is present in statement parameters. Never commit this plan or upload it as a public workflow artifact.'};
 }

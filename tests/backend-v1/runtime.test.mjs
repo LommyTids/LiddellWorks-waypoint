@@ -1,3 +1,5 @@
+import { initializeRehearsal,importPlan,verifyData,verifyPermissions,completeRehearsal } from '../../scripts/backend-v1/import-rehearsal.mjs';
+import { buildImport } from '../../scripts/backend-v1/plan-import.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -7,7 +9,7 @@ import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 test('Cloudflare runtime: cookie auth, D1 migrations, retries and competing writes',async t=>{
   const bundle=await build({entryPoints:['src/backend-v1/worker.js'],bundle:true,format:'esm',platform:'browser',write:false});
   const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-08-27',
-    d1Databases:['WAYPOINT_DB'],kvNamespaces:['WAYPOINT_KV'],bindings:{WAYPOINT_ENV:'staging',WAYPOINT_SESSION_SECRET:'runtime-test-secret',WAYPOINT_PASSWORD:'runtime-setup-key'}}));
+    d1Databases:['WAYPOINT_DB','REHEARSAL_DB'],kvNamespaces:['WAYPOINT_KV'],bindings:{WAYPOINT_ENV:'staging',WAYPOINT_SESSION_SECRET:'runtime-test-secret',WAYPOINT_PASSWORD:'runtime-setup-key'}}));
   t.after(()=>mf.dispose());
   const db=await mf.getD1Database('WAYPOINT_DB');
   // The checked-in migration uses ordinary statements and BEGIN/END triggers.
@@ -43,4 +45,11 @@ test('Cloudflare runtime: cookie auth, D1 migrations, retries and competing writ
   // A failed CHECK must roll back earlier statements in the SAME D1 batch.
   await assert.rejects(db.batch([db.prepare("UPDATE trips SET revision=99 WHERE id='runtime-trip'"),db.prepare("INSERT INTO write_guards VALUES('failure',0)")]));
   assert.equal((await db.prepare("SELECT revision FROM trips WHERE id='runtime-trip'").first()).revision,1);
+  const rehearsalDB=await mf.getD1Database('REHEARSAL_DB');
+  const source={format:'waypoint-kv-export-v1',entries:{users:JSON.stringify({users:[{id:'owner',username:'Owner'},{id:'viewer',username:'Viewer'}]}),trip_index:JSON.stringify({trips:[{tripId:'t1',ownerId:'owner',grants:[{accountId:'viewer',role:'viewer',companionId:'p1'}]}]}),'trip:t1':JSON.stringify({name:'Imported',companions:[{companionId:'p1',name:'Viewer',accountId:'viewer'}],activities:[{activityId:'a1',title:'Preserved',bookingRef:'private-ref',companions:['p1']}],expenses:[{expenseId:'e1',description:'Private',amount:'10'}]})}};
+  const plan=buildImport(source);await initializeRehearsal(rehearsalDB);await importPlan(rehearsalDB,plan);
+  assert.equal((await verifyData(rehearsalDB,source)).records,3);
+  assert.equal((await verifyPermissions(rehearsalDB,source)).accountsChecked,2);
+  await completeRehearsal(rehearsalDB,plan);await importPlan(rehearsalDB,plan);await verifyData(rehearsalDB,source);
+
 });

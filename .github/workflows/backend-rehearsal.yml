@@ -1,0 +1,30 @@
+name: Rehearse KV to D1 migration
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: waypoint-migration-rehearsal
+  cancel-in-progress: false
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: waypoint-staging
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_KV_READ_TOKEN: ${{ secrets.CLOUDFLARE_KV_READ_TOKEN }}
+      WAYPOINT_STAGING_D1_ID: ${{ vars.WAYPOINT_STAGING_D1_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Test import and reconciliation using synthetic data
+        run: npm run test:rehearsal
+      - name: Export privately, import into a new isolated D1 and compare
+        run: npm run backend:rehearse
+      # No artifact upload, shell tracing, deployment, source writes or data dump.

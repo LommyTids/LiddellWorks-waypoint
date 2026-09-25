@@ -205,27 +205,25 @@ values remain in the backup. Imported record revisions start at 1, distinct from
 legacy trip revisions; timestamps use an explicit epoch placeholder because
 the source has no trustworthy record modification time.
 
-The output is a deterministic parameterized SQL plan and source hash, not an
-executed migration. Applying the same plan twice fails rather than duplicating
-data. No remote data import executor is supplied in this first change. The final
-executor must enforce an empty destination, handle D1 size/statement limits,
-support restart/checkpoints where needed, and compare reconstructed data and
-permissions against the source before enabling writes. Unmapped KV caches stay
-in KV. Account credentials are not inserted into the new D1 tables.
+The planner outputs a deterministic parameterized SQL plan and source hash.
+The rehearsal executor described below now applies that plan to a fresh isolated
+D1 database, using bounded batches and resumable checkpoints, then independently
+compares the stored data and checks authorized visibility. Unmapped provider
+caches and account credentials stay in KV. It is not a production cutover tool.
 
 ## Remaining production gates
 
-1. Build and test the legacy browser read/write compatibility adapter or upgrade
-   the web client to v1. A compatibility write must check revisions and apply
-   per-record changes atomically; a second writable KV copy is not a sync plan.
+1. Validate the now-connected staging browser against representative real data
+   in a controlled rehearsal. Multi-record UI edits remain individually atomic,
+   and failures can leave an explicitly reported partial save.
 2. Decide and implement production account/session consistency; isolate staging
    accounts, secrets and permission mappings throughout rehearsal.
-3. Implement the private import executor, full-data reconciliation and rehearsed
-   cutover/rollback procedure. After D1 accepts new writes, reverting to stale KV
-   would lose those edits: pause writers and reconcile or restore D1 first.
-4. Add provider/location endpoints required by the browser and iOS; the staging
-   API currently serves account and trip sync routes only. R2 photo upload and
-   image processing remain a later feature, with no bucket required now.
+3. Complete a successful remote rehearsal and prepare the final private retained
+   backup, write freeze, production routing and rollback procedure. After D1
+   accepts new writes, reverting to stale KV would lose edits: pause writers and
+   reconcile or restore D1 first.
+4. Confirm provider configuration in production. The staging web Worker already
+   exposes the existing location/flight helpers; R2 photos remain a later feature.
 5. Upgrade iOS caches/outbox to record revisions, IDs, conflict outcomes and cache
    invalidation; test cookie authentication and offline retry. Android can reuse
    the same API later. Run real-device/Xcode validation when available.
@@ -295,3 +293,78 @@ Validation includes two independent web clients, concurrent edits, lost-response
 retry, explicit partial failure, scoped visibility, sharing rollback, and a real
 browser creating/reloading a trip and activity without any KV trip-data request.
 Production cutover and the private import executor are still separate work.
+
+
+## Run the private migration rehearsal from an iPad
+
+In GitHub **Actions → Rehearse KV to D1 migration → Run workflow**, select
+`main`. This is a new workflow, separate from staging deployment. No Worker is
+changed, no domain is switched, and no KV key is written or deleted.
+
+The job uses the existing `waypoint-staging` environment:
+
+- `CLOUDFLARE_API_TOKEN`: requires D1 write/edit to create and query the rehearsal
+  database (the existing staging deployment token normally already has this).
+- Source export requires Workers KV Storage **Read** in the source Cloudflare
+  account. If the existing token has it, nothing needs adding. Otherwise create
+  a separate read-only token and save it as the environment secret
+  `CLOUDFLARE_KV_READ_TOKEN`. The exporter uses it only for reads.
+- Account and source namespace IDs are taken from the checked-in configuration.
+  There is no destination database ID input to accidentally aim at production.
+
+The job first exports the source privately and rehearses the import in local
+SQLite. Only after that passes does it create a new D1 database named
+`waypoint-rehearsal-DATE-RANDOM`. It rejects a nonempty destination and excludes
+known staging/production IDs. This new database is never bound to any Worker or
+made available through a public URL. It contains private trip data; account
+password hashes are not copied into D1.
+
+Import requests are limited to 20 statements and approximately 250 KB per batch.
+A record exceeding the rehearsal request-size limit fails validation before
+creating a remote database. D1 imports keep deterministic IDs and never overwrite
+existing records. Checkpoints let transient import failures resume automatically
+within the run, including when a response was lost after commit. Data is marked
+verified only after all rows, tags, grants and change counts match and the real
+sync query returns the expected records for every source account and an outsider.
+Dates, bookings, expenses and extension fields are compared as part of the full
+payload. Collection order is not retained; records are compared by identity.
+
+The source is read again after import to detect observed changes. For a smooth
+rehearsal, choose a quiet period and avoid editing trips during the run. You do
+not need to disable the live website. KV's eventual consistency means matching
+reads are evidence for this rehearsal, not proof of a point-in-time production
+snapshot. Final cutover still requires paused writers and a durable private backup.
+
+Open the completed run's **Summary**. It reports pass/fail, counts, a source hash,
+account-visibility results, and the new database name/ID. These may be shared back
+in chat. Do not share trip payloads, password hashes, keys, or private exports.
+No source file, SQL plan, password hashes or trip payloads are uploaded as GitHub
+artifacts or written into logs. The temporary export is removed after the run;
+it is not a retained migration backup. The private rehearsal D1 remains in your
+Cloudflare account for review.
+
+If it fails, the summary reports a safe phase and code:
+
+| Phase/code | What to do |
+| --- | --- |
+| `read_only_source_export` / `cloudflare_token_permissions` | Add the KV read token described above, then rerun |
+| `source_changed` | Retry when no one is editing the source trips/accounts |
+| `validate_source` / `source_or_verification_error` | Stop; the source needs private inspection before import |
+| `verification_*_mismatch` | Stop; the import did not match the source and is not ready for cutover |
+| `import_interrupted` | Automatic retries were exhausted; retain the database ID for diagnosis |
+| `cloudflare_request_failed` during creation | Check account permissions and available D1 database capacity |
+
+Each new workflow run starts with a new export and a new database. It never
+resumes a different export into an old rehearsal database. Old rehearsal copies
+can be deleted manually in Cloudflare D1 after review; they count toward your
+account's database/storage limits (Free has 10 databases). Do not delete the
+staging database or an eventual production database when cleaning up rehearsals.
+
+For a private local export, the same checks can run without Cloudflare access:
+
+```sh
+npm run test:rehearsal
+npm run backend:rehearse -- --local private-migration/source.kv-export.private.json
+```
+
+The production cutover remains deliberately unavailable from this workflow.
