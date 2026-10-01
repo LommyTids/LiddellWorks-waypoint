@@ -4,7 +4,7 @@ Native SwiftUI project for iPhone and iPad, iOS 17+, with Apple Maps, account-is
 
 ## Open on your Mac
 
-1. Unzip the complete archive; keep `Package.swift`, `Sources`, `Tests` and `WayPointApp` beside `WayPoint.xcodeproj`.
+1. Clone this repository and switch to the iOS feature branch, then open `apps/ios/`. For a standalone archive, unzip the complete folder and keep its package, source and test folders beside the Xcode project.
 2. Open **WayPoint.xcodeproj** in Xcode. Select the **WayPoint** scheme and an installed iPhone or iPad simulator running iOS 17 or newer.
 3. Press **Run**. Use **Explore a demo trip** first; it requires no account.
 4. For shared staging trips, sign in with the account you created at https://waypoint-backend-staging.tomhaliddell.workers.dev. Your production website credentials are separate.
@@ -49,4 +49,4 @@ The app edits itinerary fields and preserves the server's unrelated raw data. Pe
 
 The production KV-to-D1 rehearsal last reported `validate_source` failure. That separate migration blocker remains unresolved; the native app uses synthetic staging data and does not perform migration or cutover.
 
-The source and Xcode project can be checked in this workspace, but Xcode and Swift are not installed here. A successful Mac build, simulator run or device test is not claimed until you run the commands above. Give Claude this entire folder for review; include actual Xcode errors/results rather than only the handover document.
+GitHub macOS CI runs the package tests, simulator build and app-hosted tests. Check the latest PR run for results; local authoring checks alone do not prove an Apple SDK build. Device behavior and authenticated end-to-end staging sync still need verification. Give Claude this entire folder for review; include actual Xcode errors/results rather than only the handover document.

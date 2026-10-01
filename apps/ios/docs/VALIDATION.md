@@ -11,7 +11,7 @@ Updated 1 October 2026 for the D1 staging native implementation.
 - Legacy whole-trip upload remains absent; staging network isolation checks pass.
 - Independent source review of cursor handling, durable outbox, lost receipts, canonical payloads, permissions, and project integration.
 
-These are static checks, not a Swift type-check or Apple SDK build. Swift/Xcode are not installed in the authoring workspace. The included XCTest tests have not been executed here. No simulator/device run, authenticated staging native session, signing or distribution is claimed.
+The authoring workspace checks are static. Separately, the first GitHub macOS run (Xcode 16.4, build 16F6) passed all 43 core tests and the unsigned simulator app build. Its app-hosted test build exposed a simulator architecture mismatch; the generator now selects only the active architecture in Debug, and CI selects the host simulator architecture explicitly. Check the latest PR #33 run for the complete rerun result. Device, authenticated staging-native sync, signing and distribution validation remain outstanding.
 
 ## Tests supplied
 
