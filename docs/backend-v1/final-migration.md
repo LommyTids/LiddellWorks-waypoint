@@ -188,3 +188,22 @@ This workflow cannot apply a different source snapshot to an old database.
 Within one run an ambiguous import batch is retried against the same hash and
 checkpoint, then reconciled. On failure the backup remains even if importing
 stopped; a new run takes a new frozen export and creates a new destination.
+
+## If the pause endpoint works in your browser but Actions cannot read it
+
+The script checks the public pause endpoint from the GitHub runner and never
+logs response bodies, redirect targets or raw network errors. Use the safe code:
+
+| Code | Meaning / next check |
+| --- | --- |
+| `source_pause_http_403` | The runner request is forbidden; inspect Cloudflare security events for the exact migration-status path before making a narrow access change |
+| `source_pause_http_404` | The runner received not found; verify the production deployment and route |
+| `source_pause_http_503` | The runner received service unavailable; inspect the Worker deployment/status |
+| `source_pause_redirect` | The endpoint redirects; review the canonical domain/path routing; the script refuses to follow redirects |
+| `source_pause_invalid_response` | HTTP succeeded but the response was not JSON; inspect route handling or challenge responses |
+| `source_pause_timeout` / `source_pause_network_error` | The request did not complete; retry and inspect connectivity if it persists |
+| `source_not_paused` | JSON was returned but its storage, pause flag or freeze marker did not match |
+
+These failures stop before export or import. A working browser response alone
+is not substituted for the runner check. Keep the pause guard and do not disable
+site-wide protection or follow unverified redirects to force the migration.

@@ -3,8 +3,15 @@ export const SOURCE_STATUS='https://liddellworks.com/WayPoint/api/migration-stat
 export async function assertPaused(freezeId,fetcher=fetch){
  check(/^[A-Za-z0-9_-]{8,128}$/.test(freezeId||''),'invalid_freeze_id');
  let response,status;
- try{response=await fetcher(SOURCE_STATUS+'?check='+crypto.randomUUID(),{cache:'no-store',redirect:'error',signal:AbortSignal.timeout(30000)});status=await response.json();}catch{throw new RehearsalError('source_pause_unavailable');}
- check(response.ok&&status.storage==='kv'&&status.writesPaused===true&&status.freezeId===freezeId,'source_not_paused');
+ try{response=await fetcher(SOURCE_STATUS+'?check='+crypto.randomUUID(),{cache:'no-store',redirect:'manual',signal:AbortSignal.timeout(30000)});}catch(error){
+  // Use only fixed codes; fetch messages/causes can contain URLs or headers.
+  if(error?.name==='TimeoutError'||error?.name==='AbortError')throw new RehearsalError('source_pause_timeout');
+  throw new RehearsalError('source_pause_network_error');
+ }
+ check(response.status<300||response.status>=400,'source_pause_redirect');
+ check(response.ok,'source_pause_http_'+response.status);
+ try{status=await response.json();}catch{throw new RehearsalError('source_pause_invalid_response');}
+ check(status?.storage==='kv'&&status.writesPaused===true&&status.freezeId===freezeId,'source_not_paused');
 }
 export function assertDistinctResources(source,staging,backup,destination){
  check(/^[a-f0-9]{32}$/i.test(source)&&/^[a-f0-9]{32}$/i.test(backup),'invalid_namespace');
