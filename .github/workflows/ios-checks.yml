@@ -1,0 +1,83 @@
+name: iOS checks
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      ios: ${{ steps.paths.outputs.ios }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: paths
+        name: Detect native changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python3 - <<'PY'
+          import os, subprocess
+          base = os.environ.get('BASE_SHA', '')
+          if os.environ['EVENT_NAME'] == 'workflow_dispatch' or not base or set(base) == {'0'}:
+              changed = True
+          else:
+              files = subprocess.check_output(['git', 'diff', '--name-only', base, os.environ['HEAD_SHA']], text=True).splitlines()
+              changed = any(p.startswith('apps/ios/') or p == '.github/workflows/ios-checks.yml' for p in files)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('ios=' + str(changed).lower() + '\n')
+          PY
+  ios:
+    name: Build and test native app
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
+    runs-on: macos-15
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@v5
+      - name: Core tests and unsigned simulator build
+        run: bash scripts/check-mac.sh
+      - name: Choose an installed iPhone simulator
+        run: |
+          python3 - <<'PY'
+          import json, os, platform, subprocess
+          devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '--json']))['devices']
+          phones = [d for runtime, items in devices.items() if '.iOS-' in runtime for d in items if d.get('isAvailable') and d['name'].startswith('iPhone')]
+          if not phones:
+              raise SystemExit('No available iPhone simulator. Install an iOS runtime on the runner.')
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('WAYPOINT_TEST_DESTINATION=platform=iOS Simulator,id=' + phones[0]['udid'] + ',arch=' + platform.machine() + '\n')
+          PY
+      - name: App-hosted API and persistence tests
+        run: |
+          xcodebuild -project WayPoint.xcodeproj -scheme WayPoint \
+            -configuration Debug -destination "$WAYPOINT_TEST_DESTINATION" \
+            -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO test
+  gate:
+    name: iOS gate
+    if: always()
+    needs: [changes, ios]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require success when native files changed
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          IOS_CHANGED: ${{ needs.changes.outputs.ios }}
+          IOS_RESULT: ${{ needs.ios.result }}
+        run: |
+          test "$CHANGES_RESULT" = success
+          if [ "$IOS_CHANGED" = true ]; then
+            test "$IOS_RESULT" = success
+          fi
