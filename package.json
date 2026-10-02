@@ -16,7 +16,9 @@
     "backend:staging-config": "node scripts/backend-v1/staging-config.mjs",
     "test:backend:browser": "node --test tests/backend-v1/setup-browser.test.mjs",
     "test:rehearsal": "node --test tests/backend-v1/rehearsal.test.mjs",
-    "backend:rehearse": "node scripts/backend-v1/rehearse.mjs"
+    "backend:rehearse": "node scripts/backend-v1/rehearse.mjs",
+    "test:migration": "node --test tests/backend-v1/migration.test.mjs",
+    "backend:prepare-production": "node scripts/backend-v1/prepare-production.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.1",

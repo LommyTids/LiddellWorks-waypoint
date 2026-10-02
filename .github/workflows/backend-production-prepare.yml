@@ -1,0 +1,64 @@
+name: Prepare final KV to D1 migration
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type PREPARE FROZEN MIGRATION (this does not switch production)'
+        required: true
+        type: string
+      other_writers_paused:
+        description: 'All dashboard/API edits and deployments are paused; only this migration may create backup/candidate resources'
+        required: true
+        default: false
+        type: boolean
+      freeze_id:
+        description: 'Exact WAYPOINT_FREEZE_ID set on the paused production Worker'
+        required: true
+        type: string
+      expected_source_hash:
+        description: 'Source hash from the passing rehearsal of the cleaned source'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  # Share the lock with the rehearsal so neither races the other.
+  group: waypoint-migration-rehearsal
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: waypoint-production
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_KV_READ_TOKEN: ${{ secrets.CLOUDFLARE_KV_READ_TOKEN }}
+      WAYPOINT_BACKUP_PUBLIC_KEY: ${{ vars.WAYPOINT_BACKUP_PUBLIC_KEY }}
+      WAYPOINT_FREEZE_ID: ${{ inputs.freeze_id }}
+      EXPECTED_SOURCE_HASH: ${{ inputs.expected_source_hash }}
+      MIGRATION_CONFIRMATION: ${{ inputs.confirmation }}
+      OTHER_WRITERS_PAUSED: ${{ inputs.other_writers_paused }}
+      WAYPOINT_BACKUP_OUTPUT_DIR: ${{ runner.temp }}/waypoint-encrypted-backup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:migration
+      - name: Verify pause, retain encrypted backup, import and verify candidate
+        run: npm run backend:prepare-production
+      - name: Downloadable encrypted recovery copy and safe summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: waypoint-encrypted-backup-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/waypoint-encrypted-backup/source.encrypted.json
+            ${{ runner.temp }}/waypoint-encrypted-backup/migration-summary.json
+          if-no-files-found: ignore
+          retention-days: 90
+      # No plaintext export, private encryption key, deploy or source write.
+      # The separate Cloudflare backup namespace has no automatic expiration.

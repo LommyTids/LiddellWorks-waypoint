@@ -17,6 +17,8 @@
 #                              trip data between visits (see src/worker.js)
 # ==============================================================================
 
+# Preserve dashboard migration pause variables across ordinary deployments.
+keep_vars = true
 name = "waypoint-app"
 main = "src/worker.js"
 compatibility_date = "2026-08-27"

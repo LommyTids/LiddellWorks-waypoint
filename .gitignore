@@ -38,3 +38,7 @@ Thumbs.db
 .wp-*
 scratch/
 *.local.js
+
+# Migration encryption keys and restored private backups.
+*.pem
+*.encrypted.json

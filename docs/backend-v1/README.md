@@ -381,3 +381,9 @@ npm run backend:rehearse -- --local private-migration/source.kv-export.private.j
 ```
 
 The production cutover remains deliberately unavailable from this workflow.
+
+## Final migration preparation
+
+After a passing rehearsal, follow [final-migration.md](final-migration.md) for
+the production write pause, encrypted retained backup, verified D1 candidate
+and recovery check. The preparation workflow never switches production.
