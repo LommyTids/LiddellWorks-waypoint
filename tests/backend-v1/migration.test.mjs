@@ -125,3 +125,26 @@ test('pause request failures distinguish HTTP, redirects, parsing and network wi
  await assert.rejects(assertPaused(freezeId,async()=>{const e=new Error('PRIVATE_TIMEOUT_DETAIL');e.name='TimeoutError';throw e;}),e=>e.code==='source_pause_timeout'&&!e.message.includes('PRIVATE'));
  await assert.rejects(assertPaused(freezeId,async()=>new Response('null')),e=>e.code==='source_not_paused');
 });
+
+test('preview preflight reconciles the exact verified candidate and retained backup using read-only requests',async t=>{
+ const {verifyPreview,previewConfiguration}=await import('../../scripts/backend-v1/production-preview.mjs');
+ const f=fakeCloudflare(t),prepared=await prepareProduction(f.options);
+ const pins={accountId:f.api.account,kvNamespaceId:SOURCE,databaseId:DEST,databaseName:prepared.databaseName,sourceHash:prepared.sourceHash,freezeId,backupNamespaceId:BACKUP,backupId:prepared.backup.backupId,encryptedSha256:prepared.backup.encryptedSha256,keyFingerprint:prepared.backup.keyFingerprint};
+ const api={account:f.api.account,request:(path,options)=>path==='/d1/database/'+DEST?Promise.resolve({result:{uuid:DEST,name:prepared.databaseName}}):f.api.request(path,options)};
+ f.calls.length=0;
+ const result=await verifyPreview({api,readApi:api,pins,fetcher:pausedFetch});assert.equal(result.status,'preview_preflight_passed');assert.equal(result.destinationWrites,0);
+ assert(f.calls.every(c=>!c.method||c.method==='GET'||(c.path.endsWith('/query')&&c.body.batch.every(s=>s.sql.startsWith('SELECT')))));
+ assert.equal(previewConfiguration(pins).vars.WAYPOINT_WRITES_PAUSED,'true');
+ assert.equal(previewConfiguration(pins).d1_databases[0].database_id,DEST);
+ await assert.rejects(verifyPreview({api,readApi:api,pins:{...pins,encryptedSha256:'0'.repeat(64)},fetcher:pausedFetch}),e=>e.code==='backup_identity_mismatch');
+ await f.db.prepare("UPDATE records SET revision=2").run();
+ await assert.rejects(verifyPreview({api,readApi:api,pins,fetcher:pausedFetch}),e=>e.code==='verification_records_mismatch');
+});
+
+test('production browser uses D1 adapter and never exposes the dummy-trip setup page',async()=>{
+ const sync=(await import('../../src/backend-v1/worker.js')).default;
+ const env={WAYPOINT_ENV:'production',WAYPOINT_WRITES_PAUSED:'true',WAYPOINT_SOURCE_HASH:'a'.repeat(64),WAYPOINT_FREEZE_ID:freezeId,WAYPOINT_SESSION_SECRET:'test-secret',WAYPOINT_KV:{get:async()=>null},WAYPOINT_DB:{prepare:()=>({first:async()=>({source_hash:'a'.repeat(64),state:'verified'})})},ASSETS:{fetch:async()=>new Response('<title>Waypoint</title><body><script src="/WayPoint/js/boot.js"></script>')}};
+ const page=await sync.fetch(new Request('https://test/WayPoint/'),env,{});const html=await page.text();assert.equal(page.status,200);assert(html.includes('Migration preview'));assert(html.includes('d1-client.js'));assert(!html.includes('Test trips only'));
+ for(const path of ['/WayPoint/setup','/WayPoint/staging.js','/WayPoint/api/data'])assert.equal((await sync.fetch(new Request('https://test'+path),env,{})).status,404);
+ const unpaused=await sync.fetch(new Request('https://test/WayPoint/'),{...env,WAYPOINT_WRITES_PAUSED:'false'},{});assert.equal(unpaused.status,503);
+});

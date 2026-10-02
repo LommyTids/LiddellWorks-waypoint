@@ -63,3 +63,33 @@ test('tablet web app creates a trip and activity through D1 and reloads saved da
  assert.equal((await db.prepare('SELECT count(*) AS n FROM trips WHERE deleted=0').first()).n,1);
  await page.evaluate(()=>doLogout());await page.waitForFunction(()=>currentUser===null);assert.equal(await page.evaluate(()=>state.trips.length),0);
 });
+
+test('production browser signs in to imported trips, shows pause and blocks edits without changing data',async t=>{
+ const {readFile}=await import('node:fs/promises');
+ const {pbkdf2Sync}=await import('node:crypto');
+ const {LocalD1}=await import('../../scripts/backend-v1/local-d1.mjs');
+ const {buildImport}=await import('../../scripts/backend-v1/plan-import.mjs');
+ const {initializeRehearsal,importPlan,completeRehearsal,verifyData}=await import('../../scripts/backend-v1/import-rehearsal.mjs');
+ const salt='00'.repeat(16),password='browser-preview-password';
+ const user={id:'owner',username:'owner',passwordSalt:salt,passwordHash:pbkdf2Sync(password,Buffer.from(salt,'hex'),100000,32,'sha256').toString('hex')};
+ const source={format:'waypoint-kv-export-v1',entries:{users:JSON.stringify({users:[user]}),users_initialized:'1',trip_index:JSON.stringify({trips:[{tripId:'real-trip',ownerId:'owner',grants:[]}]}),'trip:real-trip':JSON.stringify({name:'Real imported trip',activities:[{activityId:'a1',title:'Preserved activity',companions:[]}]})}};
+ const plan=buildImport(source),db=new LocalD1();t.after(()=>db.close());
+ await initializeRehearsal(db);await importPlan(db,plan);await completeRehearsal(db,plan);
+ const env={WAYPOINT_ENV:'production',WAYPOINT_WRITES_PAUSED:'true',WAYPOINT_SOURCE_HASH:plan.sourceHash,WAYPOINT_FREEZE_ID:'browser-freeze',WAYPOINT_SESSION_SECRET:'existing-secret',WAYPOINT_DB:db,WAYPOINT_KV:new MemoryKV(source.entries),ASSETS:{async fetch(request){
+  let path=new URL(request.url).pathname;if(path==='/WayPoint/')path+="index.html";
+  try{const content=await readFile(new URL('../../public'+path,import.meta.url));return new Response(content,{headers:{'Content-Type':path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.html')?'text/html':'application/octet-stream'}});}catch{return new Response('Not found',{status:404});}
+ }}};
+ const browser=await chromium.launch({headless:true});t.after(()=>browser.close());const context=await browser.newContext();const page=await context.newPage(),errors=[],paths=[];page.on('pageerror',e=>errors.push(e.message));
+ await context.route('**/*',async route=>{
+  const r=route.request();if(!r.url().startsWith('https://production.test/'))return route.abort();paths.push(new URL(r.url()).pathname);
+  const response=await worker.fetch(new Request(r.url(),{method:r.method(),headers:await r.allHeaders(),...(r.postData()?{body:r.postData()}: {})}),env,{});
+  await route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:Buffer.from(await response.arrayBuffer())});
+ });
+ await page.goto('https://production.test/WayPoint/');
+ await page.locator('#login-form [name="username"]').fill('owner');await page.locator('#login-form [name="password"]').fill(password);await page.getByRole('button',{name:'Log in',exact:true}).click();
+ await page.waitForFunction(()=>stateIsTrustworthy&&state.trips[0]?.activities.some(a=>a.title==='Preserved activity'));
+ await page.getByText('Migration preview · Saving is paused',{exact:true}).waitFor();
+ const rejected=await page.evaluate(async()=>{const r=await fetch('/WayPoint/api/v1/sync/mutations',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});return r.status;});assert.equal(rejected,503);
+ await page.reload();await page.waitForFunction(()=>stateIsTrustworthy&&state.trips[0]?.name==='Real imported trip');
+ assert(!paths.includes('/WayPoint/api/data'));assert.deepEqual(errors,[]);assert.equal(await env.WAYPOINT_KV.get('users'),source.entries.users);await verifyData(db,source);
+});

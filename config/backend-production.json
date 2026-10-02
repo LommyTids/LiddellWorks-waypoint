@@ -1,0 +1,12 @@
+{
+  "accountId": "807ebdb4d145d52fe467b41f5ec83473",
+  "kvNamespaceId": "2224928fef98456992e12b1a4dba3295",
+  "databaseId": "28e4ca98-6e8a-46d3-a45a-6fc1f6352b5e",
+  "databaseName": "waypoint-production-candidate-20261002-6de2a094-b3f6-4d60-8885-36e4aeb1e89f",
+  "sourceHash": "65835a54ffb391b76d3e099e02857194e76004fde67867450b52494a1bd6b6d4",
+  "freezeId": "waypoint-final-20261002-attempt1",
+  "backupNamespaceId": "13ef988b819744b4bc0ce205000a9f56",
+  "backupId": "20261002-6de2a094-b3f6-4d60-8885-36e4aeb1e89f",
+  "encryptedSha256": "d60595d2ba9cf100380f9188c9e3f6cc511cbff9cc16c88f50e6cbc92303bc26",
+  "keyFingerprint": "48abbeb54e116deb4e1d90d7dbf53a5fbd4dc7f2fd279a713a378ee00ba37a1e"
+}

@@ -62,7 +62,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   check(process.env.OTHER_WRITERS_PAUSED==='true','other_writers_not_paused');
   const staging=JSON.parse(await readFile(new URL('../../config/backend-staging.json',import.meta.url),'utf8'));
   const production=await readFile(new URL('../../wrangler.toml',import.meta.url),'utf8');
-  check(/name\s*=\s*"waypoint-app"/.test(production)&&/main\s*=\s*"src\/worker.js"/.test(production),'unsupported_production_configuration');
+  check(/name\s*=\s*"waypoint-app"/.test(production)&&/main\s*=\s*"src\/(?:worker|router).js"/.test(production),'unsupported_production_configuration');
   const source=production.split('[[kv_namespaces]]').slice(1).find(b=>/binding\s*=\s*"WAYPOINT_KV"/.test(b))?.match(/\bid\s*=\s*"([a-f0-9]{32})"/i)?.[1];check(source,'invalid_source_configuration');
   const api=new Cloudflare(process.env.CLOUDFLARE_ACCOUNT_ID||staging.accountId,process.env.CLOUDFLARE_API_TOKEN);
   const readApi=new Cloudflare(api.account,process.env.CLOUDFLARE_KV_READ_TOKEN||process.env.CLOUDFLARE_API_TOKEN);
