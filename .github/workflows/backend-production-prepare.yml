@@ -39,7 +39,6 @@ jobs:
       EXPECTED_SOURCE_HASH: ${{ inputs.expected_source_hash }}
       MIGRATION_CONFIRMATION: ${{ inputs.confirmation }}
       OTHER_WRITERS_PAUSED: ${{ inputs.other_writers_paused }}
-      WAYPOINT_BACKUP_OUTPUT_DIR: ${{ runner.temp }}/waypoint-encrypted-backup
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,6 +48,8 @@ jobs:
       - run: npm ci
       - run: npm run test:migration
       - name: Verify pause, retain encrypted backup, import and verify candidate
+        env:
+          WAYPOINT_BACKUP_OUTPUT_DIR: ${{ runner.temp }}/waypoint-encrypted-backup
         run: npm run backend:prepare-production
       - name: Downloadable encrypted recovery copy and safe summary
         if: always()

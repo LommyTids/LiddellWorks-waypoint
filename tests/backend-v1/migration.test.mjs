@@ -106,3 +106,12 @@ test('REST KV backup writes use text bodies and error summaries never echo provi
 test('workflow exposes no automatic deployment, plaintext artifact or unfreeze',async()=>{
  const workflow=await readFile('.github/workflows/backend-production-prepare.yml','utf8');assert(workflow.includes('environment: waypoint-production'));assert(workflow.includes('source.encrypted.json'));assert(!workflow.includes('wrangler deploy'));assert(!workflow.includes('source.private'));assert(!workflow.includes('private.pem'));
 });
+
+
+test('production workflow uses runner context only after a runner is assigned',async()=>{
+ const workflow=await readFile('.github/workflows/backend-production-prepare.yml','utf8');
+ const jobConfiguration=workflow.split('    steps:')[0];
+ assert(!jobConfiguration.includes('${{ runner.'),'runner context is unavailable in job-level env');
+ const prepareStep=workflow.split('      - name: Verify pause, retain encrypted backup, import and verify candidate')[1].split('      - name:')[0];
+ assert(prepareStep.includes('        env:\n          WAYPOINT_BACKUP_OUTPUT_DIR: ${{ runner.temp }}/waypoint-encrypted-backup'));
+});
