@@ -53,3 +53,14 @@ test('Cloudflare runtime: cookie auth, D1 migrations, retries and competing writ
   await completeRehearsal(rehearsalDB,plan);await importPlan(rehearsalDB,plan);await verifyData(rehearsalDB,source);
 
 });
+
+test('Cloudflare runtime: production KV pause rejects existing-client write routes',async t=>{
+  const bundle=await build({entryPoints:['src/worker.js'],bundle:true,format:'esm',platform:'browser',write:false});
+  const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-08-27',kvNamespaces:['WAYPOINT_KV'],bindings:{WAYPOINT_WRITES_PAUSED:'true',WAYPOINT_FREEZE_ID:'runtime-freeze',WAYPOINT_SESSION_SECRET:'runtime-secret'}}));
+  t.after(()=>mf.dispose());const kv=await mf.getKVNamespace('WAYPOINT_KV');await kv.put('trip_index','{"trips":[]}');
+  for(const path of ['data','users','setup','trip-grants','companions/link','login']){
+    const response=await mf.dispatchFetch('https://production.test/WayPoint/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});assert.equal(response.status,503,path);
+  }
+  const response=await mf.dispatchFetch('https://production.test/WayPoint/api/migration-status');assert.deepEqual(await response.json(),{storage:'kv',writesPaused:true,freezeId:'runtime-freeze'});
+  assert.equal(await kv.get('trip_index'),'{"trips":[]}');assert.equal(await kv.get('users'),null);
+});

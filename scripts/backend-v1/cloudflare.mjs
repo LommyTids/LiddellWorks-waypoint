@@ -5,10 +5,10 @@ export class RehearsalError extends Error {
 export function check(condition,code){if(!condition)throw new RehearsalError(code);}
 export class Cloudflare {
   constructor(account,token,fetcher=fetch){check(/^[a-f0-9]{32}$/i.test(account),'invalid_account');check(!!token,'missing_api_token');this.account=account;this.token=token;this.fetcher=fetcher;}
-  async request(path,{method='GET',body,raw=false,retry=true}={}){
+  async request(path,{method='GET',body,textBody,raw=false,retry=true}={}){
     for(let attempt=0;attempt<4;attempt++){
       let response;
-      try{response=await this.fetcher('https://api.cloudflare.com/client/v4/accounts/'+this.account+path,{method,headers:{Authorization:'Bearer '+this.token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(60000)});}
+      try{response=await this.fetcher('https://api.cloudflare.com/client/v4/accounts/'+this.account+path,{method,headers:{Authorization:'Bearer '+this.token,...(body?{'Content-Type':'application/json'}:textBody!==undefined?{'Content-Type':'text/plain; charset=utf-8'}:{})},...(body?{body:JSON.stringify(body)}:textBody!==undefined?{body:textBody}:{}),redirect:'error',signal:AbortSignal.timeout(60000)});}
       catch{if(retry&&attempt<3){await new Promise(r=>setTimeout(r,1000*2**attempt));continue;}throw new RehearsalError('cloudflare_network_error');}
       if(retry&&(response.status===429||response.status>=500)&&attempt<3){await new Promise(r=>setTimeout(r,1000*2**attempt));continue;}
       check(response.ok,response.status===401||response.status===403?'cloudflare_token_permissions':response.status===429?'cloudflare_rate_limit':'cloudflare_request_failed');

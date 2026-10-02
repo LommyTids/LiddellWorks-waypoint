@@ -392,6 +392,26 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // Migration pause is checked before auth or request parsing. Old browser
+    // sessions cannot save, link accounts, change grants or update credentials.
+    const writesPaused = env.WAYPOINT_WRITES_PAUSED === "true";
+    if (path === "/WayPoint/api/migration-status" && request.method === "GET") {
+      return new Response(JSON.stringify({ storage: "kv", writesPaused,
+        freezeId: writesPaused ? (env.WAYPOINT_FREEZE_ID || null) : null }), {
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
+      });
+    }
+    if (writesPaused && path.startsWith("/WayPoint/api/")) {
+      if (!["GET", "HEAD"].includes(request.method)) {
+        return jsonError(503, "Trip and account edits are paused for migration. Please try again later.");
+      }
+      // GET routes can lazily migrate old data or refresh provider caches.
+      // Bind the original get method, but prevent EVERY KV write in this request.
+      const kv = env.WAYPOINT_KV;
+      const denied = async function () { const error = new Error("Writes paused"); error.name = "MigrationPausedError"; throw error; };
+      env = { ...env, WAYPOINT_KV: { get: kv.get.bind(kv), put: denied, delete: denied } };
+    }
+
     // ---- Auth endpoints (these ARE the login system, so none of them
     // require you to already be logged in) --------------------------------
     if (path === "/WayPoint/api/login" && request.method === "POST") {
@@ -510,6 +530,7 @@ export default {
     return env.ASSETS.fetch(request);
     })();
     } catch (err) {
+      if (err && err.name === "MigrationPausedError") return jsonError(503, "Trip and account edits are paused for migration. Please try again later.");
       if (err && err.name === "UsersStorageError") {
         return jsonError(503, "Account storage is unavailable or corrupt. Setup and login are disabled until it is repaired.");
       }
