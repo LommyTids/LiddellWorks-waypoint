@@ -70,7 +70,7 @@ test('retained backup stores only encrypted values and independently verifies re
 test('pause verification checks live storage and exact marker throughout settling',async()=>{
  const waits=[];await settlePausedSource(freezeId,async ms=>waits.push(ms),pausedFetch);assert.deepEqual(waits,[40000,40000,40000]);
  for(const status of [{storage:'d1',writesPaused:true,freezeId},{storage:'kv',writesPaused:false,freezeId},{storage:'kv',writesPaused:true,freezeId:'another-freeze'}])await assert.rejects(assertPaused(freezeId,async()=>new Response(JSON.stringify(status))),e=>e.code==='source_not_paused');
- await assert.rejects(assertPaused(freezeId,async()=>new Response('PRIVATE HTML')) ,e=>e.code==='source_pause_unavailable');
+ await assert.rejects(assertPaused(freezeId,async()=>new Response('PRIVATE HTML')) ,e=>e.code==='source_pause_invalid_response');
  assert.throws(()=>assertDistinctResources(SOURCE,staging,SOURCE),e=>e.code==='backup_isolation_failed');assert.throws(()=>assertDistinctResources(SOURCE,staging,BACKUP,staging.databaseId),e=>e.code==='destination_isolation_failed');
 });
 
@@ -114,4 +114,14 @@ test('production workflow uses runner context only after a runner is assigned',a
  assert(!jobConfiguration.includes('${{ runner.'),'runner context is unavailable in job-level env');
  const prepareStep=workflow.split('      - name: Verify pause, retain encrypted backup, import and verify candidate')[1].split('      - name:')[0];
  assert(prepareStep.includes('        env:\n          WAYPOINT_BACKUP_OUTPUT_DIR: ${{ runner.temp }}/waypoint-encrypted-backup'));
+});
+
+
+test('pause request failures distinguish HTTP, redirects, parsing and network without leaking responses',async()=>{
+ for(const [status,code] of [[403,'source_pause_http_403'],[404,'source_pause_http_404'],[503,'source_pause_http_503'],[301,'source_pause_redirect'],[302,'source_pause_redirect']]){
+  await assert.rejects(assertPaused(freezeId,async(url,options)=>{assert.equal(options.redirect,'manual');return new Response('PRIVATE_RESPONSE_BODY',{status,headers:{Location:'https://private.invalid/PRIVATE_TOKEN'}});}),e=>e.code===code&&!e.message.includes('PRIVATE'));
+ }
+ await assert.rejects(assertPaused(freezeId,async()=>{throw new Error('PRIVATE_NETWORK_DETAIL');}),e=>e.code==='source_pause_network_error'&&!e.message.includes('PRIVATE'));
+ await assert.rejects(assertPaused(freezeId,async()=>{const e=new Error('PRIVATE_TIMEOUT_DETAIL');e.name='TimeoutError';throw e;}),e=>e.code==='source_pause_timeout'&&!e.message.includes('PRIVATE'));
+ await assert.rejects(assertPaused(freezeId,async()=>new Response('null')),e=>e.code==='source_not_paused');
 });
