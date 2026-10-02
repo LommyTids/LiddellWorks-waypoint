@@ -64,3 +64,25 @@ test('Cloudflare runtime: production KV pause rejects existing-client write rout
   const response=await mf.dispatchFetch('https://production.test/WayPoint/api/migration-status');assert.deepEqual(await response.json(),{storage:'kv',writesPaused:true,freezeId:'runtime-freeze'});
   assert.equal(await kv.get('trip_index'),'{"trips":[]}');assert.equal(await kv.get('users'),null);
 });
+
+test('Cloudflare runtime: production preview keeps credentials, reads imported D1 and rejects every save',async t=>{
+ const {pbkdf2Sync}=await import('node:crypto');
+ const bundle=await build({entryPoints:['src/router.js'],bundle:true,format:'esm',platform:'browser',write:false});
+ const salt='00'.repeat(16),password='preview-password';
+ const user={id:'owner',username:'owner',passwordSalt:salt,passwordHash:pbkdf2Sync(password,Buffer.from(salt,'hex'),100000,32,'sha256').toString('hex')};
+ const source={format:'waypoint-kv-export-v1',entries:{users:JSON.stringify({users:[user]}),users_initialized:'1',trip_index:JSON.stringify({trips:[{tripId:'real-trip',ownerId:'owner',grants:[]}]}),'trip:real-trip':JSON.stringify({name:'Preserved trip',activities:[{activityId:'a1',title:'Preserved activity',companions:[]}]})}};
+ const plan=buildImport(source);
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-08-27',d1Databases:['WAYPOINT_DB'],kvNamespaces:['WAYPOINT_KV'],bindings:{WAYPOINT_ENV:'production',WAYPOINT_WRITES_PAUSED:'true',WAYPOINT_SOURCE_HASH:plan.sourceHash,WAYPOINT_FREEZE_ID:'preview-freeze',WAYPOINT_SESSION_SECRET:'existing-secret'}}));
+ t.after(()=>mf.dispose());
+ const db=await mf.getD1Database('WAYPOINT_DB'),kv=await mf.getKVNamespace('WAYPOINT_KV');
+ await initializeRehearsal(db);await importPlan(db,plan);await completeRehearsal(db,plan);
+ for(const [key,value] of Object.entries(source.entries))await kv.put(key,value);
+ const call=(path,body,cookie)=>mf.dispatchFetch('https://production.test/WayPoint/api/'+path,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
+ const login=await call('login',{username:'owner',password});assert.equal(login.status,200,await login.clone().text());const cookie=login.headers.get('set-cookie').split(';')[0];
+ const caps=await (await call('v1/sync/capabilities',null,cookie)).json();assert.equal(caps.environment,'production');assert.equal(caps.writesPaused,true);assert.equal(caps.productionReady,false);
+ const bootstrap=await (await call('v1/sync/bootstrap',null,cookie)).json();assert(bootstrap.entities.some(e=>e.data.title==='Preserved activity'));
+ for(const path of ['data','v1/sync/mutations','v1/trips','v1/web/access','users','users/delete','setup','trip-grants','companions/link','account/avatar'])assert.equal((await call(path,{},cookie)).status,503,path);
+ assert.equal((await call('logout',{},cookie)).status,200);
+ assert.equal(await kv.get('users'),source.entries.users);await verifyData(db,source);
+ const status=await (await call('migration-status')).json();assert.equal(status.storage,'d1');assert.equal(status.writesPaused,true);
+});

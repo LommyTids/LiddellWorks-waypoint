@@ -1,0 +1,50 @@
+name: Deploy read-only production D1 preview
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DEPLOY READ ONLY D1 (switches the live browser to D1, saving stays paused)'
+        required: true
+        type: string
+      backup_recovery_verified:
+        description: 'I decrypted the retained backup locally and its sourceHash matches the prepared candidate'
+        required: true
+        default: false
+        type: boolean
+      other_writers_paused:
+        description: 'Source KV edits, other deployments and external writers remain paused'
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: waypoint-migration-rehearsal
+  cancel-in-progress: false
+jobs:
+  preview:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: waypoint-production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_KV_READ_TOKEN: ${{ secrets.CLOUDFLARE_KV_READ_TOKEN }}
+      PREVIEW_CONFIRMATION: ${{ inputs.confirmation }}
+      BACKUP_RECOVERY_VERIFIED: ${{ inputs.backup_recovery_verified }}
+      OTHER_WRITERS_PAUSED: ${{ inputs.other_writers_paused }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:migration
+      - name: Verify frozen source, retained ciphertext and exact candidate without writing data
+        run: node scripts/backend-v1/production-preview.mjs
+      - name: Deploy live browser preview with all saving disabled
+        run: npx wrangler deploy --config wrangler.production-preview.generated.json
+      - name: Verify public D1 status after deployment
+        run: node scripts/backend-v1/verify-preview-status.mjs

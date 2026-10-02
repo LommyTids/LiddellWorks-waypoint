@@ -42,3 +42,5 @@ scratch/
 # Migration encryption keys and restored private backups.
 *.pem
 *.encrypted.json
+
+wrangler.production-preview.generated.json

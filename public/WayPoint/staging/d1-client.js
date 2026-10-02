@@ -1,4 +1,4 @@
-/* Loaded only by the staging Worker before boot.js. Production keeps its KV path. */
+/* Loaded by D1 Workers before boot.js. The legacy KV Worker does not inject this adapter. */
 (function (root) {
   'use strict';
   function canonical(v) { if (Array.isArray(v)) return '['+v.map(canonical).join(',')+']'; if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(function(k){return JSON.stringify(k)+':'+canonical(v[k]);}).join(',')+'}';return JSON.stringify(v); }
@@ -71,7 +71,7 @@
   loadInitialState=async function(){
     appLoadState='loading';stateIsTrustworthy=false;updateSystemFeedback();
     try{var loaded=await client.load(currentUser.id);stateIsTrustworthy=true;connectionState='online';appLoadState='ready';return loaded;}
-    catch(e){client.clear();appLoadState='error';showToastSafe('Could not refresh staging trips: '+e.message);return {trips:[]};}
+    catch(e){client.clear();appLoadState='error';showToastSafe('Could not refresh trips: '+e.message);return {trips:[]};}
     finally{updateSystemFeedback();}
   };
   sendSave=async function(toSave){

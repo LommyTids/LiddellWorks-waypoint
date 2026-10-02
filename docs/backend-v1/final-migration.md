@@ -207,3 +207,10 @@ logs response bodies, redirect targets or raw network errors. Use the safe code:
 These failures stop before export or import. A working browser response alone
 is not substituted for the runner check. Keep the pause guard and do not disable
 site-wide protection or follow unverified redirects to force the migration.
+
+## Backup recovery verified: next step
+
+After a matching `backup_recovery_verified` result, follow
+[the read-only production preview guide](production-preview.md). This is a
+separate reviewed deployment; saving and the native staging connection stay
+unchanged until later activation.

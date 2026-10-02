@@ -20,7 +20,7 @@
 # Preserve dashboard migration pause variables across ordinary deployments.
 keep_vars = true
 name = "waypoint-app"
-main = "src/worker.js"
+main = "src/router.js"
 compatibility_date = "2026-08-27"
 
 # Only requests matching this exact pattern are sent to this Worker. Any
@@ -52,3 +52,9 @@ html_handling = "auto-trailing-slash"
 # account, it doesn't need to be created again.
 binding = "WAYPOINT_KV"
 id = "2224928fef98456992e12b1a4dba3295"
+
+# Inactive until the reviewed read-only preview workflow sets WAYPOINT_ENV.
+[[d1_databases]]
+binding = "WAYPOINT_DB"
+database_name = "waypoint-production-candidate-20261002-6de2a094-b3f6-4d60-8885-36e4aeb1e89f"
+database_id = "28e4ca98-6e8a-46d3-a45a-6fc1f6352b5e"
