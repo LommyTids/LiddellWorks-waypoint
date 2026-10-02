@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Cloudflare,RemoteD1,check,RehearsalError } from './cloudflare.mjs';
 import { exportSnapshot,verifySourceStable } from './source.mjs';
-import { buildImport } from './plan-import.mjs';
+import { buildImport,SourceValidationError } from './plan-import.mjs';
 import { LocalD1 } from './local-d1.mjs';
 import { initializeRehearsal,importPlan,verifyData,verifyPermissions,completeRehearsal } from './import-rehearsal.mjs';
 
@@ -50,7 +50,7 @@ try{
  }
  await summary({status:'passed',mode:local?'local':'cloudflare',...(databaseId?{databaseName,databaseId}:{}),sourceHash:plan.sourceHash,counts,recordsByKind:plan.counts.byKind,permissions,sourceWrites:0,productionSwitch:false,accounts:'Credentials remain in existing KV; no account credentials imported into D1.',consistency:'Observed stable reads only. Final migration still requires paused writers and a retained private backup.'});
 }catch(error){
- const code=error instanceof RehearsalError?error.code:'source_or_verification_error';
+ const code=error instanceof RehearsalError||error instanceof SourceValidationError?error.code:'source_or_verification_error';
  // Do not print error.message/stack: errors can contain SQL, source IDs or data.
- await summary({status:'failed',phase,code,...(databaseName?{databaseName}:{}),...(databaseId?{databaseId}:{}),sourceWrites:0,productionSwitch:false});process.exitCode=1;
+ await summary({status:'failed',phase,code,...(error instanceof SourceValidationError?{location:error.location,nextStep:'Review the source at these one-based positions. Do not delete or remap records automatically.'}:{}),...(databaseName?{databaseName}:{}),...(databaseId?{databaseId}:{}),sourceWrites:0,productionSwitch:false});process.exitCode=1;
 }finally{if(privateDir)await rm(privateDir,{recursive:true,force:true});}

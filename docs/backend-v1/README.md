@@ -349,10 +349,23 @@ If it fails, the summary reports a safe phase and code:
 | --- | --- |
 | `read_only_source_export` / `cloudflare_token_permissions` | Add the KV read token described above, then rerun |
 | `source_changed` | Retry when no one is editing the source trips/accounts |
-| `validate_source` / `source_or_verification_error` | Stop; the source needs private inspection before import |
+| `validate_source` / `missing_*`, `invalid_*`, `duplicate_*`, `owner_grant`, or `reserved_source_field` | Use the safe `location` positions to inspect the affected source entry privately before any repair |
+| `validate_source` / `unindexed_trip_keys` | Review the reported count of trip keys absent from the index; preserve them until their ownership is understood |
+| `source_or_verification_error` | Unexpected failure; stop and investigate without posting the private export or raw errors |
 | `verification_*_mismatch` | Stop; the import did not match the source and is not ready for cutover |
 | `import_interrupted` | Automatic retries were exhausted; retain the database ID for diagnosis |
 | `cloudflare_request_failed` during creation | Check account permissions and available D1 database capacity |
+
+Source validation reports fixed labels and one-based positions: `tripNumber`
+refers to the trip index order, `recordNumber` to the named collection order,
+`grantNumber` to the trip grant order, and `accountNumber` to the account list.
+The report contains no source IDs, names, credentials or record contents. Share
+only the JSON summary for diagnosis. Validation does not repair, discard or
+remap data and runs before an isolated remote database is created.
+
+To try a diagnostics branch before merging it, open GitHub **Actions → Rehearse
+KV to D1 migration → Run workflow**, select that branch, and run it. A Worker
+staging deployment is not needed for these script changes.
 
 Each new workflow run starts with a new export and a new database. It never
 resumes a different export into an old rehearsal database. Old rehearsal copies

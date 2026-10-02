@@ -81,9 +81,35 @@ test('REST adapter sends parameterized batches and suppresses private API errors
 });
 
 test('CLI failure summary never echoes private source values or keys',async()=>{
- const {mkdtemp,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {spawnSync}=await import('node:child_process');
+ const {mkdtemp,writeFile,readFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {spawnSync}=await import('node:child_process');
  const dir=await mkdtemp(join(tmpdir(),'waypoint-test-'));
  try{const source=fixture();source.entries.trip_index=JSON.stringify({trips:[{tripId:'SECRET_TRIP_ID',ownerId:'owner'}]});const file=join(dir,'source.json');await writeFile(file,JSON.stringify(source));
- const result=spawnSync(process.execPath,['scripts/backend-v1/rehearse.mjs','--local',file],{encoding:'utf8',env:{...process.env,GITHUB_STEP_SUMMARY:''}});assert.equal(result.status,1);assert(!result.stdout.includes('SECRET_TRIP_ID'));assert(!result.stdout.includes('private-hash'));assert.equal(JSON.parse(result.stdout).status,'failed');
+ const result=spawnSync(process.execPath,['scripts/backend-v1/rehearse.mjs','--local',file],{encoding:'utf8',env:{...process.env,GITHUB_STEP_SUMMARY:join(dir,'summary.md')}});assert.equal(result.status,1);assert(!result.stdout.includes('SECRET_TRIP_ID'));assert(!result.stdout.includes('private-hash'));const report=JSON.parse(result.stdout);assert.equal(report.status,'failed');assert.equal(report.code,'missing_source_key');assert.deepEqual(report.location,{source:'trip_content',tripNumber:1});const summary=await readFile(join(dir,'summary.md'),'utf8');assert(summary.includes('missing_source_key'));assert(!summary.includes('SECRET_TRIP_ID'));assert(!summary.includes('private-hash'));assert(!result.stderr.includes('SECRET_TRIP_ID'));
  }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('validation diagnostics identify malformed structures and references without source values',()=>{
+ const cases=[
+  ['invalid_trip_index',s=>s.entries.trip_index='null',{source:'trip_index'}],
+  ['invalid_account_index',s=>s.entries.users='null',{source:'users'}],
+  ['invalid_account',s=>edit(s,'users',u=>u.users[0]=null),{source:'users',accountNumber:1}],
+  ['invalid_source_id',s=>edit(s,'users',u=>u.users[0].id='PRIVATE INVALID ID'),{source:'users',accountNumber:1,field:'id'}],
+  ['duplicate_account_id',s=>edit(s,'users',u=>u.users.push(u.users[0])),{source:'users',accountNumber:6}],
+  ['invalid_trip_entry',s=>edit(s,'trip_index',i=>i.trips[0]=null),{source:'trip_index',tripNumber:1}],
+  ['missing_trip_owner',s=>edit(s,'trip_index',i=>i.trips[0].ownerId='PRIVATE_OWNER'),{source:'trip_index',tripNumber:1,field:'ownerId'}],
+  ['invalid_source_json',s=>s.entries['trip:trip1']='PRIVATE INVALID JSON',{source:'trip_content',tripNumber:1}],
+  ['invalid_record_collection',s=>edit(s,'trip:trip1',t=>t.activities={private:'data'}),{source:'trip_content',tripNumber:1,collection:'activities'}],
+  ['invalid_record',s=>edit(s,'trip:trip1',t=>t.activities[0]=null),{source:'trip_content',tripNumber:1,collection:'activities',recordNumber:1}],
+  ['duplicate_record_id',s=>edit(s,'trip:trip1',t=>t.activities[1].activityId=1),{source:'trip_content',tripNumber:1,collection:'activities',recordNumber:2,field:'activityId'}],
+  ['invalid_participant_tags',s=>edit(s,'trip:trip1',t=>t.activities[0].companions='PRIVATE_TAG'),{source:'trip_content',tripNumber:1,collection:'activities',recordNumber:1,field:'companions'}],
+  ['missing_record_participant',s=>edit(s,'trip:trip1',t=>t.activities[0].companions=[1,'PRIVATE_PARTICIPANT']),{source:'trip_content',tripNumber:1,collection:'activities',recordNumber:1,field:'companions',tagNumber:2}],
+  ['missing_linked_account',s=>edit(s,'trip:trip1',t=>t.companions[0].accountId='PRIVATE_ACCOUNT'),{source:'trip_content',tripNumber:1,collection:'companions',recordNumber:1,field:'accountId'}],
+  ['invalid_grant',s=>edit(s,'trip_index',i=>i.trips[0].grants[0]=null),{source:'trip_index',tripNumber:1,grantNumber:1}],
+  ['missing_grant_account',s=>edit(s,'trip_index',i=>i.trips[0].grants[0].accountId='PRIVATE_ACCOUNT'),{source:'trip_index',tripNumber:1,grantNumber:1,field:'accountId'}],
+  ['invalid_grant_role',s=>edit(s,'trip_index',i=>i.trips[0].grants[0].role='PRIVATE_ROLE'),{source:'trip_index',tripNumber:1,grantNumber:1,field:'role'}],
+  ['missing_grant_participant',s=>edit(s,'trip_index',i=>i.trips[0].grants[0].companionId='PRIVATE_PARTICIPANT'),{source:'trip_index',tripNumber:1,grantNumber:1,field:'companionId'}],
+  ['unindexed_trip_keys',s=>s.entries['trip:PRIVATE_ORPHAN']='{}',{source:'trip_index',count:1}]
+ ];
+ function edit(source,key,mutate){const value=JSON.parse(source.entries[key]);mutate(value);source.entries[key]=JSON.stringify(value);}
+ for(const [code,mutate,location] of cases){const source=fixture();mutate(source);const before=JSON.stringify(source);assert.throws(()=>buildImport(source),e=>{assert.equal(e.code,code);assert.deepEqual(e.location,location);assert(!JSON.stringify(e).includes('PRIVATE'));assert(!e.message.includes('PRIVATE'));return true;});assert.equal(JSON.stringify(source),before);}
 });
