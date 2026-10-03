@@ -1,23 +1,36 @@
-> Production connection update: after [D1 activation](../../docs/backend-v1/production-activation.md), this app uses the production origin and a separate production session/cache/outbox. Sign in with your existing web account. Earlier staging instructions below describe the foundation stage.
+# WayPoint iOS — production D1 sync
 
-# WayPoint iOS — D1 staging project
+Native SwiftUI app for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync. The app connects to **https://liddellworks.com/WayPoint**. Use the same username and password as the website.
 
-Native SwiftUI project for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync to the isolated Cloudflare D1 staging backend. Production still uses KV and is not changed by this app.
+## Update and open on your Mac
 
-## Open on your Mac
+An app built from an old checkout can still connect to the separate staging backend and accept only its test accounts. Updating the website does not update an installed iOS app: rebuild the app from the current repository.
 
-1. Clone this repository and switch to the iOS feature branch, then open `apps/ios/`. For a standalone archive, unzip the complete folder and keep its package, source and test folders beside the Xcode project.
-2. Open **WayPoint.xcodeproj** in Xcode. Select the **WayPoint** scheme and an installed iPhone or iPad simulator running iOS 17 or newer.
-3. Press **Run**. Use **Explore a demo trip** first; it requires no account.
-4. For shared staging trips, sign in with the account you created at https://waypoint-backend-staging.tomhaliddell.workers.dev. Your production website credentials are separate.
-5. Use **Sync now** to send saved changes and download server changes. Review conflicts in Settings. The staging web app is at `/WayPoint/app` on that same origin.
-6. To run on a physical device, select your Apple development team in **Signing & Capabilities** and change the bundle identifier if your team requires it.
+Close Xcode. In Terminal, update the checkout you intend to build. If your fresh checkout is `~/WayPoint-migration`, run:
 
-No Cloudflare API token, setup key or signing secret belongs in Xcode. Native authentication uses the end-user account's secure `wp_session` cookie, stored in Keychain. The development endpoint is pinned to staging; no production write switch is supplied.
+```sh
+cd "$HOME/WayPoint-migration"
+git status --short
+git switch main
+git pull --ff-only origin main
+open apps/ios/WayPoint.xcodeproj
+```
+
+If Git reports local changes or refuses the update, retain those changes and resolve them before proceeding. Do not discard them to update the app. If your checkout is elsewhere, use that directory in the first command. Opening the project by this path avoids Xcode reopening a different old copy.
+
+1. Select the **WayPoint** scheme and your iPhone/iPad or an installed iOS 17+ simulator.
+2. For a physical device, select your Apple development team in **Signing & Capabilities**. Change the bundle identifier only if your team requires it.
+3. Select **Product → Clean Build Folder**, then **Run**. This installs the newly built app on the selected device or simulator.
+4. Sign in with your existing website account. The login screen describes the website account, and Settings shows **Server: liddellworks.com**.
+5. Use **Sync now** to send saved changes and download server changes. Review conflicts in Settings. Save a temporary item, verify it in the website, edit it there, then sync iOS to check both directions.
+
+If login still fails, send the exact app error and confirm the Server field or login screen text. A Cloudflare challenge is a network/security response and does not mean your password is wrong.
+
+No Cloudflare API token, setup key or signing secret belongs in Xcode. Native authentication uses the end-user's secure `wp_session` cookie, stored in Keychain. Production sessions, downloaded trips and queued changes have a separate environment namespace from staging. Staging drafts are retained locally and are never uploaded to production. Do not uninstall the old app to fix the endpoint if you need its unsynced drafts.
 
 ## Build and test
 
-In Terminal, from this folder:
+From `apps/ios` in Terminal:
 
 ```sh
 bash scripts/check-mac.sh
@@ -31,24 +44,22 @@ WAYPOINT_TEST_DESTINATION='platform=iOS Simulator,name=YOUR EXACT SIMULATOR NAME
   bash scripts/check-mac.sh --test
 ```
 
-The shared scheme includes the app-hosted service tests. Core tests also run independently with `swift test`. This project has no third-party Swift dependencies.
+The shared scheme includes the app-hosted service tests. Core tests also run independently with `swift test`. This project has no third-party Swift dependencies. GitHub macOS CI builds the simulator app and runs the tests; device signing and authenticated live sync also need an actual Mac/device check.
 
 ## Source layout
 
 - `Sources/WayPointCore`: legacy-compatible models/demo plus D1 protocol, reducer and outbox.
 - `Tests/WayPointCoreTests`: core regression tests.
 - `WayPointApp/App`: state orchestration and lifecycle.
-- `WayPointApp/Services`: staging API, Keychain, SwiftData/demo and durable D1 cache, Apple place search.
+- `WayPointApp/Services`: production API, Keychain, SwiftData/demo and durable D1 cache, Apple place search.
 - `WayPointApp/Views`: trips, timeline/map/plan, editor and pending-change review.
-- `WayPointAppTests`: HTTP service tests.
+- `WayPointAppTests`: HTTP service and storage tests.
 - `scripts/generate_project.py`: regenerate target membership after adding/removing app/test files.
-- `docs/VALIDATION.md`: what has and has not been verified.
-- `docs/ARCHITECTURE.md`: current storage/sync behavior.
+- `docs/VALIDATION.md`: validation and manual acceptance checks.
+- `docs/ARCHITECTURE.md`: storage/sync behavior.
 
 ## Scope and remaining work
 
-The app edits itinerary fields and preserves the server's unrelated raw data. People/sharing administration, complete expense workflows, photos and Android remain later work. Map imagery/place lookup need a connection; saved itinerary and coordinates remain available offline. Foreground/manual sync is implemented; background execution is not promised.
+The app edits itinerary fields and preserves the server's unrelated raw data. People/sharing administration, complete expense workflows, photos and Android remain later work. Map imagery/place lookup need a connection; downloaded itinerary and coordinates remain available offline. Foreground/manual sync is implemented; background execution is not promised.
 
-The production KV-to-D1 rehearsal last reported `validate_source` failure. That separate migration blocker remains unresolved; the native app uses synthetic staging data and does not perform migration or cutover.
-
-GitHub macOS CI runs the package tests, simulator build and app-hosted tests. Check the latest PR run for results; local authoring checks alone do not prove an Apple SDK build. Device behavior and authenticated end-to-end staging sync still need verification. Give Claude this entire folder for review; include actual Xcode errors/results rather than only the handover document.
+Production D1 editing is authorized separately through the [activation workflow](../../docs/backend-v1/production-activation.md). This app requires a ready production sync server and does not perform migration or cutover. Give Claude this entire folder for review, with actual Xcode errors/results and any live sync failures.

@@ -79,13 +79,13 @@ var TAB_GROUPS = [
     { key: 'activities', label: 'Activities', icon: 'activity' }
   ] },
   { label: 'People', tabs: [
-    { key: 'companions', label: 'Companions', icon: 'companions' },
-    { key: 'contacts', label: 'Contacts', icon: 'contacts' }
+    { key: 'companions', label: 'Companions', icon: 'companions' }
   ] },
   { label: 'Manage', tabs: [
     // Expenses is hidden for a scoped "user"/"viewer" grant because the
     // server strips it from their trip data; an empty financial tab would
     // be misleading rather than useful.
+    { key: 'contacts', label: 'Contacts', icon: 'contacts' },
     { key: 'expenses', label: 'Expenses', icon: 'expenses' },
     { key: 'settings', label: 'Settings', icon: 'settings' }
   ] }
@@ -113,7 +113,7 @@ var MOBILE_DESTINATIONS = [
 function mobileDestinationForTab(tab) {
   if (tab === 'timeline' || tab === 'map') return 'overview';
   if (['destinations', 'transport', 'accommodation', 'activities'].indexOf(tab) !== -1) return 'plan';
-  if (tab === 'companions' || tab === 'contacts') return 'people';
+  if (tab === 'companions') return 'people';
   return 'more';
 }
 
@@ -155,7 +155,7 @@ function renderMobileDestinationNav(trip) {
 }
 
 function renderMobileMoreTab(trip) {
-  var items = [];
+  var items = [{key:'contacts',icon:'contacts',label:'Contacts',description:'Booking and local contact details'}];
   if (canFullyEditTrip(trip)) {
     items.push({ key: 'expenses', icon: 'expenses', label: 'Expenses', description: 'Review trip spending and currencies' });
   }
@@ -163,6 +163,15 @@ function renderMobileMoreTab(trip) {
   return '<div class="tab-panel-head"><h2>More</h2></div><div class="mobile-more-list">' + items.map(function (item) {
     return '<button class="mobile-more-card" data-action="switch-tab" data-tab="' + item.key + '">' + icon(item.icon) + '<span class="mobile-more-card-copy"><span class="mobile-more-card-title">' + item.label + '</span><span class="mobile-more-card-description">' + item.description + '</span></span>' + icon('forward') + '</button>';
   }).join('') + '</div>';
+}
+
+function companionFiltersHtml(trip) {
+  var people = taggablePeople(trip);
+  if (!people.length) return '';
+  return '<div class="companion-filters" role="group" aria-label="Filter items by people">' + people.map(function (person) {
+    var selected = companionIsSelected(trip, person.companionId);
+    return '<button type="button" class="companion-filter' + (selected ? ' is-selected' : '') + '" data-action="toggle-companion-filter" data-id="' + esc(person.companionId) + '" aria-pressed="' + selected + '" aria-label="Show items for ' + esc(person.name) + '">' + (companionAvatarHtml(trip, person.companionId, person.name) || avatarMarkerHtml({ type: 'companion' }, person.name)) + '<span>' + esc(person.name) + '</span></button>';
+  }).join('') + '<button type="button" class="btn btn-ghost" data-action="show-all-people">Show all people</button><span class="companion-filter-note">Untagged items stay visible</span></div>';
 }
 
 function renderTripView() {
@@ -196,7 +205,7 @@ function renderTripView() {
       return '<button id="trip-nav-' + t.key + '" class="tab-btn ' + (currentTab === t.key ? 'active' : '') + '" data-action="switch-tab" data-tab="' + t.key + '" aria-controls="trip-panel"' + (currentTab === t.key ? ' aria-current="page"' : '') + '>' +
         icon(t.icon) + t.label + '</button>';
     }).join('');
-    return '<div class="tab-group"><div class="tab-group-label">' + esc(group.label) + '</div><div class="tab-group-tabs">' + buttons + '</div></div>';
+    return '<div class="tab-group"><div class="tab-group-label">' + esc(group.label) + '</div><div class="tab-group-tabs">' + buttons + '</div>' + (group.label === 'People' ? companionFiltersHtml(trip) : '') + '</div>';
   }).join('');
   var panel;
   switch (currentTab) {
@@ -235,7 +244,7 @@ function renderTripView() {
     '</div>' +
       '<nav class="desktop-trip-nav" aria-label="Trip sections"><div class="nav-group-label">View</div><div class="hero-row">' + heroHtml + '</div>' +
     '<div class="tabbar">' + tabsHtml + '</div></nav>' +
-    '<div class="mobile-trip-shell">' + renderMobileChildNav(trip, mobileDestinationForTab(currentTab)) +
+    '<div class="mobile-trip-shell">' + companionFiltersHtml(trip) + renderMobileChildNav(trip, mobileDestinationForTab(currentTab)) +
       (mobileDestinationForTab(currentTab) === 'more' && currentTab !== 'more' ? '<button class="back-link mobile-more-return" data-action="switch-mobile-destination" data-destination="more">' + icon('back') + ' More</button>' : '') +
     '</div>' +
     '<section id="trip-panel" class="trip-panel" tabindex="-1" ' + (currentTab === 'more' ? 'aria-label="More"' : 'aria-labelledby="trip-nav-' + currentTab + '"') + '>' + panel + '</section>' +

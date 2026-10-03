@@ -1,6 +1,6 @@
 # Validation and first Mac run
 
-Updated 1 October 2026 for the D1 staging native implementation.
+Updated 3 October 2026 for production D1 native sync.
 
 ## Checked in the authoring workspace
 
@@ -8,21 +8,20 @@ Updated 1 October 2026 for the D1 staging native implementation.
 - Generated Xcode project parsed as OpenStep; app source membership checked against files.
 - Shared scheme and workspace XML parsed; app-hosted test target included.
 - Python project/validation scripts compile; Mac build script passes shell syntax checks.
-- Legacy whole-trip upload remains absent; staging network isolation checks pass.
+- Legacy whole-trip upload remains absent; production network isolation checks pass.
 - Independent source review of cursor handling, durable outbox, lost receipts, canonical payloads, permissions, and project integration.
 
-The authoring workspace checks are static. Separately, the first GitHub macOS run (Xcode 16.4, build 16F6) passed all 43 core tests and the unsigned simulator app build. Its app-hosted test build exposed a simulator architecture mismatch; the generator now selects only the active architecture in Debug, and CI selects the host simulator architecture explicitly. Check the latest PR #33 run for the complete rerun result. Device, authenticated staging-native sync, signing and distribution validation remain outstanding.
-
+The authoring workspace checks are static. GitHub macOS CI runs the core tests, unsigned simulator app build and app-hosted tests using Xcode 16.4. Review the latest workflow for the specific revision you build. These checks do not prove live authentication or device sync; perform the manual checks below with the production website account.
 ## Tests supplied
 
 The core tests cover original decoder/demo queue behavior plus D1 record revisions, patches preserving unknown fields, immutable retries, unrelated vs same-record conflicts, explicit reapply, complete bootstrap, quarantine on access changes, scoped permissions, trip/child dependency order, local creation cancellation and mutation wire shape. App-hosted tests cover login cookie parsing, unauthorized/permission-epoch errors, escaped cursors, mutation conflict results, account-isolated storage, retained legacy store and corrupt-file recovery.
 
 Run `bash scripts/check-mac.sh` for core tests and simulator build, then its `--test` option with an installed simulator destination for app tests. Record exact Xcode/SDK versions and results. Resolve compiler/SDK/runtime errors before treating this as a validated app.
 
-## Manual staging acceptance
+## Manual production acceptance
 
 1. Launch demo on iPhone and iPad simulators. Browse timeline/map/plan, edit each kind and relaunch; verify storage and queue survive.
-2. Sign in with a staging account. Confirm visible trips/roles against `/WayPoint/app` on the staging origin.
+2. Sign in with your existing website account. Confirm Settings shows `liddellworks.com` and visible trips/roles match `https://liddellworks.com/WayPoint/`. Confirm that previous staging snapshots and queued edits do not appear in production.
 3. Create a trip and activity; sync. Check the browser sees them. Edit in the browser and sync iOS; check it sees the change.
 4. Disconnect after a complete download. Browse/edit, force quit/reopen, reconnect and sync. Verify one committed edit and no lost drafts.
 5. Interrupt a request after a possible server commit; retry. Confirm unchanged mutation IDs/bodies, no duplicate records and durable receipt acknowledgement.
@@ -35,4 +34,4 @@ Run `bash scripts/check-mac.sh` for core tests and simulator build, then its `--
 
 ## Remaining gates
 
-Successful Mac build/test execution; actual staging end-to-end native sync; device Keychain/file-protection checks; full timezone/expense/account-admin workflows as separately scoped; release icon/privacy/signing/distribution. The production D1 migration rehearsal remains unresolved and is not changed by this native project.
+Successful Mac build/test execution; actual production end-to-end native sync; device Keychain/file-protection checks; full timezone/expense/account-admin workflows as separately scoped; release icon/privacy/signing/distribution. The native app does not run migration workflows or authorize production editing. See the backend activation guide for those controls.

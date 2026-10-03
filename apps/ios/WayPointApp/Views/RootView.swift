@@ -90,7 +90,7 @@ private struct SignInView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(model.isBusy)
-                Text("Staging preview · Uses your separate Cloudflare test backend. Your live trips have not been migrated.")
+                Text("Sign in with the same username and password you use at liddellworks.com/WayPoint.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -204,7 +204,10 @@ private struct SettingsView: View {
         Form {
             Section("Account") {
                 LabeledContent("Signed in as", value: model.accountName)
-                LabeledContent("Mode", value: model.isDemo ? "Local demo" : "Staging account")
+                LabeledContent("Mode", value: model.isDemo ? "Local demo" : "WayPoint account")
+                if !model.isDemo {
+                    LabeledContent("Server", value: URL(string: WayPointAPI.origin)?.host ?? WayPointAPI.origin)
+                }
             }
             Section {
                 LabeledContent("Local changes", value: "\(model.pendingCount)")

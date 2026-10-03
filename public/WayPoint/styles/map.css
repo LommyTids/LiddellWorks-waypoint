@@ -144,3 +144,8 @@
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
   .trip-card:hover, .hero-btn:hover { transform: none; }
 }
+
+/* Separate both controls when dates meet, including at the final-day edge. */
+.map-range-slider.handles-overlap { height: 90px; }
+.map-range-slider.handles-overlap .map-range-input[data-map-range-handle="end"] { top: 44px; }
+.map-range-slider.handles-overlap .map-range-handle-label.is-end { top: 68px; }

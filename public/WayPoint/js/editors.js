@@ -195,8 +195,7 @@ function myParticipantIds(trip) {
 
 // What this viewer's lens should be BEFORE they express a preference.
 function defaultItemScope(trip) {
-  var g = trip && trip.myGrant;
-  return (g && g.role === 'admin') ? 'mine' : 'everything';
+  return 'everything';
 }
 
 // Can this viewer use the lens at all? Two ways the answer is no:
@@ -240,23 +239,28 @@ function itemScopeFor(trip) {
 // reference them by id; `companions` stay because the People line and the
 // tag picker need everyone; `expenses` stay because that tab is full-scope
 // only anyway.
+function companionIsSelected(trip, id) {
+  var excluded = typeof companionSelection !== 'undefined' && companionSelection[trip.tripId] || [];
+  return excluded.indexOf(id) === -1;
+}
+
 function scopedTripForRender(trip) {
-  if (!trip || itemScopeFor(trip) !== 'mine') return trip;
-  var mine = myParticipantIds(trip);
-  if (!mine.length) return trip; // No identity -- nothing sensible to filter by.
-  // An item with NO tags stays visible to everyone. Otherwise an item
-  // nobody thought to tag would vanish for every person using the lens,
-  // which is how a booking gets forgotten.
-  var isMine = function (item) {
+  if (!trip) return trip;
+  var mine = itemScopeFor(trip) === 'mine' ? myParticipantIds(trip) : null;
+  var excluded = typeof companionSelection !== 'undefined' && companionSelection[trip.tripId] || [];
+  if ((!mine || !mine.length) && !excluded.length) return trip;
+  var visible = function (item) {
     var tags = (item && item.companions) || [];
     if (!tags.length) return true;
-    return mine.some(function (id) { return tags.indexOf(id) !== -1; });
+    return tags.some(function (id) {
+      return (!mine || !mine.length || mine.indexOf(id) !== -1) && excluded.indexOf(id) === -1;
+    });
   };
   return Object.assign({}, trip, {
-    destinations: (trip.destinations || []).filter(isMine),
-    activities: (trip.activities || []).filter(isMine),
-    accommodation: (trip.accommodation || []).filter(isMine),
-    transport: (trip.transport || []).filter(isMine)
+    destinations: (trip.destinations || []).filter(visible),
+    activities: (trip.activities || []).filter(visible),
+    accommodation: (trip.accommodation || []).filter(visible),
+    transport: (trip.transport || []).filter(visible)
   });
 }
 
@@ -271,7 +275,7 @@ function scopedTripForRender(trip) {
 // up removes the question of which copy the caller happened to hold.
 function itemScopeHiddenCount(trip) {
   var live = trip && byId(state.trips, trip.tripId, 'tripId');
-  if (!live || itemScopeFor(live) !== 'mine') return 0;
+  if (!live) return 0;
   var shown = scopedTripForRender(live);
   if (shown === live) return 0;
   return ['destinations', 'activities', 'accommodation', 'transport'].reduce(function (total, key) {
@@ -287,8 +291,8 @@ function itemScopeIndicatorHtml(trip) {
   var hidden = itemScopeHiddenCount(trip);
   if (!hidden) return '';
   return '<button class="status-badge is-scoped" data-action="set-item-scope" data-scope="everything" ' +
-    'title="Showing only items tagged to you — click to show everything">' +
-    icon('person') + ' Just my items <span class="scope-badge-count">' + hidden + ' hidden</span></button>';
+    'title="Some items are hidden by your people selection — click to show everything">' +
+    icon('person') + (itemScopeFor(trip) === 'mine' ? ' Just my items' : ' People filter') + ' <span class="scope-badge-count">' + hidden + ' hidden</span></button>';
 }
 
 function tripAccessBadgeHtml(trip) {

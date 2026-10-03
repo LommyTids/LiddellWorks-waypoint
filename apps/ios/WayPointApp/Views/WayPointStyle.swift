@@ -83,7 +83,7 @@ struct DraftNotice: View {
         Label {
             Text(isDemo
                  ? "Demo trip. Changes stay on this device."
-                 : "Staging trips. Save offline, then tap Sync now to send changes.")
+                 : "Save offline, then tap Sync now to send changes to your WayPoint account.")
                 .font(.footnote)
         } icon: {
             Image(systemName: "internaldrive")

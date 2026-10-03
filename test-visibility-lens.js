@@ -25,6 +25,7 @@ const ctx = {
   SUPERUSER_PARTICIPANT_ID,
   currentUser: null,
   itemScopePreference: {},
+  companionSelection: {},
   state: { trips: [] },
   byId: (list, id, field) => (list || []).find((x) => x[field] === id),
   icon: (n) => '<svg data-icon="' + n + '"></svg>'
@@ -57,7 +58,7 @@ function makeTrip(role, over) {
   return trip;
 }
 
-function reset() { ctx.itemScopePreference = {}; ctx.currentUser = null; }
+function reset() { ctx.itemScopePreference = {}; ctx.companionSelection = {}; ctx.currentUser = null; }
 
 /* ---- 1. the safety invariant -------------------------------------------- */
 
@@ -95,7 +96,7 @@ assert.strictEqual(JSON.stringify(trip), before, 'scopedTripForRender mutated th
 reset();
 ctx.currentUser = { id: 'acct-owner' };
 assert.strictEqual(ctx.defaultItemScope(makeTrip('superuser')), 'everything', 'The Trip Owner should start on "everything"');
-assert.strictEqual(ctx.defaultItemScope(makeTrip('admin')), 'mine', 'An Admin should start on "mine"');
+assert.strictEqual(ctx.defaultItemScope(makeTrip('admin')), 'everything', 'An Admin should start with everyone visible');
 assert.strictEqual(ctx.defaultItemScope(makeTrip('user')), 'everything', 'A scoped grant has nothing to narrow');
 
 // A scoped user/viewer is never offered the lens: the Worker already
@@ -117,8 +118,9 @@ trip = makeTrip('admin');
 // comparison despite identical contents.
 assert.strictEqual(ctx.myParticipantIds(trip).join(','), 'c-admin', 'An admin should resolve to their linked companion record');
 
+ctx.itemScopePreference.t1 = 'mine';
 let shown = ctx.scopedTripForRender(trip);
-assert.notStrictEqual(shown, trip, 'The default admin lens should have produced a filtered copy');
+assert.notStrictEqual(shown, trip, 'The explicit mine lens should have produced a filtered copy');
 const activityIds = shown.activities.map((a) => a.activityId);
 assert(activityIds.indexOf('a1') !== -1, 'An item tagged to me was dropped');
 assert(activityIds.indexOf('a2') === -1, 'An item tagged only to someone else survived the filter');
@@ -154,6 +156,7 @@ assert.strictEqual(shown.tripId, trip.tripId, 'tripId must survive');
 reset();
 ctx.currentUser = { id: 'acct-admin' };
 trip = makeTrip('admin');
+ctx.itemScopePreference.t1 = 'mine';
 // Hidden from the admin: d1 (tagged to the owner participant), a2 and h1
 // (tagged only to someone else). Visible: a1 and x1 (tagged to them) and
 // a3 (tagged to nobody).
@@ -198,5 +201,35 @@ assert(/\.status-badge\.is-scoped\s*\{[^}]*cursor:\s*pointer/.test(style), 'The 
 const settingsCopy = source.slice(source.indexOf('<h3>What you see</h3>'), source.indexOf('<h3>What you see</h3>') + 1200);
 assert(/does not change what anyone can open or edit/.test(settingsCopy),
   'The Settings copy no longer says the lens is a view filter rather than a permission');
+
+
+// Shared journeys use ANY selected participant; filtering never edits saved data.
+reset();
+ctx.currentUser = { id: 'acct-owner' };
+trip = makeTrip('superuser', {
+  transport: [
+    { transportId: 'AMS-HND', companions: ['tom', 'farrah'] },
+    { transportId: 'PEK-NRT', companions: ['jon', 'rachel'] },
+    { transportId: 'untagged', companions: [] }
+  ]
+});
+const unfilteredSource = JSON.stringify(trip);
+const flights = () => ctx.scopedTripForRender(trip).transport.map(x => x.transportId).join(',');
+assert.strictEqual(flights(), 'AMS-HND,PEK-NRT,untagged');
+ctx.companionSelection.t1 = ['tom'];
+assert.strictEqual(flights(), 'AMS-HND,PEK-NRT,untagged', 'Farrah must keep the shared flight visible');
+ctx.companionSelection.t1 = ['tom', 'farrah'];
+assert.strictEqual(flights(), 'PEK-NRT,untagged', 'Only the fully deselected flight should disappear');
+ctx.companionSelection.t1.push('jon');
+assert.strictEqual(flights(), 'PEK-NRT,untagged', 'Rachel must keep the second flight visible');
+ctx.companionSelection.t1.push('rachel');
+assert.strictEqual(flights(), 'untagged', 'Untagged records must remain visible');
+assert.strictEqual(ctx.companionIsSelected(trip, 'rachel'), false);
+assert.strictEqual(JSON.stringify(trip), unfilteredSource, 'People filtering must not mutate or delete records');
+assert.strictEqual(ctx.scopedTripForRender(trip).contacts, trip.contacts);
+ctx.companionSelection.t1 = [];
+assert.strictEqual(ctx.scopedTripForRender(trip), trip, 'Show all must restore the original render source');
+assert(/scheduleMapRefresh\(scopedTripForRender\(trip\)\)/.test(source), 'Changing dates must retain the companion filter');
+assert(/resetMapView\(scopedTripForRender\(trip\)\)/.test(source), 'Resetting map dates must retain the companion filter');
 
 console.log('visibility lens checks passed');
