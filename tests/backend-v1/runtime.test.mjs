@@ -85,4 +85,31 @@ test('Cloudflare runtime: production preview keeps credentials, reads imported D
  assert.equal((await call('logout',{},cookie)).status,200);
  assert.equal(await kv.get('users'),source.entries.users);await verifyData(db,source);
  const status=await (await call('migration-status')).json();assert.equal(status.storage,'d1');assert.equal(status.writesPaused,true);
+ await db.prepare("UPDATE rehearsal_control SET state='active' WHERE id=1").run();
+ assert.equal((await call('v1/sync/mutations',{},cookie)).status,503);
+ assert.equal((await (await call('v1/sync/capabilities',null,cookie)).json()).productionReady,false);
+});
+
+test('Cloudflare runtime: unpause alone cannot activate, authorized editing writes only D1 trip data',async t=>{
+ const {pbkdf2Sync}=await import('node:crypto');
+ const bundle=await build({entryPoints:['src/router.js'],bundle:true,format:'esm',platform:'browser',write:false});
+ const salt='00'.repeat(16),password='active-password';
+ const user={id:'owner',username:'owner',passwordSalt:salt,passwordHash:pbkdf2Sync(password,Buffer.from(salt,'hex'),100000,32,'sha256').toString('hex')};
+ const source={format:'waypoint-kv-export-v1',entries:{users:JSON.stringify({users:[user]}),users_initialized:'1',trip_index:JSON.stringify({trips:[{tripId:'real-trip',ownerId:'owner',grants:[]}]}),'trip:real-trip':JSON.stringify({name:'Preserved trip',activities:[{activityId:'a1',title:'Preserved activity',companions:[]}]})}};
+ const plan=buildImport(source);
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-08-27',d1Databases:['WAYPOINT_DB'],kvNamespaces:['WAYPOINT_KV'],bindings:{WAYPOINT_ENV:'production',WAYPOINT_WRITES_PAUSED:'false',WAYPOINT_SOURCE_HASH:plan.sourceHash,WAYPOINT_FREEZE_ID:'active-freeze',WAYPOINT_SESSION_SECRET:'existing-secret'}}));
+ t.after(()=>mf.dispose());const db=await mf.getD1Database('WAYPOINT_DB'),kv=await mf.getKVNamespace('WAYPOINT_KV');
+ await initializeRehearsal(db);await importPlan(db,plan);await completeRehearsal(db,plan);for(const [k,v] of Object.entries(source.entries))await kv.put(k,v);
+ const call=(path,body,cookie)=>mf.dispatchFetch('https://production.test/WayPoint/api/'+path,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
+ const blocked=await call('login',{username:'owner',password});assert.equal(blocked.status,503);assert.equal((await blocked.json()).error.code,'editing_not_authorized');
+ await db.prepare("UPDATE rehearsal_control SET state='active' WHERE id=1").run();
+ const login=await call('login',{username:'owner',password});assert.equal(login.status,200);const cookie=login.headers.get('set-cookie').split(';')[0];
+ const caps=await (await call('v1/sync/capabilities',null,cookie)).json();assert.equal(caps.productionReady,true);assert.equal(caps.writesPaused,false);
+ const mutation={mutationId:'active-edit-1',tripId:'real-trip',kind:'activity',recordId:'a1',operation:'update',baseRevision:1,data:{title:'Edited in production'}};
+ const body={protocolVersion:1,mutations:[mutation]};
+ const edit=await (await call('v1/sync/mutations',body,cookie)).json();assert.equal(edit.results[0].status,'applied');
+ const duplicate=await (await call('v1/sync/mutations',body,cookie)).json();assert.equal(duplicate.results[0].duplicate,true);
+ const read=await (await call('v1/sync/bootstrap',null,cookie)).json();assert(read.entities.some(e=>e.data.title==='Edited in production'&&e.revision===2));
+ assert.equal((await call('data',{trips:[]},cookie)).status,404);assert.equal(await kv.get('trip_index'),source.entries.trip_index);assert.equal(await kv.get('trip:real-trip'),source.entries['trip:real-trip']);
+ const conflict=await (await call('v1/sync/mutations',{protocolVersion:1,mutations:[{...mutation,mutationId:'active-conflict-2'}]},cookie)).json();assert.equal(conflict.results[0].status,'conflict');
 });

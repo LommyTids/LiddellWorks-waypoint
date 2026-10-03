@@ -1,0 +1,45 @@
+name: Authorize production D1 editing
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AUTHORIZE D1 EDITING (saving remains paused until you explicitly unpause the Worker)'
+        required: true
+        type: string
+      real_trips_reviewed:
+        description: 'I signed in and reviewed the real trips in the live read-only D1 preview'
+        required: true
+        default: false
+        type: boolean
+      other_writers_paused:
+        description: 'Legacy KV trip writers and other deployments remain stopped'
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: waypoint-migration-rehearsal
+  cancel-in-progress: false
+jobs:
+  authorize:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: waypoint-production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_KV_READ_TOKEN: ${{ secrets.CLOUDFLARE_KV_READ_TOKEN }}
+      EDITING_CONFIRMATION: ${{ inputs.confirmation }}
+      REAL_TRIPS_REVIEWED: ${{ inputs.real_trips_reviewed }}
+      OTHER_WRITERS_PAUSED: ${{ inputs.other_writers_paused }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:migration
+      - name: Reconcile unchanged candidate and authorize editing without releasing pause
+        run: node scripts/backend-v1/authorize-editing.mjs

@@ -92,4 +92,14 @@ test('production browser signs in to imported trips, shows pause and blocks edit
  const rejected=await page.evaluate(async()=>{const r=await fetch('/WayPoint/api/v1/sync/mutations',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});return r.status;});assert.equal(rejected,503);
  await page.reload();await page.waitForFunction(()=>stateIsTrustworthy&&state.trips[0]?.name==='Real imported trip');
  assert(!paths.includes('/WayPoint/api/data'));assert.deepEqual(errors,[]);assert.equal(await env.WAYPOINT_KV.get('users'),source.entries.users);await verifyData(db,source);
+ await db.prepare("UPDATE rehearsal_control SET state='active' WHERE id=1").run();env.WAYPOINT_WRITES_PAUSED='false';
+ await page.reload();await page.waitForFunction(()=>stateIsTrustworthy&&state.trips.length===1);
+ assert.equal(await page.getByText('Migration preview · Saving is paused',{exact:true}).count(),0);
+ await page.evaluate(()=>openActivityForm(state.trips[0],state.trips[0].activities[0]));
+ await page.locator('#entity-form [name="title"]').fill('Edited production activity');
+ await page.locator('#entity-form [name="startDate"]').fill('2026-10-03');await page.locator('#entity-form [name="endDate"]').fill('2026-10-03');
+ await page.locator('#entity-form button[type="submit"]').click();
+ await page.waitForFunction(()=>!saveInFlight&&stateIsTrustworthy&&state.trips[0]?.activities.some(a=>a.title==='Edited production activity'));
+ await page.reload();await page.waitForFunction(()=>stateIsTrustworthy&&state.trips[0]?.activities.some(a=>a.title==='Edited production activity'));
+ assert.equal(await env.WAYPOINT_KV.get('trip:real-trip'),source.entries['trip:real-trip']);assert(!paths.includes('/WayPoint/api/data'));assert.deepEqual(errors,[]);
 });

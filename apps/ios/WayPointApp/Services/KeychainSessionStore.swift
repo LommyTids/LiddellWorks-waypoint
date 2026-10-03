@@ -70,7 +70,7 @@ enum SessionStoreError: LocalizedError {
 final class KeychainSessionStore {
     // Endpoint identity is part of the key: a future environment must use its
     // own key, never reuse a production session on a different server.
-    private let service = "com.liddellworks.waypoint.session.d1-staging-v1"
+    private let service = "com.liddellworks.waypoint.session." + WayPointAPI.environmentID
     private let key = "wp_session.v1"
 
     init() {}

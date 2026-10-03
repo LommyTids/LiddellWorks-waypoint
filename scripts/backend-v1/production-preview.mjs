@@ -8,9 +8,9 @@ import {buildImport} from './plan-import.mjs';
 import {verifyData,verifyPermissions} from './import-rehearsal.mjs';
 import {readRetainedBackup} from './migration-backup.mjs';
 
-export async function verifyPreview({api,readApi,pins,fetcher}){
+export async function verifyPreview({api,readApi,pins,fetcher,checkPause,allowAuthorized=false}){
  check(api.account===pins.accountId,'account_mismatch');
- await assertPaused(pins.freezeId,fetcher);
+ await (checkPause?checkPause():assertPaused(pins.freezeId,fetcher));
  const snapshot=await exportSnapshot(readApi,pins.kvNamespaceId);
  check(buildImport(snapshot).sourceHash===pins.sourceHash,'source_hash_changed');
  const manifestKey='migration:'+pins.backupId+':manifest';
@@ -22,10 +22,10 @@ export async function verifyPreview({api,readApi,pins,fetcher}){
  const db=new RemoteD1(api,pins.databaseId);
  const marker=await db.prepare('SELECT source_hash FROM import_manifest WHERE id=1').first();
  const control=await db.prepare('SELECT source_hash,state FROM rehearsal_control WHERE id=1').first();
- check(marker?.source_hash===pins.sourceHash&&control?.source_hash===pins.sourceHash&&control.state==='verified','candidate_not_verified');
+ check(marker?.source_hash===pins.sourceHash&&control?.source_hash===pins.sourceHash&&(control.state==='verified'||(allowAuthorized&&control.state==='active')),'candidate_not_verified');
  const counts=await verifyData(db,snapshot),permissions=await verifyPermissions(db,snapshot);
  await verifySourceStable(readApi,pins.kvNamespaceId,snapshot);
- await assertPaused(pins.freezeId,fetcher);
+ await (checkPause?checkPause():assertPaused(pins.freezeId,fetcher));
  return {status:'preview_preflight_passed',databaseId:pins.databaseId,sourceHash:pins.sourceHash,counts,permissions,sourceWrites:0,destinationWrites:0,productionSwitch:false};
 }
 export function previewConfiguration(pins){

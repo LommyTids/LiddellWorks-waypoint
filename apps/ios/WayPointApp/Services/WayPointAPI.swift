@@ -14,7 +14,7 @@ enum APIError: LocalizedError {
         case .invalidResponse: return "WayPoint returned an unexpected response. Your local trips have not been replaced."
         case .server(let message): return message
         case .bootstrapRequired: return "Access or database history changed. WayPoint needs a fresh authorized snapshot."
-        case .protocolMismatch: return "This server does not support the staging sync protocol used by this app."
+        case .protocolMismatch: return "This server does not support the production sync protocol used by this app."
         }
     }
 }
@@ -32,12 +32,12 @@ private final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
     }
 }
 
-/// The staging D1 deployment is deliberately pinned. Production is still KV;
-/// its trip revisions must never be used for these record-level mutations.
+/// Production origin is pinned. Production sessions, snapshots and queued
+/// mutations are isolated from the previous staging environment.
 @MainActor
 final class WayPointAPI {
-    static let origin = "https://waypoint-backend-staging.tomhaliddell.workers.dev"
-    static let environmentID = "d1-staging-v1"
+    static let origin = "https://liddellworks.com"
+    static let environmentID = "d1-production-v1"
     private enum Endpoint: String {
         case login, whoami, logout
         case capabilities = "v1/sync/capabilities"
@@ -98,7 +98,7 @@ final class WayPointAPI {
     func capabilities(session: SavedSession) async throws -> D1Capabilities {
         let (data, _) = try await send(.capabilities, session: session)
         let result = try decoder.decode(D1Capabilities.self, from: data)
-        guard result.protocolVersion == 1, result.environment == "staging",
+        guard result.protocolVersion == 1, result.environment == "production", result.productionReady,
               result.recordRevisions, !result.legacyTripRevisionsAccepted,
               result.maxMutationBatch >= 1, result.maxPageSize >= 1 else {
             throw APIError.protocolMismatch
