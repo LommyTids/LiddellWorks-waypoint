@@ -222,7 +222,7 @@ private struct SettingsView: View {
             } header: {
                 Text("Offline storage & sync")
             } footer: {
-                Text(model.isDemo ? "Demo trips and changes stay on this device. Sign in to your staging account to try sync." : "Saved trips work offline. Changes are queued on this device and sent to the staging backend when you tap Sync now. Conflicts stay here until you review them.")
+                Text(model.isDemo ? "Demo trips and changes stay on this device. Sign in to your existing WayPoint account to try sync." : "Saved trips work offline. Changes are queued on this device and sent to WayPoint when you tap Sync now. Conflicts stay here until you review them.")
             }
             if let mutations = model.workspace?.mutations, !mutations.isEmpty {
                 Section("Pending changes") {
@@ -250,7 +250,7 @@ private struct SettingsView: View {
                 Text("Signing out keeps drafts on this device for your next sign-in to the same account.")
             }
             Section {
-                LabeledContent("WayPoint", value: "iOS staging preview")
+                LabeledContent("WayPoint", value: "iOS production sync")
             }
         }
         .navigationTitle("Settings")

@@ -80,3 +80,5 @@ review a rollback to the legacy Worker while keeping the source paused; verify
 live `storage: kv` before resuming any KV writer. Never resume KV while the live
 browser reports D1. After the later activation allows D1 edits, this original
 KV snapshot is stale and must not be used as an automatic rollback target.
+
+After successful review, follow [production activation](production-activation.md).

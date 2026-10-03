@@ -1,3 +1,5 @@
+> Production connection update: after [D1 activation](../../docs/backend-v1/production-activation.md), this app uses the production origin and a separate production session/cache/outbox. Sign in with your existing web account. Earlier staging instructions below describe the foundation stage.
+
 # WayPoint iOS — D1 staging project
 
 Native SwiftUI project for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync to the isolated Cloudflare D1 staging backend. Production still uses KV and is not changed by this app.

@@ -53,9 +53,9 @@ final class WayPointAPITests: XCTestCase {
         catch APIError.bootstrapRequired { }
     }
 
-    func testBootstrapCursorIsEncodedAndCredentialStaysOnStaging() async throws {
+    func testBootstrapCursorIsEncodedAndCredentialStaysOnProduction() async throws {
         let client = api(status: 200, body: "{\"protocolVersion\":1,\"entities\":[],\"complete\":true,\"nextCursor\":null,\"syncCursor\":\"signed_cursor\"}") { request in
-            XCTAssertEqual(request.url?.host, "waypoint-backend-staging.tomhaliddell.workers.dev")
+            XCTAssertEqual(request.url?.host, "liddellworks.com")
             XCTAssertEqual(request.url?.path, "/WayPoint/api/v1/sync/bootstrap")
             let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems
             XCTAssertEqual(items?.first(where: { $0.name == "cursor" })?.value, "a+b&cursor")
@@ -64,6 +64,20 @@ final class WayPointAPITests: XCTestCase {
         }
         let result = try await client.bootstrap(session: session(), cursor: "a+b&cursor")
         XCTAssertTrue(result.complete)
+    }
+
+    func testCapabilitiesAcceptOnlyReadyProduction() async throws {
+        for (environment, ready) in [("staging", true), ("production", false), ("production", true)] {
+            let body = "{\"protocolVersion\":1,\"environment\":\"\(environment)\",\"recordRevisions\":true,\"maxMutationBatch\":20,\"maxPageSize\":100,\"productionReady\":\(ready),\"legacyTripRevisionsAccepted\":false}"
+            let client = api(status: 200, body: body)
+            if environment == "production" && ready {
+                _ = try await client.capabilities(session: session())
+            } else {
+                do { _ = try await client.capabilities(session: session()); XCTFail("Expected protocol mismatch") }
+                catch APIError.protocolMismatch { }
+            }
+        }
+        XCTAssertEqual(WayPointAPI.environmentID, "d1-production-v1")
     }
 
     func testHTTP200MutationConflictRemainsAResult() async throws {

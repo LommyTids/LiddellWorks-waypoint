@@ -176,7 +176,7 @@ struct RecordEditorView: View {
                     Button("Delete item", role: .destructive) { confirmDelete = true }
                         .disabled(model.isBusy)
                 } footer: {
-                    Text(model.isDemo ? "This deletion stays in your local demo." : "The deletion is saved offline and sent to the staging backend on your next sync.")
+                    Text(model.isDemo ? "This deletion stays in your local demo." : "The deletion is saved offline and sent to WayPoint on your next sync.")
                 }
             }
         }

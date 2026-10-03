@@ -148,3 +148,20 @@ test('production browser uses D1 adapter and never exposes the dummy-trip setup 
  for(const path of ['/WayPoint/setup','/WayPoint/staging.js','/WayPoint/api/data'])assert.equal((await sync.fetch(new Request('https://test'+path),env,{})).status,404);
  const unpaused=await sync.fetch(new Request('https://test/WayPoint/'),{...env,WAYPOINT_WRITES_PAUSED:'false'},{});assert.equal(unpaused.status,503);
 });
+
+test('editing authorization requires live paused D1 code, reconciles before marker update and leaves pause intact',async t=>{
+ const {authorizeEditing}=await import('../../scripts/backend-v1/authorize-editing.mjs');
+ const f=fakeCloudflare(t),prepared=await prepareProduction(f.options);
+ const pins={accountId:f.api.account,kvNamespaceId:SOURCE,databaseId:DEST,databaseName:prepared.databaseName,sourceHash:prepared.sourceHash,freezeId,backupNamespaceId:BACKUP,backupId:prepared.backup.backupId,encryptedSha256:prepared.backup.encryptedSha256,keyFingerprint:prepared.backup.keyFingerprint};
+ const api={account:f.api.account,request:(path,options)=>path==='/d1/database/'+DEST?Promise.resolve({result:{uuid:DEST,name:prepared.databaseName}}):f.api.request(path,options)};
+ let supported=false,paused=true;
+ const fetcher=async()=>new Response(JSON.stringify({storage:'d1',writesPaused:paused,sourceHash:pins.sourceHash,freezeId,activationSupported:supported,editingAuthorized:(await f.db.prepare('SELECT state FROM rehearsal_control WHERE id=1').first()).state==='active'}));
+ await assert.rejects(authorizeEditing({api,readApi:api,pins,fetcher}),e=>e.code==='activation_code_not_deployed');
+ assert.equal((await f.db.prepare('SELECT state FROM rehearsal_control WHERE id=1').first()).state,'verified');
+ supported=true;const result=await authorizeEditing({api,readApi:api,pins,fetcher});assert.equal(result.status,'editing_authorized');assert.equal(result.writesPaused,true);assert.equal(result.sourceWrites,0);
+ assert.equal((await f.db.prepare('SELECT state FROM rehearsal_control WHERE id=1').first()).state,'active');
+ assert.equal((await authorizeEditing({api,readApi:api,pins,fetcher})).status,'editing_authorized');
+ paused=false;await assert.rejects(authorizeEditing({api,readApi:api,pins,fetcher}),e=>e.code==='preview_not_paused');
+ paused=true;await f.db.prepare('UPDATE records SET revision=2').run();await assert.rejects(authorizeEditing({api,readApi:api,pins,fetcher}),e=>e.code==='verification_records_mismatch');
+ assert(!f.calls.some(c=>c.path.includes('/workers/')));
+});
