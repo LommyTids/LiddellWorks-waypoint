@@ -72,7 +72,7 @@ test('production browser signs in to imported trips, shows pause and blocks edit
  const {initializeRehearsal,importPlan,completeRehearsal,verifyData}=await import('../../scripts/backend-v1/import-rehearsal.mjs');
  const salt='00'.repeat(16),password='browser-preview-password';
  const user={id:'owner',username:'owner',passwordSalt:salt,passwordHash:pbkdf2Sync(password,Buffer.from(salt,'hex'),100000,32,'sha256').toString('hex')};
- const source={format:'waypoint-kv-export-v1',entries:{users:JSON.stringify({users:[user]}),users_initialized:'1',trip_index:JSON.stringify({trips:[{tripId:'real-trip',ownerId:'owner',grants:[]}]}),'trip:real-trip':JSON.stringify({name:'Real imported trip',activities:[{activityId:'a1',title:'Preserved activity',companions:[]}]})}};
+ const source={format:'waypoint-kv-export-v1',entries:{users:JSON.stringify({users:[user]}),users_initialized:'1',trip_index:JSON.stringify({trips:[{tripId:'real-trip',ownerId:'owner',grants:[]}]}),'trip:real-trip':JSON.stringify({name:'Real imported trip',startDate:'2026-10-01',endDate:'2026-10-03',companions:[{companionId:'tom',name:'Tom'},{companionId:'farrah',name:'Farrah'},{companionId:'jon',name:'Jon'},{companionId:'rachel',name:'Rachel'}],transport:[{transportId:'ams-hnd',mode:'Flight',flightNumber:'AMS-HND',fromLocation:'AMS',toLocation:'HND',departDateTime:'2026-10-01T10:00',arriveDateTime:'2026-10-01T15:00',companions:['tom','farrah']},{transportId:'pek-nrt',mode:'Flight',flightNumber:'PEK-NRT',fromLocation:'PEK',toLocation:'NRT',departDateTime:'2026-10-01T10:00',arriveDateTime:'2026-10-01T15:00',companions:['jon','rachel']}],activities:[{activityId:'a1',title:'Preserved activity',companions:[]}]})}};
  const plan=buildImport(source),db=new LocalD1();t.after(()=>db.close());
  await initializeRehearsal(db);await importPlan(db,plan);await completeRehearsal(db,plan);
  const env={WAYPOINT_ENV:'production',WAYPOINT_WRITES_PAUSED:'true',WAYPOINT_SOURCE_HASH:plan.sourceHash,WAYPOINT_FREEZE_ID:'browser-freeze',WAYPOINT_SESSION_SECRET:'existing-secret',WAYPOINT_DB:db,WAYPOINT_KV:new MemoryKV(source.entries),ASSETS:{async fetch(request){
@@ -89,6 +89,24 @@ test('production browser signs in to imported trips, shows pause and blocks edit
  await page.locator('#login-form [name="username"]').fill('owner');await page.locator('#login-form [name="password"]').fill(password);await page.getByRole('button',{name:'Log in',exact:true}).click();
  await page.waitForFunction(()=>stateIsTrustworthy&&state.trips[0]?.activities.some(a=>a.title==='Preserved activity'));
  await page.getByText('Migration preview · Saving is paused',{exact:true}).waitFor();
+ await page.locator('[data-action="open-trip"]').click();
+ const people=page.locator('.desktop-trip-nav .companion-filter');
+ assert.equal(await people.count(),5,'Four companions plus the virtual owner should have circles');
+ assert.equal(await people.locator('.avatar-marker').count(),5,'Missing custom avatars still need a circle');
+ const visibleJourneys=()=>page.evaluate(()=>{
+  const trip=scopedTripForRender(currentTrip());
+  return {map:mapLegsForTrip(trip).map(l=>l.item.transportId),timeline:renderTimelineTab(trip)};
+ });
+ let journeys=await visibleJourneys();assert.deepEqual(journeys.map,['ams-hnd','pek-nrt']);assert(journeys.timeline.includes('AMS-HND'));assert(journeys.timeline.includes('PEK-NRT'));
+ await people.filter({hasText:'Tom'}).click();
+ journeys=await visibleJourneys();assert.deepEqual(journeys.map,['ams-hnd','pek-nrt']);
+ await people.filter({hasText:'Farrah'}).click();
+ journeys=await visibleJourneys();assert.deepEqual(journeys.map,['pek-nrt']);assert(!journeys.timeline.includes('AMS-HND'));assert(journeys.timeline.includes('PEK-NRT'));
+ assert.equal(await people.filter({hasText:'Farrah'}).getAttribute('aria-pressed'),'false');
+ await page.locator('.desktop-trip-nav [data-action="show-all-people"]').click();
+ assert.deepEqual((await visibleJourneys()).map,['ams-hnd','pek-nrt']);
+ assert.equal(await page.locator('.desktop-trip-nav .tab-group').filter({has:page.locator('.tab-group-label',{hasText:'Manage'})}).getByRole('button',{name:'Contacts',exact:true}).count(),1);
+
  const rejected=await page.evaluate(async()=>{const r=await fetch('/WayPoint/api/v1/sync/mutations',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});return r.status;});assert.equal(rejected,503);
  await page.reload();await page.waitForFunction(()=>stateIsTrustworthy&&state.trips[0]?.name==='Real imported trip');
  assert(!paths.includes('/WayPoint/api/data'));assert.deepEqual(errors,[]);assert.equal(await env.WAYPOINT_KV.get('users'),source.entries.users);await verifyData(db,source);

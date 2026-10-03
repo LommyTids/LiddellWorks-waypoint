@@ -66,4 +66,15 @@ assert(/\.leaflet-popup-content\.leaflet-popup-scrolled::after\s*\{[^}]*position
 assert(/\.leaflet-popup-content\.leaflet-popup-scrolled::after\s*\{[^}]*linear-gradient/.test(mapStyle),
   'The scroll cue is not a fade');
 
+
+// Render both handles on the final day, the previously overlapping case.
+const controlsStart = html.indexOf('function mapRangeControlsHtml');
+const controlsEnd = html.indexOf('function mapFiltersHtml', controlsStart);
+const days = ['2026-10-01', '2026-10-02', '2026-10-03'];
+const renderControls = new Function('ensureMapRange', 'mapState', 'esc', 'mapRangeDateLabel', 'mapRangeDayCount', 'mapViewIsDefault', 'icon', 'formatDateHeading', html.slice(controlsStart, controlsEnd) + ';return mapRangeControlsHtml({});');
+const controls = renderControls(() => days, {rangeStart: days[2], rangeEnd: days[2]}, x => x, x => x, () => 1, () => false, () => '', x => x);
+assert(controls.includes('handles-overlap'), 'Final-day handles must use separate rows');
+assert.strictEqual((controls.match(/value="2"/g) || []).length, 2, 'Both handles should still point to the final day');
+assert(controls.includes('data-action="map-show-all"'), 'The collapsed range needs Show all');
+assert(/\.handles-overlap \.map-range-input\[data-map-range-handle="end"\]\s*\{\s*top: 44px/.test(mapStyle), 'The ending handle must be offset below the start');
 console.log('map range and route-arc regression checks passed');

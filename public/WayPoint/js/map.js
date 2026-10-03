@@ -185,9 +185,9 @@ function mapRangeControlsHtml(trip) {
     '<div class="map-range-summary">' +
       '<strong data-map-range-summary>' + esc(mapRangeDateLabel(mapState.rangeStart)) + ' — ' + esc(mapRangeDateLabel(mapState.rangeEnd)) + '</strong>' +
       '<span class="map-range-summary-actions"><span class="map-range-days" data-map-range-days>' + mapRangeDayCount(trip) + ' day' + (mapRangeDayCount(trip) === 1 ? '' : 's') + '</span>' +
-      '<button type="button" class="btn btn-ghost map-reset" data-action="reset-map-view"' + (mapViewIsDefault(trip) ? ' disabled' : '') + '>' + icon('reset') + ' Reset</button></span>' +
+      '<button type="button" class="btn btn-ghost" data-action="map-show-all" title="Show every trip date and all map layers">Show all</button><button type="button" class="btn btn-ghost map-reset" data-action="reset-map-view"' + (mapViewIsDefault(trip) ? ' disabled' : '') + '>' + icon('reset') + ' Reset</button></span>' +
     '</div>' +
-    '<div class="map-range-slider' + (endPercent - startPercent < 20 ? ' labels-overlap' : '') + '" data-map-range-slider style="--range-start:' + startPercent + '%;--range-end:' + endPercent + '%" aria-label="Map date range">' +
+    '<div class="map-range-slider' + (endPercent - startPercent < 20 ? ' labels-overlap handles-overlap' : '') + '" data-map-range-slider style="--range-start:' + startPercent + '%;--range-end:' + endPercent + '%" aria-label="Map date range">' +
       '<div class="map-range-rail"></div><div class="map-range-fill"></div>' +
       '<input class="map-range-input" data-map-range-handle="start" type="range" min="0" max="' + max + '" step="1" value="' + startIndex + '" aria-label="Map range start: ' + esc(formatDateHeading(mapState.rangeStart)) + '">' +
       '<input class="map-range-input" data-map-range-handle="end" type="range" min="0" max="' + max + '" step="1" value="' + endIndex + '" aria-label="Map range end: ' + esc(formatDateHeading(mapState.rangeEnd)) + '">' +
@@ -617,6 +617,7 @@ function updateMapRangeUi(trip) {
     slider.style.setProperty('--range-start', startPercent + '%');
     slider.style.setProperty('--range-end', endPercent + '%');
     slider.classList.toggle('labels-overlap', endPercent - startPercent < 20);
+    slider.classList.toggle('handles-overlap', endPercent - startPercent < 20);
     var startInput = slider.querySelector('[data-map-range-handle="start"]');
     var endInput = slider.querySelector('[data-map-range-handle="end"]');
     if (startInput) { startInput.value = startIndex; startInput.setAttribute('aria-label', 'Map range start: ' + formatDateHeading(mapState.rangeStart)); }

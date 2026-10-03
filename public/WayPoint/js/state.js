@@ -25,6 +25,8 @@ var timelineDayExpansion = {};
 // starts empty and only ever holds a deliberate choice --
 // see itemScopeFor() and scopedTripForRender() by the permission helpers.
 var itemScopePreference = {};
+// Local display selection only; never included in trip saves. Missing ids are selected.
+var companionSelection = {};
 // Connection, loading and save feedback are separate axes. Keeping them
 // separate prevents a successful historic load from being mistaken for an
 // editable online session after the browser later loses its connection.

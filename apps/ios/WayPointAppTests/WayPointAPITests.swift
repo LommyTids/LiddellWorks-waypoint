@@ -31,6 +31,8 @@ final class WayPointAPITests: XCTestCase {
                          body: "{\"status\":\"ok\",\"id\":\"test_account\",\"username\":\"Tester\"}",
                          headers: ["Set-Cookie": "wp_session=\(cookie); Path=/WayPoint; Secure; HttpOnly; SameSite=Lax; Max-Age=604800"]) { request in
             XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.scheme, "https")
+            XCTAssertEqual(request.url?.host, "liddellworks.com")
             XCTAssertEqual(request.url?.path, "/WayPoint/api/login")
             XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
         }

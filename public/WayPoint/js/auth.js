@@ -140,6 +140,7 @@ async function doLogout() {
     // every real data endpoint re-checks the session regardless.
   }
   state = { trips: [] };
+  companionSelection = {};
   currentView = 'dashboard'; currentTripId = null; currentTab = 'timeline';
   clearSavedNav();
   // Re-run checkAuth() (not just currentUser = null) so setupNeeded

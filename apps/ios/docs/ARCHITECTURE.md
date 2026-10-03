@@ -1,6 +1,6 @@
-# Native staging architecture
+# Native production architecture
 
-Cloudflare D1 is the canonical trip-data store for the isolated staging deployment. The production website still uses KV. iOS talks to the versioned D1 API through a staging-only HTTP client and uses a local account-isolated cache and durable outbox. CloudKit is disabled. Android can implement the same server protocol later.
+Cloudflare D1 is the canonical trip-data store shared by the production website and iOS. iOS talks to the versioned D1 API at https://liddellworks.com through a production-only HTTP client and uses a local account-isolated cache and durable outbox. Credentials remain in the existing KV account store. CloudKit is disabled. Android can implement the same server protocol later.
 
 The app retains the original legacy model/decoder and SwiftData workspace for demo and compatibility. D1 state has a separate versioned, environment/account-isolated durable store. Legacy drafts are never automatically uploaded with their whole-trip base revisions. They remain in the legacy store.
 
@@ -8,8 +8,8 @@ The pure core reducer handles entity identity, record revisions, authorized snap
 
 Bootstrap is collected in temporary memory and published only when complete. Permission/history invalidation clears the authorized view and requires another bootstrap. Incremental entity application and cursor advancement persist together. Submitted requests retain their original IDs and bodies across ambiguous transport failures. Conflict resolution requires a deliberate user action and a new mutation identity.
 
-Authentication uses the server's signed host-only HttpOnly cookie, not bearer tokens. Keychain uses a staging-specific service and device-only accessibility. Request redirects, shared cookies and shared response caches are disabled. Session claims are local shape/expiry checks only; permissions come from the server.
+Authentication uses the server's signed host-only HttpOnly cookie, not bearer tokens. Keychain uses a production-specific service and device-only accessibility. Staging sessions, snapshots and queued edits are retained in separate namespaces and never replayed to production. Request redirects, shared cookies and shared response caches are disabled. Session claims are local shape/expiry checks only; permissions come from the server.
 
 MapKit is display/discovery, not record identity or sync storage. Venue text and address/pin coordinates are distinct. Travel values stay local wall-clock/date-only strings; they are not silently converted to UTC. Imported fields outside the editor are retained, and server patches use supported field names.
 
-Offline account/session revocation cannot be observed until the device reconnects. A connected permission reset must hide the stale authorized cache before obtaining another snapshot. Background sync, offline basemap coverage, photos and production migration are outside this milestone.
+Offline account/session revocation cannot be observed until the device reconnects. A connected permission reset must hide the stale authorized cache before obtaining another snapshot. Background sync, offline basemap coverage, photos and running production migration workflows are outside this milestone.

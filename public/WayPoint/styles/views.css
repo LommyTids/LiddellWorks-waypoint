@@ -509,3 +509,10 @@ tr:last-child td { border-bottom: none; }
   .mobile-destination-btn.active .icon { color: var(--wp-action-accent); }
 }
 
+
+.companion-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 8px; }
+.companion-filter { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 48px; min-height: 48px; border: 0; border-radius: 8px; background: transparent; color: var(--wp-text-secondary); cursor: pointer; font: var(--wp-type-meta); }
+.companion-filter .avatar-marker { width: 36px; height: 36px; border: 2px solid transparent; }
+.companion-filter.is-selected .avatar-marker { outline: 2px solid var(--wp-action-accent); outline-offset: 2px; }
+.companion-filter:not(.is-selected) .avatar-marker { opacity: .35; filter: grayscale(1); }
+.companion-filter-note { color: var(--wp-text-secondary); font: var(--wp-type-meta); }

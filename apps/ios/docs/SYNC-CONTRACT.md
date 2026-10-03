@@ -1,8 +1,8 @@
-# Implemented staging v1 integration
+# Implemented production v1 integration
 
-Authoritative backend: `LommyTids/LiddellWorks-waypoint`, inspected foundation through main merge `f56b8c7` (PR #32). Read its `docs/backend-v1/README.md`, `src/backend-v1/protocol.js`, `store.js`, `worker.js` and tests when changing this client.
+Authoritative backend: `LommyTids/LiddellWorks-waypoint`, production connection introduced in PR #39. Read its `docs/backend-v1/README.md`, `src/backend-v1/protocol.js`, `store.js`, `worker.js` and tests when changing this client.
 
-Origin: https://waypoint-backend-staging.tomhaliddell.workers.dev. Authentication routes use `/WayPoint/api`; sync routes use `/WayPoint/api/v1`. Production is deliberately not selected.
+Origin: https://liddellworks.com. Authentication routes use `/WayPoint/api`; sync routes use `/WayPoint/api/v1`. Capabilities must report the production environment and `productionReady: true`.
 
 Bootstrap returns paginated entities, `complete`, `nextCursor`, and final `syncCursor`. Changes return entities, `hasMore`, and cursor. Cursors are opaque and account/dataset/permission-bound. On `bootstrap_required`, invalidate authorized state before replacing it with a complete snapshot. Do not replay old drafts without current authorization.
 
@@ -10,4 +10,4 @@ Mutations are create/update/delete, with client UUID, tripId, kind, recordId and
 
 Server supports trip plus destination/activity/transport/accommodation/companion/contact/expense entities. UI primarily edits the four itinerary categories while keeping the other authorized entities. The server enforces roles and field allowlists; no client can grant itself permission.
 
-The old LocalWorkspace queue is a legacy/demo model, not a v1 request encoder. The D1 workspace/outbox owns live staging mutations. Existing legacy drafts must be manually reviewed/migrated, never uploaded with whole-trip revisions.
+The old LocalWorkspace queue is a legacy/demo model, not a v1 request encoder. The D1 workspace/outbox owns live production mutations. Existing legacy drafts must be manually reviewed/migrated, never uploaded with whole-trip revisions.

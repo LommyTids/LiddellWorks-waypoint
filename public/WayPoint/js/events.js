@@ -65,9 +65,24 @@ document.addEventListener('click', function (e) {
   // The viewing lens (Settings > What you see, the header chip, and the
   // way out offered by an emptied tab). Purely a redraw: nothing is sent
   // to the server, and nobody else's view of this trip changes.
+  if ((action === 'toggle-companion-filter' || action === 'show-all-people') && trip) {
+    var excluded = (companionSelection[trip.tripId] || []).slice();
+    var id = el.dataset.id;
+    if (action === 'show-all-people') excluded = [];
+    else if (taggablePersonById(trip, id)) {
+      var index = excluded.indexOf(id);
+      if (index === -1) excluded.push(id); else excluded.splice(index, 1);
+    }
+    companionSelection[trip.tripId] = excluded;
+    itemScopePreference[trip.tripId] = 'everything';
+    pendingRenderFocus = (el.closest('.mobile-trip-shell') ? '.mobile-trip-shell ' : '.desktop-trip-nav ') + '[data-action="' + action + '"]' + (id ? '[data-id="' + CSS.escape(id) + '"]' : '');
+    render();
+    return;
+  }
   if (action === 'set-item-scope') {
     if (!trip) return;
     itemScopePreference[trip.tripId] = el.dataset.scope === 'mine' ? 'mine' : 'everything';
+    if (el.dataset.scope !== 'mine') companionSelection[trip.tripId] = [];
     saveNavigationState();
     render();
     return;
@@ -153,7 +168,8 @@ document.addEventListener('click', function (e) {
     updateMapRangeUi(trip);
     return;
   }
-  if (action === 'reset-map-view' && trip) { resetMapView(trip); return; }
+  if (action === 'reset-map-view' && trip) { resetMapView(scopedTripForRender(trip)); return; }
+  if (action === 'map-show-all' && trip) { resetMapView(scopedTripForRender(trip)); return; }
   if (action === 'map-fit-selection') { fitMapToSelection(); return; }
   if (action === 'map-toggle-fullscreen') {
     var mapShell = document.getElementById('map-shell');
@@ -338,7 +354,7 @@ document.addEventListener('input', function (e) {
   if (handle === 'start') mapState.rangeStart = days[Math.min(value, endIndex)];
   else mapState.rangeEnd = days[Math.max(value, startIndex)];
   updateMapRangeUi(trip);
-  scheduleMapRefresh(trip);
+  scheduleMapRefresh(scopedTripForRender(trip));
 });
 
 document.addEventListener('fullscreenchange', function () {
