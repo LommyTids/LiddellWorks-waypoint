@@ -46,6 +46,10 @@ WAYPOINT_TEST_DESTINATION='platform=iOS Simulator,name=YOUR EXACT SIMULATOR NAME
 
 The shared scheme includes the app-hosted service tests. Core tests also run independently with `swift test`. This project has no third-party Swift dependencies. GitHub macOS CI builds the simulator app and runs the tests; device signing and authenticated live sync also need an actual Mac/device check.
 
+## App icon
+
+The selected W-shaped travel route is installed in `WayPointApp/Assets.xcassets/AppIcon.appiconset`. Its opaque 1024×1024 master supplies the iPhone/iPad icon through the iOS asset catalog; the system applies the rounded corner mask. The project generator includes the catalog and selects `AppIcon`, so regeneration preserves it.
+
 ## Source layout
 
 - `Sources/WayPointCore`: legacy-compatible models/demo plus D1 protocol, reducer and outbox.
