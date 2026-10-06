@@ -88,7 +88,7 @@ async function startup(loggedIn) {
   }
   deferred.forEach(execute);
   await Promise.all(pending);
-  assert(elements.get('brand-icon').innerHTML.includes('<svg'), 'Brand icon did not initialize');
+  assert(elements.get('brand-icon').innerHTML.includes('branding/app-icon.png'), 'Brand logo did not initialize');
   assert(listeners.has('click') && listeners.has('submit') && listeners.has('online'), 'Event handlers did not initialize');
   assert.equal(typeof context.render, 'function');
   assert.equal(typeof context.initMap, 'function');

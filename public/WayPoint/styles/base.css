@@ -184,11 +184,23 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
+  position: relative;
+  isolation: isolate;
   background: var(--wp-bg-canvas);
   color: var(--wp-text-primary);
   font: var(--wp-type-body);
   -webkit-font-smoothing: antialiased;
 }
+body::before {
+  content: "";
+  position: fixed;
+  inset: 12vh -8vw 0;
+  background: url('/WayPoint/branding/waypoint-mark.png') center / min(85vw, 1000px) auto no-repeat;
+  opacity: .06;
+  pointer-events: none;
+  z-index: -1;
+}
+.brand-logo { display: block; width: 32px; height: 32px; border-radius: 7px; }
 h1 { font: var(--wp-type-display); }
 h2, h3, h4 { font: var(--wp-type-heading); }
 h1, h2, h3, h4 { margin: 0; text-wrap: balance; }
@@ -355,4 +367,3 @@ input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-si
 .auth-error { background: var(--wp-state-danger-subtle); color: var(--wp-state-danger); border-radius: var(--radius-sm); padding: 8px 10px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); margin-bottom: 14px; }
 
 .page { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
-

@@ -48,7 +48,7 @@ export default {
         const html=(await asset.text()).replace('<title>Waypoint</title>',production?'<title>Waypoint</title>':'<title>Waypoint · D1 staging</title>').replace('<body>', banner).replace('<script src="/WayPoint/js/boot.js"></script>','<script src="/WayPoint/d1-schema.js"></script><script src="/WayPoint/staging/d1-client.js"></script><script src="/WayPoint/js/boot.js"></script>');
         return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY'}});
       }
-      if(request.method==='GET' && /^\/WayPoint\/(js|styles|data|vendor|ui|staging)\//.test(url.pathname) && env.ASSETS) return env.ASSETS.fetch(request);
+      if(request.method==='GET' && /^\/WayPoint\/(js|styles|data|vendor|ui|staging|branding)\//.test(url.pathname) && env.ASSETS) return env.ASSETS.fetch(request);
       if (!production && request.method==='GET' && ['/', '/WayPoint', '/WayPoint/', '/WayPoint/setup'].includes(url.pathname)) return setupResponse();
       if (!production && request.method==='GET' && url.pathname==='/WayPoint/staging.js') return setupResponse(true);
       if (AUTH_PATHS.has(url.pathname)) {

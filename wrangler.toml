@@ -8,7 +8,7 @@
 #
 # What each section below does, briefly:
 #   name / main            -> identifies this Worker and its entry-point code
-#   routes                 -> *this* is what makes liddellworks.com/WayPoint*
+#   routes                 -> serves liddellworks.com/waypoint* and old links
 #                              reach this Worker, without touching any other
 #                              route/Worker already serving the rest of the site
 #   [assets]                -> serves the static app (public/WayPoint/index.html)
@@ -23,12 +23,13 @@ name = "waypoint-app"
 main = "src/router.js"
 compatibility_date = "2026-08-27"
 
-# Only requests matching this exact pattern are sent to this Worker. Any
+# Only requests matching these app patterns are sent to this Worker. Any
 # other path on liddellworks.com (e.g. "/", "/blog", etc.) is untouched and
 # keeps going to whatever already serves it — this route is intentionally
 # scoped as narrowly as possible so adding Waypoint can't break anything
 # else on the site.
 routes = [
+  { pattern = "liddellworks.com/waypoint*", zone_name = "liddellworks.com" },
   { pattern = "liddellworks.com/WayPoint*", zone_name = "liddellworks.com" }
 ]
 

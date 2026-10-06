@@ -30,7 +30,7 @@ export async function verifyPreview({api,readApi,pins,fetcher,checkPause,allowAu
 }
 export function previewConfiguration(pins){
  return {name:'waypoint-app',account_id:pins.accountId,main:'src/router.js',compatibility_date:'2026-08-27',keep_vars:true,
- routes:[{pattern:'liddellworks.com/WayPoint*',zone_name:'liddellworks.com'}],
+ routes:[{pattern:'liddellworks.com/waypoint*',zone_name:'liddellworks.com'},{pattern:'liddellworks.com/WayPoint*',zone_name:'liddellworks.com'}],
  assets:{directory:'./public',binding:'ASSETS',run_worker_first:true,html_handling:'auto-trailing-slash'},
  vars:{WAYPOINT_ENV:'production',WAYPOINT_WRITES_PAUSED:'true',WAYPOINT_FREEZE_ID:pins.freezeId,WAYPOINT_SOURCE_HASH:pins.sourceHash},
  kv_namespaces:[{binding:'WAYPOINT_KV',id:pins.kvNamespaceId}],

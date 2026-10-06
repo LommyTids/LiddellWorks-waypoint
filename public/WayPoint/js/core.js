@@ -235,7 +235,7 @@ function icon(name, extraClass) {
 
 // The brand mark is sourced from the registry as well, rather than being a
 // second hand-maintained inline SVG in the page shell.
-document.getElementById('brand-icon').innerHTML = icon('brand');
+document.getElementById('brand-icon').innerHTML = '<img class="brand-logo" src="/WayPoint/branding/app-icon.png" alt="" title="WayPoint">';
 
 /* ---------- 3b. Avatars (Companions/Avatars feature) ------------------
    Draws a companion/account marker: item rows, trip cards, the
@@ -316,4 +316,3 @@ function tripCardAvatarsHtml(trip) {
   }
   return '<span class="avatar-row trip-card-avatars">' + html + '</span>';
 }
-
