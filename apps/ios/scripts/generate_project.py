@@ -38,17 +38,21 @@ for file in sorted((ROOT/'WayPointApp').rglob('*.swift')):
     build=add('build:'+rel,'isa = PBXBuildFile; fileRef = '+ref+';')
     source_refs.append(ref); source_builds.append(build)
 
+asset_path='WayPointApp/Assets.xcassets'
+asset_ref=add('file:'+asset_path,'isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = '+q(asset_path)+'; sourceTree = SOURCE_ROOT;')
+asset_build=add('build:'+asset_path,'isa = PBXBuildFile; fileRef = '+asset_ref+';')
+
 app_product=add('product','isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WayPoint.app; sourceTree = BUILT_PRODUCTS_DIR;')
 products=add('products','isa = PBXGroup; children = ('+app_product+',); name = Products; sourceTree = "<group>";')
-main_group=add('main','isa = PBXGroup; children = ('+','.join(source_refs+[products])+',); sourceTree = "<group>";')
+main_group=add('main','isa = PBXGroup; children = ('+','.join(source_refs+[asset_ref,products])+',); sourceTree = "<group>";')
 package=add('package','isa = XCLocalSwiftPackageReference; relativePath = ".";')
 package_product=add('package-product','isa = XCSwiftPackageProductDependency; package = '+package+'; productName = WayPointCore;')
 package_build=add('package-build','isa = PBXBuildFile; productRef = '+package_product+';')
 sources=add('sources','isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ('+','.join(source_builds)+',); runOnlyForDeploymentPostprocessing = 0;')
 frameworks=add('frameworks','isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ('+package_build+',); runOnlyForDeploymentPostprocessing = 0;')
-resources=add('resources','isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
+resources=add('resources','isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ('+asset_build+',); runOnlyForDeploymentPostprocessing = 0;')
 project_cfg=configs('Project',{'CLANG_ENABLE_MODULES':'YES','IPHONEOS_DEPLOYMENT_TARGET':'17.0','SDKROOT':q('iphoneos'),'SWIFT_VERSION':'5.0','SWIFT_STRICT_CONCURRENCY':q('targeted'),'GCC_C_LANGUAGE_STANDARD':q('gnu17')}, debug_extra={'ONLY_ACTIVE_ARCH':'YES'})
-app_cfg=configs('App',{'PRODUCT_NAME':q('$(TARGET_NAME)'),'PRODUCT_BUNDLE_IDENTIFIER':q('com.liddellworks.waypoint'),'MARKETING_VERSION':q('0.1.0'),'CURRENT_PROJECT_VERSION':'1','CODE_SIGN_STYLE':q('Automatic'),'GENERATE_INFOPLIST_FILE':'YES','INFOPLIST_KEY_CFBundleDisplayName':q('WayPoint'),'INFOPLIST_KEY_LSApplicationCategoryType':q('public.app-category.travel'),'INFOPLIST_KEY_UIApplicationSceneManifest_Generation':'YES','INFOPLIST_KEY_UILaunchScreen_Generation':'YES','INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents':'YES','INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone':q('UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'),'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad':q('UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'),'TARGETED_DEVICE_FAMILY':q('1,2'),'SUPPORTED_PLATFORMS':q('iphoneos iphonesimulator'),'SUPPORTS_MACCATALYST':'NO','LD_RUNPATH_SEARCH_PATHS':q('$(inherited) @executable_path/Frameworks'),'ENABLE_PREVIEWS':'YES'})
+app_cfg=configs('App',{'ASSETCATALOG_COMPILER_APPICON_NAME':q('AppIcon'),'PRODUCT_NAME':q('$(TARGET_NAME)'),'PRODUCT_BUNDLE_IDENTIFIER':q('com.liddellworks.waypoint'),'MARKETING_VERSION':q('0.1.0'),'CURRENT_PROJECT_VERSION':'1','CODE_SIGN_STYLE':q('Automatic'),'GENERATE_INFOPLIST_FILE':'YES','INFOPLIST_KEY_CFBundleDisplayName':q('WayPoint'),'INFOPLIST_KEY_LSApplicationCategoryType':q('public.app-category.travel'),'INFOPLIST_KEY_UIApplicationSceneManifest_Generation':'YES','INFOPLIST_KEY_UILaunchScreen_Generation':'YES','INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents':'YES','INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone':q('UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'),'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad':q('UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'),'TARGETED_DEVICE_FAMILY':q('1,2'),'SUPPORTED_PLATFORMS':q('iphoneos iphonesimulator'),'SUPPORTS_MACCATALYST':'NO','LD_RUNPATH_SEARCH_PATHS':q('$(inherited) @executable_path/Frameworks'),'ENABLE_PREVIEWS':'YES'})
 target=add('target','isa = PBXNativeTarget; buildConfigurationList = '+app_cfg+'; buildPhases = ('+','.join([sources,frameworks,resources])+',); buildRules = (); dependencies = (); name = WayPoint; packageProductDependencies = ('+package_product+',); productName = WayPoint; productReference = '+app_product+'; productType = "com.apple.product-type.application";')
 test_files = sorted((ROOT/'WayPointAppTests').rglob('*.swift'))
 test_target = None

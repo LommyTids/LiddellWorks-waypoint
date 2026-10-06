@@ -71,7 +71,7 @@ test('production browser signs in to imported trips, shows pause and blocks edit
  const {buildImport}=await import('../../scripts/backend-v1/plan-import.mjs');
  const {initializeRehearsal,importPlan,completeRehearsal,verifyData}=await import('../../scripts/backend-v1/import-rehearsal.mjs');
  const salt='00'.repeat(16),password='browser-preview-password';
- const user={id:'owner',username:'owner',passwordSalt:salt,passwordHash:pbkdf2Sync(password,Buffer.from(salt,'hex'),100000,32,'sha256').toString('hex')};
+ const user={id:'owner',username:'owner',phone:'+447700900123',passwordSalt:salt,passwordHash:pbkdf2Sync(password,Buffer.from(salt,'hex'),100000,32,'sha256').toString('hex')};
  const source={format:'waypoint-kv-export-v1',entries:{users:JSON.stringify({users:[user]}),users_initialized:'1',trip_index:JSON.stringify({trips:[{tripId:'real-trip',ownerId:'owner',grants:[]}]}),'trip:real-trip':JSON.stringify({name:'Real imported trip',startDate:'2026-10-01',endDate:'2026-10-03',companions:[{companionId:'tom',name:'Tom'},{companionId:'farrah',name:'Farrah'},{companionId:'jon',name:'Jon'},{companionId:'rachel',name:'Rachel'}],transport:[{transportId:'ams-hnd',mode:'Flight',flightNumber:'AMS-HND',fromLocation:'AMS',toLocation:'HND',departDateTime:'2026-10-01T10:00',arriveDateTime:'2026-10-01T15:00',companions:['tom','farrah']},{transportId:'pek-nrt',mode:'Flight',flightNumber:'PEK-NRT',fromLocation:'PEK',toLocation:'NRT',departDateTime:'2026-10-01T10:00',arriveDateTime:'2026-10-01T15:00',companions:['jon','rachel']}],activities:[{activityId:'a1',title:'Preserved activity',companions:[]}]})}};
  const plan=buildImport(source),db=new LocalD1();t.after(()=>db.close());
  await initializeRehearsal(db);await importPlan(db,plan);await completeRehearsal(db,plan);
@@ -86,7 +86,10 @@ test('production browser signs in to imported trips, shows pause and blocks edit
   await route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:Buffer.from(await response.arrayBuffer())});
  });
  await page.goto('https://production.test/WayPoint/');
- await page.locator('#login-form [name="username"]').fill('owner');await page.locator('#login-form [name="password"]').fill(password);await page.getByRole('button',{name:'Log in',exact:true}).click();
+ assert.equal(await page.locator('#login-form [name="password"]').count(),0);
+ assert.equal(await page.locator('#login-form input').count(),1);
+ assert.equal(await page.getByRole('button',{name:'UberUser login',exact:true}).count(),0);
+ await page.locator('#login-form [name="phone"]').fill('+44 (7700) 900-123');await page.getByRole('button',{name:'Log in',exact:true}).click();
  await page.waitForFunction(()=>stateIsTrustworthy&&state.trips[0]?.activities.some(a=>a.title==='Preserved activity'));
  await page.getByText('Migration preview · Saving is paused',{exact:true}).waitFor();
  await page.locator('[data-action="open-trip"]').click();

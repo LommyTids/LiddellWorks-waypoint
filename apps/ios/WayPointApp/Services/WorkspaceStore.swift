@@ -160,11 +160,12 @@ final class WorkspaceStore {
     }
 
     private func envelope(accountID: String) throws -> WorkspaceEnvelope? {
-        var request = FetchDescriptor<WorkspaceEnvelope>(
-            predicate: #Predicate { $0.accountID == accountID }
-        )
-        request.fetchLimit = 2
-        let rows = try context.fetch(request)
+        // This small legacy cache has one envelope per signed-in account.
+        // Filter on the main actor to avoid #Predicate's generated non-Sendable
+        // KeyPath on newer Swift compilers; never impose a limit before matching.
+        // D1 snapshots and offline queues continue using their separate files.
+        let rows = try context.fetch(FetchDescriptor<WorkspaceEnvelope>())
+            .filter { $0.accountID == accountID }
         guard rows.count <= 1 else { throw WorkspaceStoreError.corruptWorkspace }
         return rows.first
     }

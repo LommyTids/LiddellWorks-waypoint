@@ -183,6 +183,40 @@ assert.equal(JSON.stringify(scopedTrip).includes("Hidden contact"), false);
 assert.equal(scopedTrip.superuserParticipant.participantId, "__trip_superuser__");
 assert.equal(scopedTrip.superuserParticipant.name, "owner");
 
+// Phone login preserves the original account, sharing scope and KV contents.
+const accounts = JSON.parse(await env.WAYPOINT_KV.get("users"));
+const aliceAccount = accounts.users.find(u => u.username === "alice");
+aliceAccount.phone = "+44 7700 900123";
+accounts.users.find(u => u.isUberUser).phone = "+447700900999";
+await env.WAYPOINT_KV.put("users", JSON.stringify(accounts));
+const accountsBefore = await env.WAYPOINT_KV.get("users");
+for (const phone of ["+447700900123", "0044 (7700) 900-123", "44 7700 900123"]) {
+  const login = await jsonCall(env, "/WayPoint/api/login", "POST", { phone });
+  assert.equal(login.status, 200);
+  assert.equal((await login.json()).id, aliceAccount.id);
+  const state = await call(env, "/WayPoint/api/data", { headers: { Cookie: cookieFrom(login) } });
+  assert.deepEqual(await state.json(), { trips: [scopedTrip] });
+}
+assert.equal(await env.WAYPOINT_KV.get("users"), accountsBefore);
+for (const phone of [null, 447700900123, "", "not-a-number", "++447700900123", "123"]) {
+  assert.equal((await jsonCall(env, "/WayPoint/api/login", "POST", { phone })).status, 400);
+}
+for (const phone of ["+447700900000"]) {
+  assert.equal((await jsonCall(env, "/WayPoint/api/login", "POST", { phone })).status, 401);
+}
+const ownerPhoneLogin = await jsonCall(env, "/WayPoint/api/login", "POST", { phone: "+447700900999" });
+assert.equal(ownerPhoneLogin.status, 200);
+const ownerPhoneIdentity = await ownerPhoneLogin.json();
+assert.equal(ownerPhoneIdentity.id, owner.id);
+assert.equal(ownerPhoneIdentity.isUberUser, true);
+assert.equal((await call(env, "/WayPoint/api/users", { headers: { Cookie: cookieFrom(ownerPhoneLogin) } })).status, 200);
+accounts.users.push({ id: "duplicate", username: "duplicate", phone: "00447700900123" });
+await env.WAYPOINT_KV.put("users", JSON.stringify(accounts));
+assert.equal((await jsonCall(env, "/WayPoint/api/login", "POST", { phone: "+447700900123" })).status, 401);
+accounts.users.pop();await env.WAYPOINT_KV.put("users", JSON.stringify(accounts));
+assert.equal((await jsonCall(env, "/WayPoint/api/login", "POST", { username: "owner", password: "password123" })).status, 200);
+assert.equal((await jsonCall(env, "/WayPoint/api/login", "POST", null)).status, 400);
+
 // Resetting a password increments sessionVersion and revokes old cookies.
 const reset = await jsonCall(env, "/WayPoint/api/users", "POST", {
   id: owner.id, username: "owner", password: "new-password123",

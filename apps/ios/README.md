@@ -1,6 +1,6 @@
 # WayPoint iOS — production D1 sync
 
-Native SwiftUI app for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync. The app connects to **https://liddellworks.com/WayPoint**. Use the same username and password as the website.
+Native SwiftUI app for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync. The app connects to **https://liddellworks.com/WayPoint**. Enter your registered phone number in the single “Enter login code here” field. Existing account IDs and permissions, including UberUser, are retained.
 
 ## Update and open on your Mac
 
@@ -45,6 +45,10 @@ WAYPOINT_TEST_DESTINATION='platform=iOS Simulator,name=YOUR EXACT SIMULATOR NAME
 ```
 
 The shared scheme includes the app-hosted service tests. Core tests also run independently with `swift test`. This project has no third-party Swift dependencies. GitHub macOS CI builds the simulator app and runs the tests; device signing and authenticated live sync also need an actual Mac/device check.
+
+## App icon
+
+The selected W-shaped travel route is installed in `WayPointApp/Assets.xcassets/AppIcon.appiconset`. Its opaque 1024×1024 master supplies the iPhone/iPad icon through the iOS asset catalog; the system applies the rounded corner mask. The project generator includes the catalog and selects `AppIcon`, so regeneration preserves it.
 
 ## Source layout
 

@@ -539,7 +539,7 @@ document.addEventListener('submit', function (e) {
   if (e.target.id === 'login-form') {
     e.preventDefault();
     var fdLogin = new FormData(e.target);
-    submitAuthForm('/WayPoint/api/login', { username: fdLogin.get('username'), password: fdLogin.get('password') });
+    submitAuthForm('/WayPoint/api/login', { phone: fdLogin.get('phone') });
     return;
   }
   if (e.target.id === 'setup-form') {

@@ -32,8 +32,7 @@ struct RootView: View {
 
 private struct SignInView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var username = ""
-    @State private var password = ""
+    @State private var phone = ""
 
     var body: some View {
         ScrollView {
@@ -53,21 +52,14 @@ private struct SignInView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Your WayPoint account").font(.headline)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Username").font(.subheadline)
-                        TextField("Username", text: $username)
-                            .textContentType(.username)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Password").font(.subheadline)
-                        SecureField("Password", text: $password)
-                            .textContentType(.password)
+                        Text("Enter login code here").font(.subheadline)
+                        TextField("Enter login code here", text: $phone)
+                            .textContentType(.telephoneNumber)
+                            .keyboardType(.phonePad)
                             .textFieldStyle(.roundedBorder)
                     }
                     Button {
-                        Task { await model.signIn(username: username.trimmingCharacters(in: .whitespacesAndNewlines), password: password) }
+                        Task { await model.signIn(phone: phone) }
                     } label: {
                         HStack {
                             if model.isBusy { ProgressView().tint(.white) }
@@ -77,7 +69,7 @@ private struct SignInView: View {
                         .padding(.vertical, 7)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(model.isBusy || username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty)
+                    .disabled(model.isBusy || phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 .padding(22)
                 .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
@@ -90,7 +82,7 @@ private struct SignInView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(model.isBusy)
-                Text("Sign in with the same username and password you use at liddellworks.com/WayPoint.")
+                Text("Your login code is your registered phone number.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

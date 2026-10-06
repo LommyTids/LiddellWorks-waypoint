@@ -80,8 +80,7 @@ function renderAuthScreen(errorMessage) {
     '<h1>Log in to Waypoint</h1>' +
     errorHtml +
     '<form id="login-form">' +
-      '<div class="field"><label>Username</label><input type="text" name="username" required autocomplete="username"></div>' +
-      '<div class="field"><label>Password</label><input type="password" name="password" required autocomplete="current-password"></div>' +
+      '<div class="field"><label>Enter login code here</label><input type="tel" name="phone" required autocomplete="tel" placeholder="Enter login code here"></div>' +
       '<button type="submit" class="btn btn-primary auth-primary">Log in</button>' +
     '</form>' +
     '<p class="field-hint auth-footer">Don\'t have an account? Ask the site owner to set one up for you.</p>' +
