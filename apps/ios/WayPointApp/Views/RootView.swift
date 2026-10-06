@@ -82,9 +82,6 @@ private struct SignInView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(model.isBusy)
-                Text("Your login code is your registered phone number.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
             .padding(24)
             .frame(maxWidth: 500)
