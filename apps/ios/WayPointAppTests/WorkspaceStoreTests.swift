@@ -25,6 +25,28 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertThrowsError(try reopened.saveD1(state, accountID: "different-account"))
     }
 
+    func testLegacyLookupUpdateAndDeleteKeepOtherAccountsIntact() throws {
+        let schema = Schema([WorkspaceEnvelope.self])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let store = WorkspaceStore(container: container)
+        for id in ["first", "second", "third"] {
+            let account = Account(id: id, username: id)
+            try store.save(LocalWorkspace(account: account, trips: [], mutations: [], lastRefresh: nil))
+        }
+        XCTAssertEqual(try store.load(accountID: "third")?.account.id, "third")
+        XCTAssertNil(try store.load(accountID: "unknown"))
+        let updated = LocalWorkspace(account: Account(id: "third", username: "Updated"),
+                                     trips: [], mutations: [], lastRefresh: nil)
+        try store.save(updated)
+        XCTAssertEqual(try store.load(accountID: "third")?.account.username, "Updated")
+        try store.delete(accountID: "third")
+        XCTAssertNil(try store.load(accountID: "third"))
+        for id in ["first", "second"] {
+            XCTAssertEqual(try store.load(accountID: id)?.account.username, id)
+        }
+    }
+
     func testCorruptD1FileIsRetainedForRecovery() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

@@ -48,7 +48,20 @@ final class WayPointAPITests: XCTestCase {
         let client = api(status: 200,
                          body: "{\"status\":\"ok\",\"id\":\"test_account\",\"username\":\"Tester\"}",
                          headers: ["Set-Cookie": "wp_session=\(cookie); Path=/WayPoint; Secure; HttpOnly; SameSite=Lax; Max-Age=604800"]) { request in
-            let payload = try? JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: String]
+            // URLSession may convert httpBody into a stream before URLProtocol.
+            var body = request.httpBody ?? Data()
+            if request.httpBody == nil, let stream = request.httpBodyStream {
+                stream.open()
+                defer { stream.close() }
+                var buffer = [UInt8](repeating: 0, count: 1024)
+                while true {
+                    let count = stream.read(&buffer, maxLength: buffer.count)
+                    if count < 0 { XCTFail("Could not read request body stream"); break }
+                    if count == 0 { break }
+                    body.append(contentsOf: buffer.prefix(count))
+                }
+            }
+            let payload = try? JSONSerialization.jsonObject(with: body) as? [String: String]
             XCTAssertEqual(payload, ["phone": "+44 7700 900123"])
             XCTAssertEqual(request.url?.path, "/WayPoint/api/login")
         }
