@@ -22,15 +22,6 @@ document.addEventListener('click', function (e) {
   var action = el.dataset.action;
   var trip = currentTripId ? currentTrip() : null;
 
-  if (action === 'toggle-uber-login') {
-    uberUserLogin = !uberUserLogin;
-    var authApp = document.getElementById('app');
-    authApp.innerHTML = renderAuthScreen();
-    enhanceAccessibility(authApp);
-    var loginInput = authApp.querySelector('input');
-    if (loginInput) loginInput.focus();
-    return;
-  }
   if (action === 'retry-connection') { retryConnection(); return; }
   if (isMutationAction(action) && !editingAvailable()) {
     setSaveStatus('readonly', connectionState === 'offline' ? 'Offline' : 'Editing locked');
@@ -548,7 +539,7 @@ document.addEventListener('submit', function (e) {
   if (e.target.id === 'login-form') {
     e.preventDefault();
     var fdLogin = new FormData(e.target);
-    submitAuthForm('/WayPoint/api/login', fdLogin.has('phone') ? { phone: fdLogin.get('phone') } : { username: fdLogin.get('username'), password: fdLogin.get('password') });
+    submitAuthForm('/WayPoint/api/login', { phone: fdLogin.get('phone') });
     return;
   }
   if (e.target.id === 'setup-form') {

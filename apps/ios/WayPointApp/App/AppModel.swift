@@ -57,17 +57,12 @@ final class AppModel: ObservableObject {
         } catch { message = error.localizedDescription }
     }
 
-    func signIn(phone: String? = nil, username: String = "", password: String = "") async {
+    func signIn(phone: String) async {
         guard !isBusy, let store else { message = storageFailure; return }
         isBusy = true; message = nil
         defer { isBusy = false }
         do {
-            let saved: SavedSession
-            if let phone {
-                saved = try await api.login(phone: phone)
-            } else {
-                saved = try await api.login(username: username, password: password)
-            }
+            let saved = try await api.login(phone: phone)
             _ = try await api.whoAmI(session: saved)
             let cached = try store.loadD1(accountID: saved.account.id, as: D1Workspace.self)
             guard cached == nil || cached?.account.id == saved.account.id else { throw APIError.unauthorized }

@@ -102,12 +102,9 @@ async function startup(loggedIn) {
     assert(elements.get('app').innerHTML.includes('id="login-form"'), 'Signed-out startup did not render login');
     assert(elements.get('app').innerHTML.includes('type="tel" name="phone"'));
     assert(!elements.get('app').innerHTML.includes('name="password"'));
-    const toggle = callbacks.get('click').find(fn => fn.toString().includes('toggle-uber-login'));
-    toggle({ target: { closest(selector) { return selector === '[data-action]' ? { dataset: { action: 'toggle-uber-login' } } : null; } } });
-    assert(elements.get('app').innerHTML.includes('name="password"'));
-    toggle({ target: { closest(selector) { return selector === '[data-action]' ? { dataset: { action: 'toggle-uber-login' } } : null; } } });
-    assert(elements.get('app').innerHTML.includes('name="phone"'));
-    assert(!elements.get('app').innerHTML.includes('name="password"'));
+    assert(!elements.get('app').innerHTML.includes('name="username"'));
+    assert(!elements.get('app').innerHTML.includes('toggle-uber-login'));
+    assert(elements.get('app').innerHTML.includes('Enter login code here'));
     let submitted;
     context.FormData = class { constructor(form) { this.fields = form.fields; } get(key) { return this.fields[key]; } has(key) { return key in this.fields; } };
     context.submitAuthForm = (url, payload) => { submitted = { url, payload }; };
@@ -115,8 +112,7 @@ async function startup(loggedIn) {
     submit({ target: { id: 'login-form', fields: { phone: '+447700900123' } }, preventDefault() {} });
     assert.equal(submitted.url, '/WayPoint/api/login');
     assert.equal(JSON.stringify(submitted.payload), JSON.stringify({ phone: '+447700900123' }));
-    submit({ target: { id: 'login-form', fields: { username: 'owner', password: 'owner-password' } }, preventDefault() {} });
-    assert.equal(JSON.stringify(submitted.payload), JSON.stringify({ username: 'owner', password: 'owner-password' }));
+
   }
 }
 

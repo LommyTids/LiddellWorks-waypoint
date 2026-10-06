@@ -61,8 +61,6 @@ function applyAuthUI() {
 // Builds the login screen, or (if no account exists yet — see
 // setupNeeded, set by checkAuth()) the one-time setup screen instead.
 // `errorMessage`, when given, is shown above the form.
-var uberUserLogin = false;
-
 function renderAuthScreen(errorMessage) {
   var errorHtml = errorMessage ? '<p class="auth-error" role="alert" tabindex="-1">' + esc(errorMessage) + '</p>' : '';
   if (setupNeeded) {
@@ -82,13 +80,9 @@ function renderAuthScreen(errorMessage) {
     '<h1>Log in to Waypoint</h1>' +
     errorHtml +
     '<form id="login-form">' +
-      (uberUserLogin ?
-        '<div class="field"><label>UberUser username</label><input type="text" name="username" required autocomplete="username"></div>' +
-        '<div class="field"><label>Password</label><input type="password" name="password" required autocomplete="current-password"></div>' :
-        '<div class="field"><label>Phone number</label><input type="tel" name="phone" required autocomplete="tel" placeholder="+44 7700 900123"><div class="field-hint">Use the number registered by the site owner, including the country code.</div></div>') +
+      '<div class="field"><label>Enter login code here</label><input type="tel" name="phone" required autocomplete="tel" placeholder="Enter login code here"></div>' +
       '<button type="submit" class="btn btn-primary auth-primary">Log in</button>' +
     '</form>' +
-    '<button type="button" class="btn" data-action="toggle-uber-login">' + (uberUserLogin ? 'Use phone number' : 'UberUser login') + '</button>' +
     '<p class="field-hint auth-footer">Don\'t have an account? Ask the site owner to set one up for you.</p>' +
   '</div></div>';
 }

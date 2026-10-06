@@ -2388,9 +2388,9 @@ async function handleLogin(request, env) {
   loginAttempts.set(attemptKey, recent);
 
   const usersDoc = await loadUsers(env);
-  // A phone may identify only one ordinary account; UberUser uses its password.
+  // A phone must identify exactly one existing account; retain its ID and role.
   const matches = phoneLogin ? usersDoc.users.filter(function (u) { return normalizeLoginPhone(u.phone) === phone; }) : [];
-  const user = phoneLogin ? (matches.length === 1 && !matches[0].isUberUser ? matches[0] : null) :
+  const user = phoneLogin ? (matches.length === 1 ? matches[0] : null) :
     usersDoc.users.find(function (u) { return u.username.toLowerCase() === username; });
   // Deliberately the same generic message whether the username doesn't
   // exist or the password's wrong — doesn't help an attacker narrow down

@@ -201,9 +201,15 @@ assert.equal(await env.WAYPOINT_KV.get("users"), accountsBefore);
 for (const phone of [null, 447700900123, "", "not-a-number", "++447700900123", "123"]) {
   assert.equal((await jsonCall(env, "/WayPoint/api/login", "POST", { phone })).status, 400);
 }
-for (const phone of ["+447700900000", "+447700900999"]) {
+for (const phone of ["+447700900000"]) {
   assert.equal((await jsonCall(env, "/WayPoint/api/login", "POST", { phone })).status, 401);
 }
+const ownerPhoneLogin = await jsonCall(env, "/WayPoint/api/login", "POST", { phone: "+447700900999" });
+assert.equal(ownerPhoneLogin.status, 200);
+const ownerPhoneIdentity = await ownerPhoneLogin.json();
+assert.equal(ownerPhoneIdentity.id, owner.id);
+assert.equal(ownerPhoneIdentity.isUberUser, true);
+assert.equal((await call(env, "/WayPoint/api/users", { headers: { Cookie: cookieFrom(ownerPhoneLogin) } })).status, 200);
 accounts.users.push({ id: "duplicate", username: "duplicate", phone: "00447700900123" });
 await env.WAYPOINT_KV.put("users", JSON.stringify(accounts));
 assert.equal((await jsonCall(env, "/WayPoint/api/login", "POST", { phone: "+447700900123" })).status, 401);
