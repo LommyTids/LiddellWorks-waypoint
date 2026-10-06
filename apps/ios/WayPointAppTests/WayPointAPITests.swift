@@ -43,6 +43,26 @@ final class WayPointAPITests: XCTestCase {
         try saved.validate()
     }
 
+    func testPhoneLoginSendsOnlyPhoneAndRetainsAccountID() async throws {
+        let cookie = session().cookieValue
+        let client = api(status: 200,
+                         body: "{\"status\":\"ok\",\"id\":\"test_account\",\"username\":\"Tester\"}",
+                         headers: ["Set-Cookie": "wp_session=\(cookie); Path=/WayPoint; Secure; HttpOnly; SameSite=Lax; Max-Age=604800"]) { request in
+            let payload = try? JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: String]
+            XCTAssertEqual(payload, ["phone": "+44 7700 900123"])
+            XCTAssertEqual(request.url?.path, "/WayPoint/api/login")
+        }
+        let saved = try await client.login(phone: " +44 7700 900123 ")
+        XCTAssertEqual(saved.account.id, "test_account")
+        XCTAssertEqual(saved.cookieValue, cookie)
+    }
+
+    func testUnregisteredPhoneShowsLoginError() async throws {
+        let client = api(status: 401, body: "{\"error\":\"Phone number is not registered.\"}")
+        do { _ = try await client.login(phone: "+447700900000"); XCTFail("Expected rejected phone") }
+        catch APIError.server(let message) { XCTAssertEqual(message, "Phone number is not registered.") }
+    }
+
     func testUnauthorizedDoesNotDecodeServerData() async throws {
         let client = api(status: 401, body: "{\"error\":{\"code\":\"unauthorized\",\"message\":\"Sign in\"}}")
         do { _ = try await client.bootstrap(session: session()); XCTFail("Expected unauthorized") }

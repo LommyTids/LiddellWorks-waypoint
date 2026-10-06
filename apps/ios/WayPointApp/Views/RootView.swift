@@ -32,6 +32,8 @@ struct RootView: View {
 
 private struct SignInView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var phone = ""
+    @State private var uberUserLogin = false
     @State private var username = ""
     @State private var password = ""
 
@@ -52,22 +54,35 @@ private struct SignInView: View {
                 }
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Your WayPoint account").font(.headline)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Username").font(.subheadline)
-                        TextField("Username", text: $username)
-                            .textContentType(.username)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Password").font(.subheadline)
-                        SecureField("Password", text: $password)
-                            .textContentType(.password)
-                            .textFieldStyle(.roundedBorder)
+                    if uberUserLogin {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("UberUser username").font(.subheadline)
+                            TextField("Username", text: $username)
+                                .textContentType(.username)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Password").font(.subheadline)
+                            SecureField("Password", text: $password)
+                                .textContentType(.password)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Phone number").font(.subheadline)
+                            TextField("+44 7700 900123", text: $phone)
+                                .textContentType(.telephoneNumber)
+                                .keyboardType(.phonePad)
+                                .textFieldStyle(.roundedBorder)
+                        }
                     }
                     Button {
-                        Task { await model.signIn(username: username.trimmingCharacters(in: .whitespacesAndNewlines), password: password) }
+                        Task {
+                            if uberUserLogin { await model.signIn(username: username, password: password) }
+                            else { await model.signIn(phone: phone) }
+                        }
                     } label: {
                         HStack {
                             if model.isBusy { ProgressView().tint(.white) }
@@ -77,7 +92,12 @@ private struct SignInView: View {
                         .padding(.vertical, 7)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(model.isBusy || username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty)
+                    .disabled(model.isBusy || (uberUserLogin ? (username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty) : phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                    Button(uberUserLogin ? "Use phone number" : "UberUser login") {
+                        uberUserLogin.toggle()
+                        password = ""
+                    }
+                    .disabled(model.isBusy)
                 }
                 .padding(22)
                 .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
@@ -90,7 +110,7 @@ private struct SignInView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(model.isBusy)
-                Text("Sign in with the same username and password you use at liddellworks.com/WayPoint.")
+                Text(uberUserLogin ? "Use your existing UberUser username and password." : "Sign in with your registered phone number, including its country code.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

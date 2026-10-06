@@ -1,6 +1,6 @@
 # WayPoint iOS — production D1 sync
 
-Native SwiftUI app for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync. The app connects to **https://liddellworks.com/WayPoint**. Use the same username and password as the website.
+Native SwiftUI app for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync. The app connects to **https://liddellworks.com/WayPoint**. Use your registered phone number, including its country code. The separate UberUser login retains username/password access.
 
 ## Update and open on your Mac
 

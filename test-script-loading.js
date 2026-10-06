@@ -45,12 +45,12 @@ function element() {
 async function startup(loggedIn) {
   const elements = new Map(['brand-icon', 'account-bar', 'system-banner', 'app', 'modal-root',
     'toast-root', 'save-indicator', 'main-content', 'polite-status'].map(id => [id, element()]));
-  const listeners = new Set(), requests = [];
+  const listeners = new Set(), requests = [], callbacks = new Map();
   const document = {
     body: element(), documentElement: element(),
     getElementById(id) { return elements.get(id) || null; },
     querySelector() { return null; }, querySelectorAll() { return []; },
-    addEventListener(name) { listeners.add(name); }
+    addEventListener(name, callback) { listeners.add(name); callbacks.set(name, [...(callbacks.get(name) || []), callback]); }
   };
   const context = vm.createContext({
     console, document, navigator: { onLine: true },
@@ -100,6 +100,23 @@ async function startup(loggedIn) {
   } else {
     assert.deepEqual(requests, ['/WayPoint/api/whoami']);
     assert(elements.get('app').innerHTML.includes('id="login-form"'), 'Signed-out startup did not render login');
+    assert(elements.get('app').innerHTML.includes('type="tel" name="phone"'));
+    assert(!elements.get('app').innerHTML.includes('name="password"'));
+    const toggle = callbacks.get('click').find(fn => fn.toString().includes('toggle-uber-login'));
+    toggle({ target: { closest(selector) { return selector === '[data-action]' ? { dataset: { action: 'toggle-uber-login' } } : null; } } });
+    assert(elements.get('app').innerHTML.includes('name="password"'));
+    toggle({ target: { closest(selector) { return selector === '[data-action]' ? { dataset: { action: 'toggle-uber-login' } } : null; } } });
+    assert(elements.get('app').innerHTML.includes('name="phone"'));
+    assert(!elements.get('app').innerHTML.includes('name="password"'));
+    let submitted;
+    context.FormData = class { constructor(form) { this.fields = form.fields; } get(key) { return this.fields[key]; } has(key) { return key in this.fields; } };
+    context.submitAuthForm = (url, payload) => { submitted = { url, payload }; };
+    const submit = callbacks.get('submit').find(fn => fn.toString().includes('login-form'));
+    submit({ target: { id: 'login-form', fields: { phone: '+447700900123' } }, preventDefault() {} });
+    assert.equal(submitted.url, '/WayPoint/api/login');
+    assert.equal(JSON.stringify(submitted.payload), JSON.stringify({ phone: '+447700900123' }));
+    submit({ target: { id: 'login-form', fields: { username: 'owner', password: 'owner-password' } }, preventDefault() {} });
+    assert.equal(JSON.stringify(submitted.payload), JSON.stringify({ username: 'owner', password: 'owner-password' }));
   }
 }
 

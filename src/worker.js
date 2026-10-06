@@ -2350,6 +2350,14 @@ async function getCurrentUser(request, env) {
 
 /* ---- Route handlers: login / logout / whoami / setup --------------------- */
 
+// Match formatting only; never guess a country code or change account IDs.
+function normalizeLoginPhone(value) {
+  if (typeof value !== "string" || value.length > 80) return null;
+  const compact = value.trim().replace(/[\s().-]/g, "");
+  if (!/^\+?[0-9]{7,15}$/.test(compact)) return null;
+  return compact.replace(/^\+/, "").replace(/^00(?=[1-9])/, "");
+}
+
 async function handleLogin(request, env) {
   let body;
   try {
@@ -2357,14 +2365,17 @@ async function handleLogin(request, env) {
   } catch (err) {
     return jsonError(400, "Request body was not valid JSON.");
   }
-  const username = (body.username || "").trim().toLowerCase();
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(400, "Invalid login request.");
+  const phoneLogin = Object.prototype.hasOwnProperty.call(body, "phone");
+  const phone = phoneLogin ? normalizeLoginPhone(body.phone) : null;
+  const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
   const password = body.password || "";
-  if (!username || !password) return jsonError(400, "Username and password are both required.");
-  if (username.length > 80 || typeof password !== "string" || password.length > 256) {
-    return jsonError(400, "Username or password was too long.");
+  if (phoneLogin && !phone) return jsonError(400, "Enter a valid phone number, including its country code if registered that way.");
+  if (!phoneLogin && (!username || typeof password !== "string" || !password || username.length > 80 || password.length > 256)) {
+    return jsonError(400, "Username and password are both required (maximum 80 and 256 characters).");
   }
 
-  const attemptKey = (request.headers.get("CF-Connecting-IP") || "unknown") + ":" + username;
+  const attemptKey = (request.headers.get("CF-Connecting-IP") || "unknown") + ":" + (phoneLogin ? "phone:" + phone : username);
   const now = Date.now();
   const recent = (loginAttempts.get(attemptKey) || []).filter(function (time) { return now - time < LOGIN_WINDOW_MS; });
   if (recent.length >= LOGIN_MAX_ATTEMPTS) {
@@ -2377,7 +2388,10 @@ async function handleLogin(request, env) {
   loginAttempts.set(attemptKey, recent);
 
   const usersDoc = await loadUsers(env);
-  const user = usersDoc.users.find(function (u) { return u.username.toLowerCase() === username; });
+  // A phone may identify only one ordinary account; UberUser uses its password.
+  const matches = phoneLogin ? usersDoc.users.filter(function (u) { return normalizeLoginPhone(u.phone) === phone; }) : [];
+  const user = phoneLogin ? (matches.length === 1 && !matches[0].isUberUser ? matches[0] : null) :
+    usersDoc.users.find(function (u) { return u.username.toLowerCase() === username; });
   // Deliberately the same generic message whether the username doesn't
   // exist or the password's wrong — doesn't help an attacker narrow down
   // which one they got wrong, at basically no cost to a genuine user.
@@ -2386,9 +2400,13 @@ async function handleLogin(request, env) {
   // measurable fast-path that otherwise reveals which usernames exist.
   const dummySalt = "00000000000000000000000000000000";
   const dummyHash = "0000000000000000000000000000000000000000000000000000000000000000";
-  const passwordOk = await verifyPassword(password, user ? user.passwordSalt : dummySalt, user ? user.passwordHash : dummyHash);
-  if (!user) return genericError();
-  if (!passwordOk) return genericError();
+  if (phoneLogin) {
+    if (!user) return jsonError(401, "That phone number is not available for login. Ask the site owner to check your account.");
+  } else {
+    // Keep existing password clients working during the transition.
+    const passwordOk = await verifyPassword(password, user ? user.passwordSalt : dummySalt, user ? user.passwordHash : dummyHash);
+    if (!user || !passwordOk) return genericError();
+  }
 
   loginAttempts.delete(attemptKey);
   const token = await signSession({ uid: user.id, sv: user.sessionVersion || 0, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }, env);

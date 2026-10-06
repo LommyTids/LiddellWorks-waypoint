@@ -67,6 +67,14 @@ final class WayPointAPI {
 
     deinit { transport.invalidateAndCancel() }
 
+    func login(phone: String) async throws -> SavedSession {
+        let phone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !phone.isEmpty, phone.utf16.count <= 80 else {
+            throw APIError.server("Enter your registered phone number, including its country code.")
+        }
+        return try await login(body: JSONEncoder().encode(PhoneLoginBody(phone: phone)))
+    }
+
     func login(username: String, password: String) async throws -> SavedSession {
         let username = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !username.isEmpty, !password.isEmpty,
@@ -74,6 +82,10 @@ final class WayPointAPI {
             throw APIError.server("Enter your username and password (maximum 80 and 256 characters).")
         }
         let body = try JSONEncoder().encode(LoginBody(username: username, password: password))
+        return try await login(body: body)
+    }
+
+    private func login(body: Data) async throws -> SavedSession {
         let (data, response) = try await send(.login, method: "POST", body: body)
         guard let result = try? decoder.decode(LoginResponse.self, from: data),
               result.status == "ok", !result.id.isEmpty, !result.username.isEmpty else {
@@ -169,7 +181,12 @@ final class WayPointAPI {
         }
         switch response.statusCode {
         case 200...299: break
-        case 401: throw APIError.unauthorized
+        case 401:
+            if endpoint == .login {
+                let detail = try? decoder.decode(LoginErrorResponse.self, from: data)
+                throw APIError.server(detail?.error ?? "Could not sign in. Check your registered phone number or UberUser credentials.")
+            }
+            throw APIError.unauthorized
         case 403: throw APIError.server("Your account does not have permission for this request.")
         case 429:
             throw APIError.server("Too many requests. Wait a few minutes, then try again.")
@@ -231,6 +248,8 @@ final class WayPointAPI {
     }
 }
 
+private struct LoginErrorResponse: Decodable { let error: String }
+private struct PhoneLoginBody: Encodable { let phone: String }
 private struct LoginBody: Encodable { let username: String; let password: String }
 private struct LoginResponse: Decodable { let status: String; let id: String; let username: String }
 private struct IdentityResponse: Decodable { let loggedIn: Bool; let id: String?; let username: String? }
