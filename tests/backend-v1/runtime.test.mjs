@@ -97,19 +97,54 @@ test('Cloudflare runtime: unpause alone cannot activate, authorized editing writ
  const user={id:'owner',username:'owner',phone:'+447700900123',passwordSalt:salt,passwordHash:pbkdf2Sync(password,Buffer.from(salt,'hex'),100000,32,'sha256').toString('hex')};
  const source={format:'waypoint-kv-export-v1',entries:{users:JSON.stringify({users:[user]}),users_initialized:'1',trip_index:JSON.stringify({trips:[{tripId:'real-trip',ownerId:'owner',grants:[]}]}),'trip:real-trip':JSON.stringify({name:'Preserved trip',activities:[{activityId:'a1',title:'Preserved activity',companions:[]}]})}};
  const plan=buildImport(source);
- const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-08-27',d1Databases:['WAYPOINT_DB'],kvNamespaces:['WAYPOINT_KV'],bindings:{WAYPOINT_ENV:'production',WAYPOINT_WRITES_PAUSED:'false',WAYPOINT_SOURCE_HASH:plan.sourceHash,WAYPOINT_FREEZE_ID:'active-freeze',WAYPOINT_SESSION_SECRET:'existing-secret'}}));
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-08-27',d1Databases:['WAYPOINT_DB'],kvNamespaces:['WAYPOINT_KV'],serviceBindings:{ASSETS:async request=>{let path=new URL(request.url).pathname;if(path==='/WayPoint/')path+='index.html';return new Response(await readFile(new URL('../../public'+path,import.meta.url)),{headers:{'Content-Type':path.endsWith('.html')?'text/html':'image/png'}});}},bindings:{WAYPOINT_ENV:'production',WAYPOINT_WRITES_PAUSED:'false',WAYPOINT_SOURCE_HASH:plan.sourceHash,WAYPOINT_FREEZE_ID:'active-freeze',WAYPOINT_SESSION_SECRET:'existing-secret'}}));
  t.after(()=>mf.dispose());const db=await mf.getD1Database('WAYPOINT_DB'),kv=await mf.getKVNamespace('WAYPOINT_KV');
  await initializeRehearsal(db);await importPlan(db,plan);await completeRehearsal(db,plan);for(const [k,v] of Object.entries(source.entries))await kv.put(k,v);
  const call=(path,body,cookie)=>mf.dispatchFetch('https://production.test/WayPoint/api/'+path,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
  const blocked=await call('login',{username:'owner',password});assert.equal(blocked.status,503);assert.equal((await blocked.json()).error.code,'editing_not_authorized');
  await db.prepare("UPDATE rehearsal_control SET state='active' WHERE id=1").run();
  const login=await call('login',{phone:'+44 (7700) 900-123'});assert.equal(login.status,200);assert.equal((await login.clone().json()).id,'owner');const cookie=login.headers.get('set-cookie').split(';')[0];
+ // Both address versions must access the same account and migrated trips.
+ const lowerCall=(path,body,cookie)=>mf.dispatchFetch('https://production.test/waypoint/api/'+path,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
+ const lowerLogin=await lowerCall('login',{phone:'+447700900123'});assert.equal(lowerLogin.status,200);
+ assert.match(lowerLogin.headers.get('set-cookie'),/Path=\/waypoint;/);
+ assert.match(login.headers.get('set-cookie'),/Path=\/WayPoint;/);
+ const lowerCookie=lowerLogin.headers.get('set-cookie').split(';')[0];
+ assert.equal((await (await lowerCall('whoami',null,lowerCookie)).json()).id,'owner');
+ const html=await (await mf.dispatchFetch('https://production.test/waypoint/')).text();assert(html.includes('/waypoint/staging/d1-client.js'));assert(html.includes('/waypoint/branding/app-icon.png'));assert(!html.includes('/WayPoint/'));
+ const markImage=await mf.dispatchFetch('https://production.test/waypoint/branding/waypoint-mark.png');assert.equal(markImage.status,200);assert.deepEqual(Buffer.from(await markImage.arrayBuffer()),await readFile('public/WayPoint/branding/waypoint-mark.png'));
  const caps=await (await call('v1/sync/capabilities',null,cookie)).json();assert.equal(caps.productionReady,true);assert.equal(caps.writesPaused,false);
  const mutation={mutationId:'active-edit-1',tripId:'real-trip',kind:'activity',recordId:'a1',operation:'update',baseRevision:1,data:{title:'Edited in production'}};
  const body={protocolVersion:1,mutations:[mutation]};
- const edit=await (await call('v1/sync/mutations',body,cookie)).json();assert.equal(edit.results[0].status,'applied');
+ const edit=await (await lowerCall('v1/sync/mutations',body,lowerCookie)).json();assert.equal(edit.results[0].status,'applied');
  const duplicate=await (await call('v1/sync/mutations',body,cookie)).json();assert.equal(duplicate.results[0].duplicate,true);
  const read=await (await call('v1/sync/bootstrap',null,cookie)).json();assert(read.entities.some(e=>e.data.title==='Edited in production'&&e.revision===2));
+ assert.deepEqual(await (await lowerCall('v1/sync/bootstrap',null,lowerCookie)).json(),read);
+ const logout=await lowerCall('logout',{},lowerCookie);assert.equal(logout.status,200);assert.match(logout.headers.get('set-cookie'),/Path=\/waypoint;/);
  assert.equal((await call('data',{trips:[]},cookie)).status,404);assert.equal(await kv.get('trip_index'),source.entries.trip_index);assert.equal(await kv.get('trip:real-trip'),source.entries['trip:real-trip']);
  const conflict=await (await call('v1/sync/mutations',{protocolVersion:1,mutations:[{...mutation,mutationId:'active-conflict-2'}]},cookie)).json();assert.equal(conflict.results[0].status,'conflict');
+});
+
+test('canonical pages redirect, documents use lowercase URLs and images remain unchanged', async () => {
+ const {default:router}=await import('../../src/router.js');
+ const assets={async fetch(request){
+  let path=new URL(request.url).pathname;
+  if(path==='/WayPoint/')path+='index.html';
+  const type=path.endsWith('.html')?'text/html':path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'image/png';
+  return new Response(await readFile(new URL('../../public'+path,import.meta.url)),{headers:{'Content-Type':type,ETag:'old', 'Content-Length':'123'}});
+ }};
+ const env={ASSETS:assets};
+ for(const path of ['/WayPoint','/WayPoint/','/WayPoint/app','/WayPoint/index.html','/waypoint','/waypoint/app','/waypoint/index.html']) {
+  const response=await router.fetch(new Request('https://liddellworks.com'+path+'?from=old'),env,{});
+  assert.equal(response.status,308);assert.equal(response.headers.get('Location'),'https://liddellworks.com/waypoint/?from=old');
+ }
+ for(const path of ['/waypoint/','/waypoint/js/auth.js','/waypoint/js/core.js','/waypoint/staging/d1-client.js','/waypoint/styles/base.css']) {
+  const response=await router.fetch(new Request('https://liddellworks.com'+path),env,{});
+  assert.equal(response.status,200);const body=await response.text();assert(!body.includes('/WayPoint/'),path);assert(body.includes('/waypoint/'),path);
+  assert.equal(response.headers.get('ETag'),null);assert.equal(response.headers.get('Content-Length'),null);
+ }
+ for(const name of ['app-icon.png','waypoint-mark.png']) {
+  const response=await router.fetch(new Request('https://liddellworks.com/waypoint/branding/'+name),env,{});
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()),await readFile(new URL('../../public/WayPoint/branding/'+name,import.meta.url)));
+ }
 });

@@ -33,7 +33,7 @@ final class WayPointAPITests: XCTestCase {
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.url?.scheme, "https")
             XCTAssertEqual(request.url?.host, "liddellworks.com")
-            XCTAssertEqual(request.url?.path, "/WayPoint/api/login")
+            XCTAssertEqual(request.url?.path, "/waypoint/api/login")
             XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
         }
         let saved = try await client.login(username: " Tester ", password: "test-only-password")
@@ -47,7 +47,7 @@ final class WayPointAPITests: XCTestCase {
         let cookie = session().cookieValue
         let client = api(status: 200,
                          body: "{\"status\":\"ok\",\"id\":\"test_account\",\"username\":\"Tester\"}",
-                         headers: ["Set-Cookie": "wp_session=\(cookie); Path=/WayPoint; Secure; HttpOnly; SameSite=Lax; Max-Age=604800"]) { request in
+                         headers: ["Set-Cookie": "wp_session=\(cookie); Path=/waypoint; Secure; HttpOnly; SameSite=Lax; Max-Age=604800"]) { request in
             // URLSession may convert httpBody into a stream before URLProtocol.
             var body = request.httpBody ?? Data()
             if request.httpBody == nil, let stream = request.httpBodyStream {
@@ -63,7 +63,7 @@ final class WayPointAPITests: XCTestCase {
             }
             let payload = try? JSONSerialization.jsonObject(with: body) as? [String: String]
             XCTAssertEqual(payload, ["phone": "+44 7700 900123"])
-            XCTAssertEqual(request.url?.path, "/WayPoint/api/login")
+            XCTAssertEqual(request.url?.path, "/waypoint/api/login")
         }
         let saved = try await client.login(phone: " +44 7700 900123 ")
         XCTAssertEqual(saved.account.id, "test_account")
@@ -91,7 +91,7 @@ final class WayPointAPITests: XCTestCase {
     func testBootstrapCursorIsEncodedAndCredentialStaysOnProduction() async throws {
         let client = api(status: 200, body: "{\"protocolVersion\":1,\"entities\":[],\"complete\":true,\"nextCursor\":null,\"syncCursor\":\"signed_cursor\"}") { request in
             XCTAssertEqual(request.url?.host, "liddellworks.com")
-            XCTAssertEqual(request.url?.path, "/WayPoint/api/v1/sync/bootstrap")
+            XCTAssertEqual(request.url?.path, "/waypoint/api/v1/sync/bootstrap")
             let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems
             XCTAssertEqual(items?.first(where: { $0.name == "cursor" })?.value, "a+b&cursor")
             XCTAssertTrue(request.value(forHTTPHeaderField: "Cookie")?.hasPrefix("wp_session=") == true)

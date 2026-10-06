@@ -152,7 +152,7 @@ final class WayPointAPI {
         _ endpoint: Endpoint, method: String = "GET", body: Data? = nil,
         session: SavedSession? = nil, cursor: String? = nil
     ) async throws -> (Data, HTTPURLResponse) {
-        guard var components = URLComponents(string: Self.origin + "/WayPoint/api/\(endpoint.rawValue)") else {
+        guard var components = URLComponents(string: Self.origin + "/waypoint/api/\(endpoint.rawValue)") else {
             throw APIError.invalidResponse
         }
         if endpoint == .bootstrap || endpoint == .changes {
@@ -211,7 +211,7 @@ final class WayPointAPI {
     private func extractSession(response: HTTPURLResponse, account: Account) throws -> SavedSession {
         guard let url = response.url,
               url.scheme == "https", url.host == URL(string: Self.origin)?.host,
-              url.path == "/WayPoint/api/login",
+              url.path == "/waypoint/api/login",
               let raw = response.value(forHTTPHeaderField: "Set-Cookie") else {
             throw APIError.invalidResponse
         }
@@ -228,7 +228,7 @@ final class WayPointAPI {
                 ? pair[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
         }
         guard attributes["domain"] == nil,
-              attributes["path"] == "/WayPoint",
+              ["/waypoint", "/WayPoint"].contains(attributes["path"] ?? ""),
               attributes["secure"] != nil, attributes["httponly"] != nil,
               let rawAge = attributes["max-age"], let age = TimeInterval(rawAge),
               age.isFinite, age > 0, age <= 30 * 24 * 60 * 60 else {
@@ -237,7 +237,7 @@ final class WayPointAPI {
         let cookies = HTTPCookie.cookies(withResponseHeaderFields: ["Set-Cookie": raw], for: url)
         guard cookies.count == 1, let cookie = cookies.first,
               cookie.name == "wp_session", cookie.domain.lowercased() == URL(string: Self.origin)?.host,
-              cookie.path == "/WayPoint", cookie.isSecure, cookie.isHTTPOnly else {
+              ["/waypoint", "/WayPoint"].contains(cookie.path), cookie.isSecure, cookie.isHTTPOnly else {
             throw APIError.invalidResponse
         }
         let claims = try SavedSession.claims(from: cookie.value)
