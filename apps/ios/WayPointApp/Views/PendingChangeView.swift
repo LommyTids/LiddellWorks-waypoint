@@ -17,39 +17,43 @@ struct PendingChangeView: View {
 
     var body: some View {
         Form {
-            if let mutation {
-                Section("Your pending change") {
-                    LabeledContent("Trip", value: model.trip(id: mutation.tripID)?.name ?? "Unavailable trip")
-                    LabeledContent("Status", value: mutation.status == .conflict ? "Needs review" : mutation.status == .blocked ? "Blocked" : "Waiting to sync")
-                    if let record = model.localRecord(for: mutation) { recordSummary(record) }
-                    else { Text(mutation.operation == .delete ? "Delete this item" : "Create or update trip") }
-                    if let message = mutation.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
-                }
-                if mutation.status == .conflict || (mutation.status == .blocked && model.localRecord(for: mutation) != nil) {
-                    Section("Current server copy") {
-                        if let server = model.serverRecord(for: mutation) { recordSummary(server) }
-                        else { Text("This item is missing or unavailable in the latest downloaded copy.") }
+            Group {
+                if let mutation {
+                    Section("Your pending change") {
+                        LabeledContent("Trip", value: model.trip(id: mutation.tripID)?.name ?? "Unavailable trip")
+                        LabeledContent("Status", value: mutation.status == .conflict ? "Needs review" : mutation.status == .blocked ? "Blocked" : "Waiting to sync")
+                        if let record = model.localRecord(for: mutation) { recordSummary(record) }
+                        else { Text(mutation.operation == .delete ? "Delete this item" : "Create or update trip") }
+                        if let message = mutation.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+                    }
+                    if mutation.status == .conflict || (mutation.status == .blocked && model.localRecord(for: mutation) != nil) {
+                        Section("Current server copy") {
+                            if let server = model.serverRecord(for: mutation) { recordSummary(server) }
+                            else { Text("This item is missing or unavailable in the latest downloaded copy.") }
+                        }
+                        Section {
+                            Button("Keep my change and queue again") { confirmReapply = true }
+                                .disabled(model.isBusy || model.isDraftSubmitted(id: mutationID))
+                        } footer: {
+                            Text("Review both copies first. This queues your change against the current server version; it may replace newer details when you sync.")
+                        }
                     }
                     Section {
-                        Button("Keep my change and queue again") { confirmReapply = true }
+                        Button(model.isDemo ? "Clear demo change marker" : "Discard this pending change", role: .destructive) { confirmDiscard = true }
                             .disabled(model.isBusy || model.isDraftSubmitted(id: mutationID))
                     } footer: {
-                        Text("Review both copies first. This queues your change against the current server version; it may replace newer details when you sync.")
+                        Text(model.isDemo ? "Demo edits are local plans. Clearing this marker keeps the edited plan." : model.isDraftSubmitted(id: mutationID)
+                             ? "This change was sent but its result is still uncertain. Sync again to check it before discarding."
+                             : "Discarding removes your local change and restores the latest downloaded version.")
                     }
+                    if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
+                } else {
+                    Section { Label("This change has been resolved.", systemImage: "checkmark.circle") }
                 }
-                Section {
-                    Button(model.isDemo ? "Clear demo change marker" : "Discard this pending change", role: .destructive) { confirmDiscard = true }
-                        .disabled(model.isBusy || model.isDraftSubmitted(id: mutationID))
-                } footer: {
-                    Text(model.isDemo ? "Demo edits are local plans. Clearing this marker keeps the edited plan." : model.isDraftSubmitted(id: mutationID)
-                         ? "This change was sent but its result is still uncertain. Sync again to check it before discarding."
-                         : "Discarding removes your local change and restores the latest downloaded version.")
-                }
-                if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
-            } else {
-                Section { Label("This change has been resolved.", systemImage: "checkmark.circle") }
             }
+            .listRowBackground(WayPointStyle.surface)
         }
+        .atlasForm()
         .navigationTitle("Review change")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Discard your pending change?", isPresented: $confirmDiscard, titleVisibility: .visible) {
@@ -70,7 +74,7 @@ struct PendingChangeView: View {
         Text(record.title).font(.headline)
         if !record.start.isEmpty { LabeledContent("Start", value: civilTime(record.start)) }
         if !record.end.isEmpty { LabeledContent("End", value: civilTime(record.end)) }
-        if !record.companions.isEmpty { LabeledContent("Participant tags", value: "\(record.companions.count)") }
+        if let trip = model.trip(id: record.tripID) { ParticipantNames(trip: trip, ids: record.companions) }
         if !record.place.venue.isEmpty { LabeledContent("Venue", value: record.place.venue) }
         if !record.place.address.isEmpty { LabeledContent("Address", value: record.place.address) }
         if !record.notes.isEmpty { Text(record.notes) }
@@ -93,22 +97,26 @@ struct NewTripView: View {
 
     var body: some View {
         Form {
-            Section("Trip") {
-                TextField("Trip name", text: $name)
-                    .textInputAutocapitalization(.words)
-                Toggle("Set travel dates", isOn: $includeDates)
-                if includeDates {
-                    DatePicker("Start", selection: $startDate, displayedComponents: .date)
-                    DatePicker("End", selection: $endDate, in: startDate..., displayedComponents: .date)
+            Group {
+                Section("Trip") {
+                    TextField("Trip name", text: $name)
+                        .textInputAutocapitalization(.words)
+                    Toggle("Set travel dates", isOn: $includeDates)
+                    if includeDates {
+                        DatePicker("Start", selection: $startDate, displayedComponents: .date)
+                        DatePicker("End", selection: $endDate, in: startDate..., displayedComponents: .date)
+                    }
                 }
+                .disabled(model.isBusy)
+                Section {
+                    DraftNotice(isDemo: model.isDemo)
+                }
+                if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
             }
-            .disabled(model.isBusy)
-            Section {
-                DraftNotice(isDemo: model.isDemo)
-            }
-            if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
+            .listRowBackground(WayPointStyle.surface)
         }
         .environment(\.timeZone, LocalTripDate.carrierZone)
+        .atlasForm()
         .navigationTitle("New trip")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -122,6 +130,7 @@ struct NewTripView: View {
                         dismiss()
                     } catch { errorMessage = error.localizedDescription }
                 }
+                .tint(WayPointStyle.amber)
                 .disabled(model.isBusy || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }

@@ -14,80 +14,19 @@ struct RootView: View {
                         .tabItem { Label("Settings", systemImage: "gearshape") }
                 }
             } else {
-                SignInView()
+                WelcomeView()
             }
         }
         .tint(WayPointStyle.teal)
         .task { await model.start() }
         .alert("WayPoint", isPresented: Binding(
-            get: { model.message != nil },
+            get: { model.workspace != nil && model.message != nil },
             set: { if !$0 { model.message = nil } }
         )) {
             Button("OK", role: .cancel) { model.message = nil }
         } message: {
             Text(model.message ?? "")
         }
-    }
-}
-
-private struct SignInView: View {
-    @EnvironmentObject private var model: AppModel
-    @State private var phone = ""
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
-                    .font(.system(size: 48, weight: .medium))
-                    .foregroundStyle(WayPointStyle.teal)
-                    .padding(.top, 32)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("WayPoint").font(.largeTitle.bold())
-                    Text("Every stop. One trip.")
-                        .font(.title2.weight(.medium))
-                    Text("Bring your travel plans with you. Download your trips, explore places with Apple Maps, and save changes offline until you can sync.")
-                        .foregroundStyle(.secondary)
-                }
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Your WayPoint account").font(.headline)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Enter login code here").font(.subheadline)
-                        TextField("Enter login code here", text: $phone)
-                            .textContentType(.telephoneNumber)
-                            .keyboardType(.phonePad)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    Button {
-                        Task { await model.signIn(phone: phone) }
-                    } label: {
-                        HStack {
-                            if model.isBusy { ProgressView().tint(.white) }
-                            Text(model.isBusy ? "Connecting…" : "Sign in").fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 7)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.isBusy || phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                .padding(22)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
-
-                Button { model.enterDemo() } label: {
-                    Label("Explore a demo trip", systemImage: "play.circle")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.bordered)
-                .disabled(model.isBusy)
-            }
-            .padding(24)
-            .frame(maxWidth: 500)
-            .frame(maxWidth: .infinity)
-        }
-        .background(Color(uiColor: .systemGroupedBackground))
     }
 }
 
@@ -99,8 +38,10 @@ private struct TripsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
+                    WayPointBrand()
                     Text(model.isDemo ? "A little inspiration" : "Hello, \(model.accountName)")
-                        .font(.title2.bold())
+                        .font(.system(.title2, design: .serif, weight: .semibold))
+                        .foregroundStyle(WayPointStyle.navy)
                     Text(model.isDemo ? "Explore a sample itinerary and try an offline edit." : "Your places, plans, and moments ahead.")
                         .foregroundStyle(.secondary)
                 }
@@ -124,12 +65,13 @@ private struct TripsView: View {
             .frame(maxWidth: 860)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(WayPointStyle.canvas)
         .navigationTitle("Your trips")
         .sheet(isPresented: $showNewTrip) { NavigationStack { NewTripView() } }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showNewTrip = true } label: { Label("New trip", systemImage: "plus") }
+                    .tint(WayPointStyle.amber)
                     .disabled(model.isBusy)
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -161,7 +103,7 @@ private struct TripCard: View {
                     .background(WayPointStyle.teal.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(trip.name).font(.title3.bold()).foregroundStyle(.primary)
+                    Text(trip.name).font(.system(.title3, design: .serif, weight: .semibold)).foregroundStyle(WayPointStyle.navy)
                     Text(LocalTripDate.range(start: trip.startDate, end: trip.endDate))
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
@@ -176,11 +118,11 @@ private struct TripCard: View {
             .font(.caption.weight(.medium)).foregroundStyle(.secondary)
             if draftCount > 0 {
                 Label("\(draftCount) pending change\(draftCount == 1 ? "" : "s")", systemImage: "pencil.circle")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                    .font(.caption.weight(.semibold)).foregroundStyle(WayPointStyle.amber)
             }
         }
         .padding(20)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
+        .atlasCard()
         .accessibilityElement(children: .combine)
     }
 }
@@ -191,60 +133,64 @@ private struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Account") {
-                LabeledContent("Signed in as", value: model.accountName)
-                LabeledContent("Mode", value: model.isDemo ? "Local demo" : "WayPoint account")
-                if !model.isDemo {
-                    LabeledContent("Server", value: URL(string: WayPointAPI.origin)?.host ?? WayPointAPI.origin)
-                }
-            }
-            Section {
-                LabeledContent("Local changes", value: "\(model.pendingCount)")
-                if let lastRefresh = model.workspace?.lastRefresh {
-                    LabeledContent("Last sync") {
-                        Text(lastRefresh, format: .dateTime.day().month(.abbreviated).hour().minute())
+            Group {
+                Section("Account") {
+                    LabeledContent("Signed in as", value: model.accountName)
+                    LabeledContent("Mode", value: model.isDemo ? "Local demo" : "WayPoint account")
+                    if !model.isDemo {
+                        LabeledContent("Server", value: URL(string: WayPointAPI.origin)?.host ?? WayPointAPI.origin)
                     }
                 }
-                if !model.isDemo {
-                    Button { Task { await model.refresh() } } label: {
-                        Label(model.isBusy ? "Syncing…" : "Sync now", systemImage: "arrow.clockwise")
+                Section {
+                    LabeledContent("Local changes", value: "\(model.pendingCount)")
+                    if let lastRefresh = model.workspace?.lastRefresh {
+                        LabeledContent("Last sync") {
+                            Text(lastRefresh, format: .dateTime.day().month(.abbreviated).hour().minute())
+                        }
                     }
-                    .disabled(!model.canRefresh || model.isBusy)
+                    if !model.isDemo {
+                        Button { Task { await model.refresh() } } label: {
+                            Label(model.isBusy ? "Syncing…" : "Sync now", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(!model.canRefresh || model.isBusy)
+                    }
+                } header: {
+                    Text("Offline storage & sync")
+                } footer: {
+                    Text(model.isDemo ? "Demo trips and changes stay on this device. Sign in to your existing WayPoint account to try sync." : "Saved trips work offline. Changes are queued on this device and sent to WayPoint when you tap Sync now. Conflicts stay here until you review them.")
                 }
-            } header: {
-                Text("Offline storage & sync")
-            } footer: {
-                Text(model.isDemo ? "Demo trips and changes stay on this device. Sign in to your existing WayPoint account to try sync." : "Saved trips work offline. Changes are queued on this device and sent to WayPoint when you tap Sync now. Conflicts stay here until you review them.")
-            }
-            if let mutations = model.workspace?.mutations, !mutations.isEmpty {
-                Section("Pending changes") {
-                    ForEach(mutations) { mutation in
-                        NavigationLink { PendingChangeView(mutationID: mutation.id) } label: {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(mutation.record?.title ?? "Trip or removed item").font(.subheadline.weight(.semibold))
-                                Text(mutation.status == .conflict ? "Needs review" : mutation.status == .blocked ? "Blocked" : "Waiting to sync")
-                                    .font(.caption).foregroundStyle(.orange)
-                                if let message = mutation.message { Text(message).font(.caption).foregroundStyle(.secondary) }
+                if let mutations = model.workspace?.mutations, !mutations.isEmpty {
+                    Section("Pending changes") {
+                        ForEach(mutations) { mutation in
+                            NavigationLink { PendingChangeView(mutationID: mutation.id) } label: {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(mutation.record?.title ?? "Trip or removed item").font(.subheadline.weight(.semibold))
+                                    Text(mutation.status == .conflict ? "Needs review" : mutation.status == .blocked ? "Blocked" : "Waiting to sync")
+                                        .font(.caption).foregroundStyle(.orange)
+                                    if let message = mutation.message { Text(message).font(.caption).foregroundStyle(.secondary) }
+                                }
                             }
                         }
                     }
                 }
+                Section("Maps") {
+                    Label("Places powered by Apple Maps", systemImage: "map")
+                    Text("Place search and map imagery need an internet connection. Saved addresses and coordinates remain in your downloaded trips.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Section {
+                    Button(model.isDemo ? "Leave demo" : "Sign out", role: .destructive) { showSignOut = true }
+                        .disabled(model.isBusy)
+                } footer: {
+                    Text("Signing out keeps drafts on this device for your next sign-in to the same account.")
+                }
+                Section {
+                    LabeledContent("WayPoint", value: "iOS production sync")
+                }
             }
-            Section("Maps") {
-                Label("Places powered by Apple Maps", systemImage: "map")
-                Text("Place search and map imagery need an internet connection. Saved addresses and coordinates remain in your downloaded trips.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section {
-                Button(model.isDemo ? "Leave demo" : "Sign out", role: .destructive) { showSignOut = true }
-                    .disabled(model.isBusy)
-            } footer: {
-                Text("Signing out keeps drafts on this device for your next sign-in to the same account.")
-            }
-            Section {
-                LabeledContent("WayPoint", value: "iOS production sync")
-            }
+            .listRowBackground(WayPointStyle.surface)
         }
+        .atlasForm()
         .navigationTitle("Settings")
         .confirmationDialog(model.isDemo ? "Leave the demo?" : "Sign out of WayPoint?", isPresented: $showSignOut, titleVisibility: .visible) {
             Button(model.isDemo ? "Leave demo" : "Sign out", role: .destructive) { Task { await model.signOut() } }

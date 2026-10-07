@@ -65,7 +65,7 @@ if test_files:
         test_builds.append(add('build:'+rel,'isa = PBXBuildFile; fileRef = '+ref+';'))
     test_product=add('test-product','isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WayPointAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR;')
     objects[products]='isa = PBXGroup; children = ('+app_product+','+test_product+',); name = Products; sourceTree = "<group>";'
-    objects[main_group]='isa = PBXGroup; children = ('+','.join(source_refs+test_refs+[products])+',); sourceTree = "<group>";'
+    objects[main_group]='isa = PBXGroup; children = ('+','.join(source_refs+test_refs+[asset_ref,products])+',); sourceTree = "<group>";'
     test_sources=add('test-sources','isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ('+','.join(test_builds)+',); runOnlyForDeploymentPostprocessing = 0;')
     test_package_build=add('test-package-build','isa = PBXBuildFile; productRef = '+package_product+';')
     test_frameworks=add('test-frameworks','isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ('+test_package_build+',); runOnlyForDeploymentPostprocessing = 0;')
@@ -76,6 +76,23 @@ if test_files:
 proj=add('project','isa = PBXProject; attributes = { BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600; TargetAttributes = { '+target+' = { CreatedOnToolsVersion = 16.0; }; }; }; buildConfigurationList = '+project_cfg+'; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en,Base,); mainGroup = '+main_group+'; packageReferences = ('+package+',); productRefGroup = '+products+'; projectDirPath = ""; projectRoot = ""; targets = ('+target+',);')
 if test_target:
     objects[proj]=objects[proj].replace('targets = ('+target+',);','targets = ('+target+','+test_target+',);')
+ui_files = sorted((ROOT/'WayPointAppUITests').rglob('*.swift'))
+ui_target = None
+if ui_files:
+    ui_refs=[]; ui_builds=[]
+    for file in ui_files:
+        rel=file.relative_to(ROOT).as_posix()
+        ref=add('file:'+rel,'isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = '+q(rel)+'; sourceTree = SOURCE_ROOT;')
+        ui_refs.append(ref)
+        ui_builds.append(add('build:'+rel,'isa = PBXBuildFile; fileRef = '+ref+';'))
+    ui_product=add('ui-product','isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WayPointAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR;')
+    objects[main_group]=objects[main_group].replace('children = (','children = ('+','.join(ui_refs)+',')
+    objects[products]=objects[products].replace('children = (','children = ('+ui_product+',')
+    ui_sources=add('ui-sources','isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ('+','.join(ui_builds)+',); runOnlyForDeploymentPostprocessing = 0;')
+    ui_frameworks=add('ui-frameworks','isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
+    ui_cfg=configs('UITests',{'PRODUCT_NAME':q('$(TARGET_NAME)'),'PRODUCT_BUNDLE_IDENTIFIER':q('com.liddellworks.waypoint.uitests'),'GENERATE_INFOPLIST_FILE':'YES','TEST_TARGET_NAME':q('WayPoint'),'CODE_SIGN_STYLE':q('Automatic'),'TARGETED_DEVICE_FAMILY':q('1,2'),'SUPPORTED_PLATFORMS':q('iphoneos iphonesimulator')})
+    ui_target=add('ui-target','isa = PBXNativeTarget; buildConfigurationList = '+ui_cfg+'; buildPhases = ('+ui_sources+','+ui_frameworks+',); buildRules = (); dependencies = ('+dependency+',); name = WayPointAppUITests; productName = WayPointAppUITests; productReference = '+ui_product+'; productType = "com.apple.product-type.bundle.ui-testing";')
+    objects[proj]=objects[proj].replace('targets = (','targets = ('+ui_target+',')
 text='// !$*UTF8*$!\n{ archiveVersion = 1; classes = {}; objectVersion = 56; objects = {\n'
 text+='\n'.join(k+' = { '+v+' };' for k,v in sorted(objects.items()))
 text+='\n}; rootObject = '+proj+'; }\n'
@@ -98,6 +115,9 @@ schemes.mkdir(parents=True,exist_ok=True)
 if test_target:
     scheme_path=schemes/'WayPoint.xcscheme'
     scheme_path.write_text(scheme_path.read_text().replace('<Testables/>','<Testables><TestableReference skipped="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="'+test_target+'" BuildableName="WayPointAppTests.xctest" BlueprintName="WayPointAppTests" ReferencedContainer="container:WayPoint.xcodeproj"/></TestableReference></Testables>'))
+if ui_target:
+    scheme_path=schemes/'WayPoint.xcscheme'
+    scheme_path.write_text(scheme_path.read_text().replace('</Testables>','<TestableReference skipped="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="'+ui_target+'" BuildableName="WayPointAppUITests.xctest" BlueprintName="WayPointAppUITests" ReferencedContainer="container:WayPoint.xcodeproj"/></TestableReference></Testables>'))
 workspace=PROJECT/'project.xcworkspace'
 workspace.mkdir(exist_ok=True)
 (workspace/'contents.xcworkspacedata').write_text('<?xml version="1.0" encoding="UTF-8"?><Workspace version="1.0"><FileRef location="self:"></FileRef></Workspace>\n')
