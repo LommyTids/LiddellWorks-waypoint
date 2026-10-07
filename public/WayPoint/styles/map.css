@@ -33,7 +33,7 @@
 .map-filter-chip.is-active { border-color: var(--map-color); background: var(--map-soft); color: var(--wp-text-primary); }
 .map-filter-chip .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); color: var(--map-color); }
 .map-filter-count { font: var(--wp-type-meta); color: var(--wp-text-muted); }
-.map-shell { position: relative; }
+.map-shell { position: relative; isolation: isolate; }
 .map-canvas { height: clamp(500px, 65dvh, 720px); border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-subdued); overflow: hidden; }
 .map-status { position: absolute; z-index: 600; left: 12px; bottom: 12px; max-width: min(420px, calc(100% - 24px)); padding: 6px 9px; border: 1px solid color-mix(in srgb, var(--wp-border-default) 80%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--wp-bg-surface) 90%, transparent); box-shadow: var(--wp-shadow-surface); color: var(--wp-text-secondary); font: var(--wp-type-micro); pointer-events: none; backdrop-filter: blur(8px); }
 .map-status.has-warning { border-color: var(--wp-action-accent); color: var(--wp-text-primary); }

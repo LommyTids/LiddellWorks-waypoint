@@ -177,6 +177,10 @@ function updateStickyShellOffsets() {
   var banner = document.getElementById('system-banner');
   if (topbar) document.documentElement.style.setProperty('--wp-shell-bar-height', topbar.getBoundingClientRect().height + 'px');
   if (banner) document.documentElement.style.setProperty('--wp-shell-banner-height', banner.getBoundingClientRect().height + 'px');
+  var controls = document.querySelector('.atlas-floating-header');
+  document.documentElement.style.setProperty('--wp-trip-controls-height', (controls ? controls.getBoundingClientRect().height : 0) + 'px');
+  var toolbar = document.querySelector('.timeline-toolbar');
+  document.documentElement.style.setProperty('--wp-trip-toolbar-height', (toolbar ? toolbar.getBoundingClientRect().height : 0) + 'px');
 }
 
 async function retryConnection(options) {

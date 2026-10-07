@@ -87,6 +87,8 @@
   --wp-text-on-strong: var(--wp-color-paper-0);
   --wp-border-default: var(--wp-color-atlas-line);
   --wp-border-strong: var(--wp-color-atlas-border);
+  --wp-action-amendment: #995900;
+  --wp-action-amendment-subtle: #fff3df;
   --wp-action-primary: var(--wp-color-atlas-ink);
   --wp-action-accent: var(--wp-color-atlas-teal);
   --wp-action-accent-strong: var(--wp-color-atlas-teal);
@@ -159,6 +161,8 @@
     --wp-text-on-strong: var(--wp-color-atlas-night);
     --wp-border-default: var(--wp-color-atlas-night-line);
     --wp-border-strong: var(--wp-color-atlas-night-border);
+    --wp-action-amendment: #f1bd78;
+    --wp-action-amendment-subtle: #3b3025;
     --wp-action-primary: var(--wp-color-atlas-paper);
     --wp-action-accent: var(--wp-color-atlas-aqua);
     --wp-action-accent-strong: var(--wp-color-atlas-aqua);
@@ -186,6 +190,8 @@
   --wp-text-on-strong: var(--wp-color-atlas-night);
   --wp-border-default: var(--wp-color-atlas-night-line);
   --wp-border-strong: var(--wp-color-atlas-night-border);
+  --wp-action-amendment: #f1bd78;
+  --wp-action-amendment-subtle: #3b3025;
   --wp-action-primary: var(--wp-color-atlas-paper);
   --wp-action-accent: var(--wp-color-atlas-aqua);
   --wp-action-accent-strong: var(--wp-color-atlas-aqua);
@@ -213,6 +219,12 @@ body {
   color: var(--wp-text-primary);
   font: var(--wp-type-body);
   -webkit-font-smoothing: antialiased;
+}
+/* The saved WayPoint mark stays decorative and never intercepts controls. */
+body::before {
+  content: ""; position: fixed; inset: 12vh 0 0;
+  background: url('/WayPoint/branding/waypoint-mark.png') center / min(80vw, 950px) auto no-repeat;
+  opacity: .10; pointer-events: none; z-index: -1;
 }
 .brand-logo { display: block; width: 40px; height: 40px; border-radius: 9px; }
 h1 { font: var(--wp-type-display); }

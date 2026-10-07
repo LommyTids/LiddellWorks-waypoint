@@ -1,12 +1,12 @@
 # Atlas web flow
 
-The trip workspace supports friends travelling on separate legs and sharing only parts of an itinerary. It uses the existing WayPoint mark and a blue/turquoise palette in both themes.
+The trip workspace supports friends travelling on separate legs and sharing only parts of an itinerary. It uses the existing WayPoint mark as a subtle background watermark and a blue/turquoise palette in both themes. Selected controls share a turquoise outline/fill; Add, Edit and Save use a contrasting amber outline, also applied to editor boxes.
 
 ## Navigation and hierarchy
 
 Desktop uses a left rail for Itinerary, Plan, People, Expenses and Trip settings. Phones use Itinerary, Plan, People and More in the bottom navigation. The same stored section keys, permissions and record editors serve both layouts.
 
-The content column stacks trip identity, Add to trip, people selection, section controls and the current panel. Identity uses the available width for the title, dates, access and whole-trip recorded costs. Agenda and Map are prominent neighbouring controls. Plan contains Areas, Travel, Stays and Activities; People contains Travellers and Contacts.
+The content column stacks trip identity, Add to trip, people selection, section controls and the current panel. From Add to trip down to the section controls, one floating bar stays below the app header and connection banner while scrolling. On smaller screens it is bounded and can scroll internally, with a compact horizontal people selector. Identity uses the available width for the title, dates, access and whole-trip recorded costs. Agenda and Map are prominent neighbouring controls. Plan contains Areas, Travel, Stays and Activities; People contains Travellers and Contacts.
 
 ## People and bookings
 
@@ -34,4 +34,4 @@ Keep the same four primary destinations, Agenda/Map choice, named assignments, i
 
 ## Validation
 
-The merge gate covers source/security regressions, static asset loading, save/reload and real Leaflet mounting in Chromium and WebKit. Responsive browser checks exercise 390, 768 and 1440 widths, both themes and four roles, plus six separate CDG departures, original booking/edit identities, filter scoping, keyboard disclosures, day collapse/date jump and band/panel geometry. The backend browser suite separately exercises phone sign-in and actual D1 create/edit/reload and paused-write protection.
+The merge gate covers source/security regressions, static asset loading, save/reload and real Leaflet mounting in Chromium and WebKit. Responsive browser checks exercise 390, 768 and 1440 widths, both themes and four roles, plus six separate CDG departures, original booking/edit identities, filter scoping, keyboard disclosures, day collapse/date jump band/panel geometry, consistent selection/amendment colors, floating-header offsets and unobscured focus. The backend browser suite separately exercises phone sign-in and actual D1 create/edit/reload and paused-write protection.
