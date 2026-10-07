@@ -1,6 +1,11 @@
-/* Offline location entry. Draft previews never change the form's saved point. */
+/* Coordinate and Plus Code entry. Named short codes use locality search. Draft previews never change the form's saved point. */
 
 function clearLocationInputPreview(wrapper) {
+  if (wrapper._locationLocalityController) wrapper._locationLocalityController.abort();
+  wrapper._locationLocalityController = null;
+  wrapper._locationLocalityChoices = null;
+  var choices = wrapper.querySelector('[data-location-locality-results]');
+  if (choices) { choices.hidden = true; choices.innerHTML = ''; choices.setAttribute('aria-busy', 'false'); }
   wrapper._locationCandidate = null;
   var region = wrapper.querySelector('[data-location-candidate]');
   if (region) region.hidden = true;
@@ -87,9 +92,16 @@ function previewLocationInput(wrapper) {
   if (!input) return;
   var checkbox = wrapper.querySelector('[data-location-reference]');
   var destination = locationInputDestination(wrapper);
-  var reference = checkbox && checkbox.checked && destination ? { lat: destination.lat, lng: destination.lng } : undefined;
+  var pastedCode = splitLocationPlusCode(input.value);
+  var reference = !(pastedCode && pastedCode.locality) && checkbox && checkbox.checked && destination ? { lat: destination.lat, lng: destination.lng } : undefined;
   var point = parseLocationInput(input.value, reference);
+  if (point.needsReference && point.locality) return lookupLocationInputLocality(wrapper, point.locality);
   if (point.error) { locationInputHint(wrapper, point.error, true); return; }
+  showLocationInputPreview(wrapper, point, destination && destination.name);
+}
+
+function showLocationInputPreview(wrapper, point, referenceName) {
+  clearLocationInputPreview(wrapper);
   abortLocationSearch(wrapper);
   clearPickerMap(wrapper);
   var results = wrapper.querySelector('[data-location-results]');
@@ -98,7 +110,7 @@ function previewLocationInput(wrapper) {
   var code = point.code || encodeLocationPlusCode(point.lat, point.lng);
   var label = wrapper.querySelector('[data-location-candidate-label]');
   if (label) label.textContent = coordinates + (code ? ' · Plus Code ' + code : '') +
-    (point.usedReference ? ' · Resolved near ' + (destination.name || 'the selected destination') : '') +
+    (point.usedReference ? ' · Resolved near ' + (referenceName || 'the selected destination') : '') +
     (point.kind === 'plus-code' ? ' · Pin shows the centre of the code’s area.' : '');
   var region = wrapper.querySelector('[data-location-candidate]');
   if (region) region.hidden = false;
@@ -125,6 +137,67 @@ function previewLocationInput(wrapper) {
   }
 }
 
+// The locality is only a temporary decoding reference, never a destination
+// or the saved pin. Fetch only on Preview/Enter, through the existing API.
+async function lookupLocationInputLocality(wrapper, locality) {
+  if (locality.length > 200) { locationInputHint(wrapper, 'Use a shorter place name after the Plus Code (town, region and country).', true); return; }
+  abortLocationSearch(wrapper);
+  var snapshot = locationInputSnapshot(wrapper);
+  var controller = new AbortController();
+  wrapper._locationLocalityController = controller;
+  locationInputHint(wrapper, 'Looking up ' + locality + '…');
+  var region = wrapper.querySelector('[data-location-locality-results]');
+  if (region) { region.hidden = false; region.setAttribute('aria-busy', 'true'); }
+  try {
+    var params = new URLSearchParams({ q: locality, context: 'destination', kind: 'area' });
+    var response = await fetch('/WayPoint/api/location-search?' + params.toString(), { signal: controller.signal });
+    var data = await response.json();
+    if (wrapper._locationLocalityController !== controller || snapshot !== locationInputSnapshot(wrapper) || wrapper.isConnected === false) return;
+    if (!response.ok) throw new Error(data.error || 'Place lookup failed.');
+    var results = (data.results || []).filter(function (result) { return validLocationInputPoint(result.lat, result.lng); });
+    if (!results.length) throw new Error('No matching place found. Check the town, region and country after the Plus Code.');
+    if (results.length === 1) {
+      previewLocationInputLocality(wrapper, results[0], snapshot);
+      if (data.attribution) {
+        var hint = wrapper.querySelector('[data-location-input-hint]');
+        if (hint) hint.textContent += ' ' + data.attribution.label;
+      }
+    } else {
+      wrapper._locationLocalityChoices = { results: results, snapshot: snapshot };
+      if (region) region.innerHTML = results.map(function (result, index) {
+        return '<button type="button" class="location-result" data-action="select-plus-code-locality" data-locality-index="' + index + '"><span class="location-result-title">' + esc(result.name || locality) + '</span><span class="location-result-address">' + esc(result.formattedAddress || '') + '</span></button>';
+      }).join('');
+      locationInputHint(wrapper, 'Choose the place intended by the Plus Code.' + (data.attribution ? ' ' + data.attribution.label : ''));
+    }
+  } catch (error) {
+    if (error.name === 'AbortError' || wrapper._locationLocalityController !== controller || snapshot !== locationInputSnapshot(wrapper) || wrapper.isConnected === false) return;
+    if (region) { region.hidden = true; region.innerHTML = ''; }
+    locationInputHint(wrapper, error.message || 'Place lookup failed. Try again when online, or paste a full Plus Code or coordinates.', true);
+  } finally {
+    if (wrapper._locationLocalityController === controller) {
+      wrapper._locationLocalityController = null;
+      if (region) region.setAttribute('aria-busy', 'false');
+    }
+  }
+}
+
+function previewLocationInputLocality(wrapper, result, snapshot) {
+  if (snapshot !== locationInputSnapshot(wrapper)) {
+    clearLocationInputPreview(wrapper);
+    locationInputHint(wrapper, 'The input changed. Preview it again.', true);
+    return;
+  }
+  var input = wrapper.querySelector('[data-location-input]');
+  var point = parseLocationInput(input.value, { lat: result.lat, lng: result.lng });
+  if (point.error) { clearLocationInputPreview(wrapper); locationInputHint(wrapper, point.error, true); return; }
+  showLocationInputPreview(wrapper, point, result.formattedAddress || result.name || point.locality);
+}
+
+function choosePlusCodeLocality(wrapper, index) {
+  var choices = wrapper._locationLocalityChoices;
+  if (choices && choices.results[index]) previewLocationInputLocality(wrapper, choices.results[index], choices.snapshot);
+}
+
 function applyLocationInput(wrapper) {
   if (!editingAvailable()) return;
   var candidate = wrapper._locationCandidate;
@@ -146,7 +219,7 @@ function applyLocationInput(wrapper) {
   pickerSet(wrapper, prefix + 'LocationStale', 'false');
   pickerSet(wrapper, prefix + 'LocationKindLabel', '');
   var query = wrapper.querySelector('[data-location-query]');
-  if (query && !query.value.trim()) query.value = point.lat.toFixed(6) + ', ' + point.lng.toFixed(6);
+  if (query && !query.value.trim()) query.value = point.locality ? point.code + ' ' + point.locality : point.lat.toFixed(6) + ', ' + point.lng.toFixed(6);
   pickerSummary(wrapper, 'Mapped from ' + (point.kind === 'plus-code' ? 'Plus Code' : 'coordinates'), false);
   var actions = wrapper.querySelector('.location-picker-actions');
   if (actions && !actions.querySelector('[data-action="preview-location"]')) {
