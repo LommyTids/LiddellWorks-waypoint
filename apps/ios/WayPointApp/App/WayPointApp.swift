@@ -9,7 +9,7 @@ struct WayPointApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
-                .tint(Color(red: 0.04, green: 0.43, blue: 0.43))
+                .tint(WayPointStyle.teal)
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active && model.canRefresh {
                         Task { await model.refresh() }

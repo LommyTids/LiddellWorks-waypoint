@@ -2,7 +2,7 @@ import SwiftUI
 import WayPointCore
 
 /// One editor for all four itinerary kinds. The original record is retained so
-/// fields not exposed by this first UI (including participants and raw data) survive.
+/// fields not exposed by this first UI (including raw data) survive.
 @MainActor
 struct RecordEditorView: View {
     @EnvironmentObject private var model: AppModel
@@ -28,12 +28,12 @@ struct RecordEditorView: View {
     @State private var confirmDelete = false
     @State private var search = ApplePlaceSearch()
 
-    init(tripID: String, kind: RecordKind, existing: ItineraryRecord? = nil, expectedRevision: Int) {
+    init(tripID: String, kind: RecordKind, existing: ItineraryRecord? = nil, expectedRevision: Int, initialParticipants: [String] = []) {
         self.tripID = tripID
         self.kind = kind
         self.existing = existing
         self.expectedRevision = expectedRevision
-        let record = existing ?? ItineraryRecord(id: UUID().uuidString, tripID: tripID, kind: kind, title: "")
+        let record = existing ?? ItineraryRecord(id: UUID().uuidString, tripID: tripID, kind: kind, title: "", companions: initialParticipants)
         _draft = State(initialValue: record)
         _latitude = State(initialValue: record.place.latitude.map { String($0) } ?? "")
         _longitude = State(initialValue: record.place.longitude.map { String($0) } ?? "")
@@ -61,28 +61,9 @@ struct RecordEditorView: View {
         return current.companions.contains(companionID)
     }
 
-    private struct ParticipantOption: Identifiable {
-        let id: String
-        let name: String
-    }
-
-    private var participants: [ParticipantOption] {
-        var values = [ParticipantOption(id: "__trip_superuser__", name: "Trip owner")]
-        if case .array(let companions)? = model.trip(id: tripID)?.raw["companions"] {
-            for companion in companions {
-                let identifier: String
-                switch companion["companionId"] {
-                case .string(let value): identifier = value
-                case .number(let value) where value.isFinite && value.rounded() == value && abs(value) <= 9_007_199_254_740_991:
-                    identifier = String(Int64(value))
-                default: continue
-                }
-                guard !identifier.isEmpty, !values.contains(where: { $0.id == identifier }) else { continue }
-                let name = Self.rawText(companion["name"])
-                values.append(ParticipantOption(id: identifier, name: name.isEmpty ? "Unnamed person" : name))
-            }
-        }
-        return values
+    private var participants: [TripParticipant] {
+        guard let trip = model.trip(id: tripID) else { return [] }
+        return TripParticipant.all(in: trip)
     }
 
     private var destinations: [ItineraryRecord] {
@@ -113,73 +94,82 @@ struct RecordEditorView: View {
 
     var body: some View {
         Form {
-            Section {
-                DraftNotice(isDemo: model.isDemo)
-                if !canEdit {
-                    Label("Read-only item. Contributors can edit only existing items tagged to them.", systemImage: "lock")
-                        .font(.footnote).foregroundStyle(.secondary)
+            Group {
+                Section {
+                    DraftNotice(isDemo: model.isDemo)
+                    if !canEdit {
+                        Label("Read-only item. Contributors can edit only existing items tagged to them.", systemImage: "lock")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
-            }
-            Section(kind.title) {
-                TextField(kind == .transport ? "Carrier or service name" : "Title", text: $draft.title)
-                if kind == .transport {
-                    TextField("Mode (flight, train, car…)", text: $transportMode)
-                    TextField("Flight number (optional)", text: $flightNumber)
-                        .textInputAutocapitalization(.characters)
+                Section(kind.title) {
+                    TextField(kind == .transport ? "Carrier or service name" : "Title", text: $draft.title)
+                    if kind == .transport {
+                        TextField("Mode (flight, train, car…)", text: $transportMode)
+                        TextField("Flight number (optional)", text: $flightNumber)
+                            .textInputAutocapitalization(.characters)
+                    }
+                    TextField("Notes", text: $draft.notes, axis: .vertical)
+                        .lineLimit(3...8)
                 }
-                TextField("Notes", text: $draft.notes, axis: .vertical)
-                    .lineLimit(3...8)
-            }
-            .disabled(!canEdit || model.isBusy)
-            if kind == .activity || kind == .accommodation {
-                Section("Destination") {
-                    Picker("Destination", selection: $destinationID) {
-                        Text("No destination").tag("")
-                        ForEach(destinations) { destination in Text(destination.title).tag(destination.id) }
-                        if !destinationID.isEmpty && !destinations.contains(where: { $0.id == destinationID }) {
-                            Text("Saved destination unavailable").tag(destinationID)
+                .disabled(!canEdit || model.isBusy)
+                if kind == .activity || kind == .accommodation {
+                    Section("Destination") {
+                        Picker("Destination", selection: $destinationID) {
+                            Text("No destination").tag("")
+                            ForEach(destinations) { destination in Text(destination.title).tag(destination.id) }
+                            if !destinationID.isEmpty && !destinations.contains(where: { $0.id == destinationID }) {
+                                Text("Saved destination unavailable").tag(destinationID)
+                            }
+                        }
+                        .disabled(!canEdit || model.isBusy || model.trip(id: tripID)?.role.allowsAddingAndDeleting != true)
+                    }
+                }
+                dateSection
+                    .disabled(!canEdit || model.isBusy)
+                placeSection
+                    .disabled(!canEdit || model.isBusy)
+                if kind == .transport { arrivalSection.disabled(!canEdit || model.isBusy) }
+                Section {
+                    if model.trip(id: tripID)?.role.allowsAddingAndDeleting == true {
+                        Button("All current travellers") { draft.companions = participants.map(\.id) }
+                            .disabled(model.isBusy)
+                        Button("Clear people") { draft.companions = [] }
+                            .disabled(model.isBusy)
+                        ForEach(participants) { participant in
+                            Toggle(participant.name, isOn: Binding(
+                                get: { draft.companions.contains(participant.id) },
+                                set: { selected in
+                                    if selected { if !draft.companions.contains(participant.id) { draft.companions.append(participant.id) } }
+                                    else { draft.companions.removeAll { $0 == participant.id } }
+                                }))
+                        }
+                        .disabled(model.isBusy)
+                    } else {
+                        if let trip = model.trip(id: tripID) {
+                            ParticipantNames(trip: trip, ids: draft.companions)
                         }
                     }
-                    .disabled(!canEdit || model.isBusy || model.trip(id: tripID)?.role.allowsAddingAndDeleting != true)
-                }
-            }
-            dateSection
-                .disabled(!canEdit || model.isBusy)
-            placeSection
-                .disabled(!canEdit || model.isBusy)
-            if kind == .transport { arrivalSection.disabled(!canEdit || model.isBusy) }
-            Section {
-                if model.trip(id: tripID)?.role.allowsAddingAndDeleting == true {
-                    ForEach(participants) { participant in
-                        Toggle(participant.name, isOn: Binding(
-                            get: { draft.companions.contains(participant.id) },
-                            set: { selected in
-                                if selected { if !draft.companions.contains(participant.id) { draft.companions.append(participant.id) } }
-                                else { draft.companions.removeAll { $0 == participant.id } }
-                            }))
-                    }
-                    .disabled(model.isBusy)
-                } else {
-                    Text("\(draft.companions.count) participant\(draft.companions.count == 1 ? "" : "s") tagged")
-                        .font(.subheadline)
-                }
-            } header: {
-                Text("Participants")
-            } footer: {
-                Text("Tags control which plans scoped accounts can see. Create and link people in the web app; contributors cannot change tags.")
-            }
-            if let errorMessage {
-                Section { Text(errorMessage).foregroundStyle(.red).accessibilityLabel("Error: \(errorMessage)") }
-            }
-            if canDelete {
-                Section {
-                    Button("Delete item", role: .destructive) { confirmDelete = true }
-                        .disabled(model.isBusy)
+                } header: {
+                    Text("Who is this for?")
                 } footer: {
-                    Text(model.isDemo ? "This deletion stays in your local demo." : "The deletion is saved offline and sent to WayPoint on your next sync.")
+                    Text("Review the named travellers before saving. No people assigned means unassigned, not everyone. Create and link people in the web app; contributors cannot change assignments.")
+                }
+                if let errorMessage {
+                    Section { Text(errorMessage).foregroundStyle(.red).accessibilityLabel("Error: \(errorMessage)") }
+                }
+                if canDelete {
+                    Section {
+                        Button("Delete item", role: .destructive) { confirmDelete = true }
+                            .disabled(model.isBusy)
+                    } footer: {
+                        Text(model.isDemo ? "This deletion stays in your local demo." : "The deletion is saved offline and sent to WayPoint on your next sync.")
+                    }
                 }
             }
+            .listRowBackground(WayPointStyle.surface)
         }
+        .atlasForm()
         .navigationTitle(existing == nil ? "New \(kind.title.lowercased())" : kind.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -187,6 +177,7 @@ struct RecordEditorView: View {
             if canEdit {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", action: save)
+                        .tint(WayPointStyle.amber)
                         .disabled(model.isBusy || draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -199,11 +190,6 @@ struct RecordEditorView: View {
             }
         } message: { Text("This queues a deletion for your next sync. In demo mode it stays on this device.") }
         .task(id: query) { await searchPlaces() }
-        .onChange(of: destinationID) { _, selected in
-            guard existing == nil, model.trip(id: tripID)?.role.allowsAddingAndDeleting == true,
-                  let destination = destinations.first(where: { $0.id == selected }) else { return }
-            draft.companions = destination.companions
-        }
         .onChange(of: draft.start) { previous, current in
             if existing == nil && (draft.end.isEmpty || draft.end == previous) { draft.end = current }
         }

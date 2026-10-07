@@ -19,5 +19,5 @@ if [ "${1:-}" = '--test' ]; then
   fi
   xcodebuild -project WayPoint.xcodeproj -scheme WayPoint \
     -configuration Debug -destination "$WAYPOINT_TEST_DESTINATION" \
-    -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO test
+    -derivedDataPath .build/ios CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES test
 fi

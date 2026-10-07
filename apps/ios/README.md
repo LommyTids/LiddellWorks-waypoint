@@ -1,6 +1,14 @@
 # WayPoint iOS — production D1 sync
 
-Native SwiftUI app for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync. The app connects to **https://liddellworks.com/WayPoint**. Enter your registered phone number in the single “Enter login code here” field. Existing account IDs and permissions, including UberUser, are retained.
+Native SwiftUI app for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync. The app connects to **https://liddellworks.com/WayPoint**. Choose **Log in to WayPoint** on the welcome screen, then enter your registered phone number in the single “Enter login code here” field. Existing account IDs and permissions, including UberUser, are retained.
+
+## Atlas interface
+
+The native app follows the web app’s blue/turquoise design language, with the existing WayPoint mark, serif headings, adaptive light/dark surfaces and amber Add/Edit/Save actions. Welcome, login and login help include loading, disabled and inline error states; account setup remains with the site owner.
+
+Trips use **Itinerary, Plan, People and More** navigation, with **Agenda/Map**, collapsible days and a date jump. Owner/Admin can select multiple travellers; either selected person matches, shared plans appear once, and unassigned plans stay visible. The same filter feeds Plan and Map. Scoped accounts keep their server-authorized snapshot. New records start with the selected people, or unassigned for All people, and changing destination preserves that choice. Participant controls include All current travellers and Clear people. Traveller/contact administration and expenses remain in the web app.
+
+See [Atlas implementation and validation](docs/ATLAS-DESIGN.md) for scope and simulator evidence.
 
 ## Update and open on your Mac
 
@@ -44,7 +52,7 @@ WAYPOINT_TEST_DESTINATION='platform=iOS Simulator,name=YOUR EXACT SIMULATOR NAME
   bash scripts/check-mac.sh --test
 ```
 
-The shared scheme includes the app-hosted service tests. Core tests also run independently with `swift test`. This project has no third-party Swift dependencies. GitHub macOS CI builds the simulator app and runs the tests; device signing and authenticated live sync also need an actual Mac/device check.
+The shared scheme includes API/storage tests and native UI tests for login/help, demo navigation, traveller defaults and accessibility text. Test runs use ad hoc simulator signing: an unsigned simulator app cannot access Keychain and reports error −34018. Core tests also run independently with `swift test`. This project has no third-party Swift dependencies. GitHub macOS CI builds the simulator app and runs the tests; device signing and authenticated live sync also need an actual Mac/device check.
 
 ## App icon
 

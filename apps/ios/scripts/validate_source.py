@@ -38,6 +38,10 @@ test_refs = set(re.findall(r'path = "(WayPointAppTests/[^"\n]+\.swift)"', projec
 test_actual = {p.relative_to(root).as_posix() for p in (root / 'WayPointAppTests').rglob('*.swift')}
 if test_refs != test_actual:
     errors.append('App test target source membership mismatch')
+ui_refs = set(re.findall(r'path = "(WayPointAppUITests/[^"\n]+\.swift)"', project_text))
+ui_actual = {p.relative_to(root).as_posix() for p in (root / 'WayPointAppUITests').rglob('*.swift')}
+if ui_refs != ui_actual:
+    errors.append('UI test target source membership mismatch')
 for xml in [root / 'WayPoint.xcodeproj/xcshareddata/xcschemes/WayPoint.xcscheme',
             root / 'WayPoint.xcodeproj/project.xcworkspace/contents.xcworkspacedata']:
     ET.parse(xml)
@@ -49,7 +53,7 @@ for token in ['httpCookieStorage = nil', 'urlCache = nil', 'completionHandler(ni
     if token not in api:
         errors.append(f'Missing network isolation check: {token}')
 
-tests = sum(len(re.findall(r'func test\w+', p.read_text())) for folder in ['Tests', 'WayPointAppTests'] for p in (root / folder).rglob('*.swift'))
+tests = sum(len(re.findall(r'func test\w+', p.read_text())) for folder in ['Tests', 'WayPointAppTests', 'WayPointAppUITests'] for p in (root / folder).rglob('*.swift'))
 if errors:
     print('\n'.join(errors))
     sys.exit(1)
