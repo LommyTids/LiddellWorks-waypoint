@@ -276,6 +276,8 @@ document.addEventListener('input', function (e) {
     pickerSet(wrapper, prefix + 'LocationStale', 'true');
     pickerSummary(wrapper, 'Location may not match', true);
   }
+  var form = wrapper.closest('#entity-form');
+  if (form) updateJourneyPresentation(form);
 });
 
 document.addEventListener('keydown', function (e) {

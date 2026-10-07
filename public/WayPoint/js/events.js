@@ -378,6 +378,7 @@ document.addEventListener('fullscreenchange', function () {
 // (see openTransportForm()).
 function journeyConfigFromElement(journey) {
   return {
+    transport: journey.dataset.transport === 'true',
     startDateKey: journey.dataset.startDate,
     endDateKey: journey.dataset.endDate,
     startTimeKey: journey.dataset.startTime,
@@ -399,11 +400,13 @@ function journeyValuesFromForm(form, config) {
   [config.startDateKey, config.endDateKey, config.startTimeKey, config.endTimeKey, config.timezoneKey, config.destinationKey].forEach(function (key) {
     if (key && form.elements[key]) values[key] = form.elements[key].value;
   });
+  if (config.transport) TRANSPORT_TIME_FIELDS.forEach(function (key) { if (form.elements[key]) values[key] = form.elements[key].value; });
   if (config.allDayKey && form.elements[config.allDayKey]) values[config.allDayKey] = form.elements[config.allDayKey].checked;
   return values;
 }
 
 function updateJourneyPresentation(form, oneJourney) {
+  syncDateControls(form);
   var journeys = oneJourney ? [oneJourney] : Array.prototype.slice.call(form.querySelectorAll('[data-journey]'));
   journeys.forEach(function (journey) {
     var config = journeyConfigFromElement(journey);
@@ -413,7 +416,7 @@ function updateJourneyPresentation(form, oneJourney) {
     Array.prototype.forEach.call(journey.querySelectorAll('input[type="time"]'), function (input) { input.disabled = allDay; });
     var values = journeyValuesFromForm(form, config);
     var endDate = form.elements[config.endDateKey];
-    if (endDate) endDate.min = values[config.startDateKey] || '';
+    if (endDate) endDate.min = config.transport ? '' : (values[config.startDateKey] || '');
     var duration = journeyDurationModel(config, values);
     var label = journey.querySelector('[data-journey-duration]');
     var strip = journey.querySelector('[data-journey-strip]');
@@ -431,7 +434,7 @@ function syncJourneyEndDate(form, journey) {
   var endInput = form.elements[config.endDateKey];
   var autoInput = form.elements[journey.dataset.autoKey];
   if (!startInput || !endInput) return;
-  endInput.min = startInput.value || '';
+  endInput.min = config.transport ? '' : (startInput.value || '');
   if (startInput.value && (!endInput.value || !autoInput || autoInput.value !== 'false')) {
     endInput.value = addDays(startInput.value, config.defaultEndOffsetDays || 0);
     if (autoInput) autoInput.value = 'true';
@@ -450,6 +453,14 @@ function validateJourneyFields(form) {
     if (!startDate || !endDate) {
       showFormError(form, 'Add both dates for this journey.', form.elements[config.startDateKey] || endDateInput);
       return false;
+    }
+    if (config.transport) {
+      var elapsed = transportElapsed(values);
+      if (elapsed.error && elapsed.error !== 'Select timezone to calculate duration' && elapsed.error !== 'Add both times') {
+        showFormError(form, elapsed.error, endDateInput);
+        return false;
+      }
+      continue;
     }
     if (endDate < startDate) {
       showFormError(form, 'The end date cannot be before the start date.', endDateInput);
@@ -483,6 +494,11 @@ function validateEditableFields(form) {
   return true;
 }
 
+document.addEventListener('input', function (e) {
+  var form = e.target.closest('#entity-form');
+  if (form && (e.target.type === 'time' || /^(depart|arrive)TimezoneOverride$/.test(e.target.name))) updateJourneyPresentation(form);
+});
+
 document.addEventListener('change', function (e) {
   var form = e.target.closest('#entity-form');
   var journey = form && e.target.closest('[data-journey]');
@@ -500,7 +516,7 @@ document.addEventListener('change', function (e) {
   // but they determine the local-time captions shown inside it.
   if (form && !journey) {
     var relatedJourney = Array.prototype.some.call(form.querySelectorAll('[data-journey]'), function (candidate) {
-      return e.target.name === candidate.dataset.timezoneKey || e.target.name === candidate.dataset.destinationKey;
+      return (candidate.dataset.transport === 'true' && TRANSPORT_TIME_FIELDS.indexOf(e.target.name) !== -1) || e.target.name === candidate.dataset.timezoneKey || e.target.name === candidate.dataset.destinationKey;
     });
     if (relatedJourney) updateJourneyPresentation(form);
   }

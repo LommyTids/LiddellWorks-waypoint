@@ -175,7 +175,7 @@ function journeyDurationModel(config, values) {
   if (!startDate || !endDate) return { label: 'Duration', filled: 0, total: 12 };
   var startDay = journeyUtcMinutes(startDate, '00:00');
   var endDay = journeyUtcMinutes(endDate, '00:00');
-  if (startDay === null || endDay === null || endDay < startDay) return { label: 'Check dates', filled: 0, total: 12 };
+  if (startDay === null || endDay === null || (!config.transport && endDay < startDay)) return { label: 'Check dates', filled: 0, total: 12 };
   var dayDifference = Math.round((endDay - startDay) / 1440);
   if (config.durationKind === 'nights') {
     var nights = Math.max(0, dayDifference);
@@ -194,6 +194,11 @@ function journeyDurationModel(config, values) {
     return { label: allDay ? calendarDays + ' day' + (calendarDays === 1 ? '' : 's') : 'Add both times', filled: Math.min(12, Math.max(1, calendarDays)), total: Math.min(12, Math.max(1, calendarDays)) };
   }
   var minutes = journeyUtcMinutes(endDate, endTime) - journeyUtcMinutes(startDate, startTime);
+  if (config.transport) {
+    var elapsed = transportElapsed(values);
+    if (elapsed.error) return { label: elapsed.error, filled: 0, total: 12 };
+    minutes = elapsed.minutes;
+  }
   if (!isFinite(minutes) || minutes < 0) return { label: 'Check times', filled: 0, total: 12 };
   var hours = Math.floor(minutes / 60), remainder = minutes % 60;
   var label = (hours ? hours + ' hour' + (hours === 1 ? '' : 's') : '') + (hours && remainder ? ' ' : '') + (remainder ? remainder + ' min' : (!hours ? '0 min' : ''));
@@ -208,6 +213,7 @@ function journeyStripHtml(model) {
 }
 
 function journeyLocalLabel(config, values, trip, end) {
+  if (config.transport) return transportLocalLabel(values, end);
   if (end && config.endLocalLabel) return config.endLocalLabel;
   if (!end && config.startLocalLabel) return config.startLocalLabel;
   var timezone = config.timezoneKey ? values[config.timezoneKey] : '';
@@ -231,10 +237,10 @@ function journeyTimingHtml(field, values, trip) {
   var allDay = !!(config.allDayKey && (values[config.allDayKey] === true || values[config.allDayKey] === 'true' || values[config.allDayKey] === 'on'));
   var modelValues = Object.assign({}, values); modelValues[config.startDateKey] = startDate; modelValues[config.endDateKey] = endDate;
   var duration = journeyDurationModel(config, modelValues);
-  var configAttrs = ' data-journey data-start-date="' + config.startDateKey + '" data-end-date="' + config.endDateKey + '" data-start-time="' + (config.startTimeKey || '') + '" data-end-time="' + (config.endTimeKey || '') + '" data-auto-key="' + autoKey + '" data-default-end-offset="' + (config.defaultEndOffsetDays || 0) + '" data-duration-kind="' + esc(config.durationKind || 'elapsed') + '" data-inclusive="' + String(config.inclusive !== false) + '" data-timezone-key="' + esc(config.timezoneKey || '') + '" data-destination-key="' + esc(config.destinationKey || '') + '" data-start-local-label="' + esc(config.startLocalLabel || '') + '" data-end-local-label="' + esc(config.endLocalLabel || '') + '"' + (config.dateOnly ? ' data-date-only="true"' : '') + (config.allDayKey ? ' data-all-day="' + config.allDayKey + '"' : '');
+  var configAttrs = (config.transport ? ' data-transport="true"' : '') + ' data-journey data-start-date="' + config.startDateKey + '" data-end-date="' + config.endDateKey + '" data-start-time="' + (config.startTimeKey || '') + '" data-end-time="' + (config.endTimeKey || '') + '" data-auto-key="' + autoKey + '" data-default-end-offset="' + (config.defaultEndOffsetDays || 0) + '" data-duration-kind="' + esc(config.durationKind || 'elapsed') + '" data-inclusive="' + String(config.inclusive !== false) + '" data-timezone-key="' + esc(config.timezoneKey || '') + '" data-destination-key="' + esc(config.destinationKey || '') + '" data-start-local-label="' + esc(config.startLocalLabel || '') + '" data-end-local-label="' + esc(config.endLocalLabel || '') + '"' + (config.dateOnly ? ' data-date-only="true"' : '') + (config.allDayKey ? ' data-all-day="' + config.allDayKey + '"' : '');
   function momentHtml(prefix, dateKey, timeKey, dateValue, timeValue, localLabel, endMoment) {
     return '<div class="journey-moment"><div class="journey-moment-head"><strong>' + esc(prefix) + '</strong><span class="journey-local-label" data-journey-local="' + (endMoment ? 'end' : 'start') + '">' + esc(localLabel) + '</span></div><div class="journey-date-time-row">' +
-      '<div class="field journey-date-field">' + icon('date') + '<label>' + esc(prefix) + ' date</label><input type="date" name="' + dateKey + '" value="' + esc(dateValue) + '"' + (endMoment ? ' min="' + esc(startDate) + '"' : '') + ' required></div>' +
+      '<div class="field journey-date-field">' + icon('date') + '<label>' + esc(prefix) + ' date</label><input type="date" name="' + dateKey + '" value="' + esc(dateValue) + '"' + (endMoment && !config.transport ? ' min="' + esc(startDate) + '"' : '') + ' required></div>' +
       (config.dateOnly ? '' : '<div class="field journey-time-field">' + icon('time') + '<label>' + esc(prefix) + ' time</label><input type="time" name="' + timeKey + '" value="' + esc(timeValue || '') + '"' + (allDay ? ' disabled' : '') + '></div>') +
     '</div></div>';
   }

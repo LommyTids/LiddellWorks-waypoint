@@ -118,13 +118,13 @@ function daysBetween(fromDate, toDate) {
 function formatDateHeading(dateStr) {
   var parts = dateStr.split('-').map(Number);
   var dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
-  return WEEKDAYS[dt.getUTCDay()] + ' ' + parts[2] + ' ' + MONTHS[parts[1] - 1] + ' ' + parts[0];
+  return WEEKDAYS[dt.getUTCDay()] + ' ' + String(parts[2]).padStart(2, '0') + '/' + MONTHS[parts[1] - 1] + '/' + parts[0];
 }
 
 function formatDateShort(dateStr) {
   if (!dateStr) return '';
   var parts = dateStr.split('-').map(Number);
-  return parts[2] + ' ' + MONTHS[parts[1] - 1] + ' ' + parts[0];
+  return String(parts[2]).padStart(2, '0') + '/' + MONTHS[parts[1] - 1] + '/' + parts[0];
 }
 
 function dateOnly(iso) { return iso ? iso.slice(0, 10) : ''; }

@@ -631,7 +631,7 @@ const ACCOMMODATION_TYPE_VALUES = new Set(["Other", "Hotel / hostel", "Apartment
 const ITEM_FIELDS = {
   destinations: ["destinationId", "name", "country", "arriveDate", "departDate", "timezone", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel", "bbox", "boundaryRef", "boundaryQuality"],
   activities: ["activityId", "title", "category", "destinationId", "date", "startDate", "endDate", "allDay", "startTime", "endTime", "location", "address", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "addressLat", "addressLng", "addressLocationRef", "addressLocationMethod", "addressLocationGranularity", "addressLocationStale", "addressLocationKindLabel"],
-  transport: ["transportId", "mode", "carrier", "flightNumber", "licensePlate", "fromLocation", "toLocation", "departDateTime", "arriveDateTime", "paymentType", "costCurrency", "costAmount", "costRate", "pointsProgram", "pointsAmount", "bookingRef", "contactId", "receiptRef", "companions", "notes", "fromLat", "fromLng", "toLat", "toLng", "fromLocationRef", "toLocationRef", "fromLocationMethod", "toLocationMethod", "fromLocationGranularity", "toLocationGranularity", "fromLocationStale", "toLocationStale", "fromLocationKindLabel", "toLocationKindLabel"],
+  transport: ["transportId", "mode", "carrier", "flightNumber", "licensePlate", "fromLocation", "toLocation", "departDateTime", "arriveDateTime", "departTimezone", "arriveTimezone", "departTimezoneOverride", "arriveTimezoneOverride", "departOccurrence", "arriveOccurrence", "paymentType", "costCurrency", "costAmount", "costRate", "pointsProgram", "pointsAmount", "bookingRef", "contactId", "receiptRef", "companions", "notes", "fromLat", "fromLng", "toLat", "toLng", "fromLocationRef", "toLocationRef", "fromLocationMethod", "toLocationMethod", "fromLocationGranularity", "toLocationGranularity", "fromLocationStale", "toLocationStale", "fromLocationKindLabel", "toLocationKindLabel"],
   accommodation: ["accommodationId", "name", "type", "destinationId", "address", "checkIn", "checkOut", "bookingRef", "contactId", "costAmount", "costCurrency", "costRate", "receiptRef", "companions", "notes", "lat", "lng", "locationRef", "locationMethod", "locationGranularity", "locationStale", "locationKindLabel"],
   contacts: ["contactId", "name", "role", "phone", "email", "address", "notes"],
   expenses: ["expenseId", "description", "category", "date", "amount", "currency", "rateOverride", "receiptRef", "contactId", "notes"],
@@ -761,6 +761,15 @@ function sanitizeItem(listKey, item) {
     } else if (listKey === "accommodation" && key === "type") {
       const type = safeText(value, 80);
       output.type = ACCOMMODATION_TYPE_VALUES.has(type) ? type : "Other";
+    }
+    else if (/^(depart|arrive)Timezone(Override)?$/.test(key)) {
+      const zone = safeText(value, 100);
+      if (zone) { try { new Intl.DateTimeFormat('en', { timeZone: zone }); } catch (_) { throw new Error("Invalid transport timezone."); } }
+      output[key] = zone;
+    }
+    else if (/^(depart|arrive)Occurrence$/.test(key)) {
+      if (!["", "earlier", "later"].includes(value)) throw new Error("Invalid clock occurrence.");
+      output[key] = value;
     }
     else if (key === "companions") output[key] = Array.isArray(value) ? value.slice(0, 100).map(function (id) { return safeId(id, false); }) : [];
     else if (key === "joinsOn" || key === "leavesOn") {

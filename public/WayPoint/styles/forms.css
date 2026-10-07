@@ -152,3 +152,9 @@ textarea { resize: vertical; min-height: 60px; }
 .suggest-item { padding: 8px 10px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); cursor: pointer; }
 .suggest-item.is-active, .suggest-item:hover { background: var(--wp-bg-subdued); }
 .suggest-empty { padding: 8px 10px; font: var(--wp-type-label); color: var(--wp-text-muted); }
+
+/* Locale-independent date text, with the browser calendar still available. */
+.formatted-date { display: flex; position: relative; align-items: center; gap: 4px; min-width: 0; width: 100%; }
+.formatted-date > input[type="text"] { min-width: 0; width: 100%; }
+.formatted-date > .date-calendar-native { position: absolute; width: 1px; height: 1px; padding: 0; opacity: 0; bottom: 0; right: 0; pointer-events: none; }
+.date-calendar-button { flex-shrink: 0; min-width: 36px; min-height: 40px; border: 1px solid var(--wp-border-default); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }

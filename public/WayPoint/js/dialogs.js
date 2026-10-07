@@ -48,6 +48,7 @@ function appendDescribedBy(control, id) {
 
 function enhanceAccessibility(scope) {
   if (!scope || !scope.querySelectorAll) return;
+  enhanceDateControls(scope);
   Array.prototype.forEach.call(scope.querySelectorAll('.field'), function (field) {
     var controls = Array.prototype.filter.call(field.querySelectorAll('input:not([type="hidden"]), select, textarea'), function (control) {
       return control.closest('.field') === field && !control.closest('label');
@@ -143,6 +144,7 @@ function activateModal() {
 }
 
 function showFormError(form, message, control) {
+  if (control && control._dateDisplay) control = control._dateDisplay;
   if (!form) { showToast(message); return; }
   var body = form.querySelector('.modal-body') || form;
   var summary = form.querySelector('.form-error-summary');
