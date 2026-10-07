@@ -10,7 +10,7 @@ function requirePattern(pattern, message) {
 
 // Desktop and mobile representations must coexist so the responsive shell
 // never forks permissions, content rendering or record state.
-requirePattern(/class="desktop-trip-nav"[^>]*aria-label="Trip sections"/, 'Desktop trip navigation is missing');
+requirePattern(/class="desktop-trip-nav atlas-rail"[^>]*aria-label="Trip sections"/, 'Desktop trip navigation is missing');
 requirePattern(/class="mobile-destination-nav"[^>]*aria-label="Trip destinations"/, 'Mobile destination navigation is missing');
 requirePattern(/grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/, 'Mobile navigation does not reserve four equal destinations');
 for (const destination of ['overview', 'plan', 'people', 'more']) {
@@ -19,7 +19,7 @@ for (const destination of ['overview', 'plan', 'people', 'more']) {
 }
 
 // Compact identity and Overview hierarchy are the agreed phone shell.
-requirePattern(/\.trip-header\s*\{[\s\S]*?position:\s*sticky[\s\S]*?top:\s*calc\(var\(--wp-shell-bar-height, 56px\) \+ var\(--wp-shell-banner-height, 0px\)\)/, 'Trip header must remain below the measured top bar and system banner');
+requirePattern(/\.atlas-trip-identity\s*\{[^}]*position:\s*static/, 'Phone identity should scroll to reserve space for the itinerary');
 requirePattern(/class="trip-date-range"/, 'Compact trip header has no date range');
 requirePattern(/mobile-overview-switch/, 'Timeline and Map have no prominent mobile segmented control');
 requirePattern(/body\.is-trip-view \.page/, 'Trip view does not reserve space for bottom navigation');

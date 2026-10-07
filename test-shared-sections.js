@@ -27,10 +27,10 @@ const formCases = [
   [forms.ACCOMMODATION_FORM_SECTIONS, 'Companions', undefined, 'Optional confirmation details and a property or host contact.']
 ];
 for (const [sections, label, hint, bookingHint] of formCases) {
-  const people = { key: 'companions', label, type: 'tag-picker', wide: true };
+  const people = { key: 'companions', label: 'Who is this for?', type: 'tag-picker', wide: true };
   if (hint) people.hint = hint;
   assert.deepEqual(plain(section(sections, 'People and notes')), {
-    title: 'People and notes', collapsible: true, fields: [
+    title: 'People and notes', fields: [
       people, { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
     ]
   });

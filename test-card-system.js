@@ -64,11 +64,10 @@ assert(/\.item-row\[data-item-section="transport"\] \.item-title\s*\{[^}]*font-w
 assert(/\.item-metadata\s*\{[^}]*flex-wrap:\s*wrap/.test(style), 'Metadata no longer flows as one wrapping run');
 assert(/\.item-meta-group\s*\{\s*display:\s*contents/.test(style), 'Metadata groups still each occupy their own row');
 
-// The people line scrolls instead of growing the card.
-assert(/\.item-people\s*\{[^}]*flex-wrap:\s*nowrap/.test(style), 'The people line wraps instead of scrolling');
-assert(/\.item-people\s*\{[^}]*overflow-x:\s*auto/.test(style), 'The people line does not scroll');
-assert(/\.item-people\s*\{[^}]*overscroll-behavior-x:\s*contain/.test(style), 'Scrolling the people line can drag the page behind it');
-assert(source.includes('tabindex="0" role="group" aria-label="People on this record"'), 'The people scroller cannot be reached or named from the keyboard');
+// Names wrap so every assignment stays readable without a hidden scroller.
+assert(/\.item-people\s*\{[^}]*flex-wrap:\s*wrap/.test(style), 'People names must wrap');
+assert(source.includes('role="group" aria-label="People on this record"'), 'People assignments lack a named group');
+assert(!source.includes('tabindex="0" role="group" aria-label="People on this record"'), 'A noninteractive people group must not add a tab stop');
 
 const coarse = (style.match(/@media \(pointer: coarse\)\s*\{([\s\S]*?)\n\}/) || [])[1] || '';
 assert(coarse.includes('.item-meta-more-btn'), 'The "+N more" disclosure is below the coarse-pointer minimum');
@@ -100,15 +99,15 @@ const meta = (over) => Object.assign({ datetime: [], location: [], category: [],
 const bare = ctx.itemRowHtml({}, { context: 'plan', section: 'activity', item: {}, icon: 'activity', title: 'Just a title', metadata: meta() });
 assert(bare.includes('Just a title'), 'The title did not render');
 assert(!bare.includes('item-metadata'), 'An empty metadata slot still rendered a wrapper');
-assert(!bare.includes('item-people'), 'An empty people slot still rendered a scroller');
+assert(bare.includes('No people assigned'), 'An unassigned itinerary record must say so');
 assert(!bare.includes('item-supporting'), 'An empty supporting slot still rendered');
-assert((bare.match(/item-row-line/g) || []).length === 2, 'A bare record should render exactly the control strip and the title line');
+assert((bare.match(/item-row-line/g) || []).length === 2, 'A bare record should render the compact title/actions and unassigned people line');
 
 // A spacer alone must not keep a line alive. The map layout's first line is
 // ['icon','spacer','actions'], so a record with no icon and no permitted
 // actions leaves only the spacer — and that line must vanish entirely.
 const spacerOnly = ctx.itemRowHtml({}, {
-  context: 'map', section: 'activity', item: {}, title: 'T',
+  context: 'map', section: 'contact', item: {}, title: 'T',
   showRecordActions: false, metadata: meta()
 });
 assert(!spacerOnly.includes('item-row-spacer'), 'A line holding only a spacer still rendered');
@@ -116,12 +115,12 @@ assert(!spacerOnly.includes('data-item-line="icon"'), 'The empty control strip s
 assert((spacerOnly.match(/item-row-line/g) || []).length === 1, 'Only the title line should survive');
 // ...but the same line does render once anything real joins the spacer.
 const withActions = ctx.itemRowHtml({}, {
-  context: 'map', section: 'activity', item: {}, title: 'T', metadata: meta()
+  context: 'map', section: 'contact', item: {}, title: 'T', metadata: meta()
 });
 assert(withActions.includes('data-item-line="icon"'), 'The control strip vanished even though it has actions');
 assert(withActions.includes('item-row-spacer'), 'The spacer is missing from a line that does render');
 
-// People move to their own scrolling line and leave the capped run.
+// People move to their own wrapping line and leave the capped run.
 const populated = ctx.itemRowHtml({}, {
   context: 'plan', section: 'activity', item: { activityId: 'a1' }, icon: 'activity', title: 'Museum',
   metadata: meta({

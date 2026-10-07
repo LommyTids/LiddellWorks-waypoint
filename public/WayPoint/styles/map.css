@@ -2,13 +2,13 @@
    The Map is intentionally allowed to use more horizontal space than the
    itinerary/editor tabs: routes are spatial information, so squeezing them
    into the normal reading-column width makes the view less useful. */
-.map-workspace { width: min(1240px, calc(100vw - 32px)); margin-left: 50%; transform: translateX(-50%); }
+.map-workspace, .map-workspace-fullwidth { width: 100%; min-width: 0; margin-left: 0; transform: none; }
 .map-toolbar { display: flex; flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 12px; }
 .map-range-controls { width: 100%; }
 .map-range-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--wp-text-secondary); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
 .map-range-summary strong { color: var(--wp-text-primary); font: var(--wp-type-label); }
 .map-range-summary-actions { display: flex; align-items: center; gap: 10px; }
-.map-reset { min-height: 32px; padding: 4px 9px; }
+.map-reset { min-height: 44px; padding: 8px 10px; }
 .map-range-days { font: var(--wp-type-meta); white-space: nowrap; }
 .map-range-slider { --range-start: 0%; --range-end: 100%; position: relative; height: 54px; margin: 0 8px; }
 .map-range-rail, .map-range-fill { position: absolute; top: 21px; height: 6px; border-radius: 999px; }
@@ -28,7 +28,7 @@
 .map-range-slider.labels-overlap .map-range-handle-label.is-end { top: 24px; }
 .map-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .map-filter-bar { display: flex; gap: 6px; flex-wrap: wrap; }
-.map-filter-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-label); cursor: pointer; }
+.map-filter-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-label); cursor: pointer; }
 .map-filter-chip:hover { border-color: var(--wp-text-muted); color: var(--wp-text-primary); }
 .map-filter-chip.is-active { border-color: var(--map-color); background: var(--map-soft); color: var(--wp-text-primary); }
 .map-filter-chip .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); color: var(--map-color); }
@@ -38,7 +38,7 @@
 .map-status { position: absolute; z-index: 600; left: 12px; bottom: 12px; max-width: min(420px, calc(100% - 24px)); padding: 6px 9px; border: 1px solid color-mix(in srgb, var(--wp-border-default) 80%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--wp-bg-surface) 90%, transparent); box-shadow: var(--wp-shadow-surface); color: var(--wp-text-secondary); font: var(--wp-type-micro); pointer-events: none; backdrop-filter: blur(8px); }
 .map-status.has-warning { border-color: var(--wp-action-accent); color: var(--wp-text-primary); }
 .map-marker-icon { background: transparent; border: 0; }
-.map-marker { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 3px solid var(--wp-bg-surface); border-radius: 10px 10px 10px 2px; background: var(--map-color); color: var(--wp-color-paper-0); box-shadow: 0 2px 5px rgba(26,34,51,.32); transform: rotate(-45deg); }
+.map-marker { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 3px solid var(--wp-bg-surface); border-radius: 10px 10px 10px 2px; background: var(--map-color); color: var(--wp-text-on-strong); box-shadow: 0 2px 5px rgba(26,34,51,.32); transform: rotate(-45deg); }
 /* The pin container supplies the familiar teardrop silhouette; rotate the
    semantic glyph back so planes, beds and tickets remain recognisable. */
 .map-marker .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); transform: rotate(45deg); }
@@ -52,7 +52,7 @@
 .map-route-popup { display: flex; flex-direction: column; gap: 3px; }
 .map-route-popup .map-route-meta { color: var(--wp-text-secondary); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
 .map-unmapped { margin-top: 18px; padding: 16px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); }
-.map-unmapped-head { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; list-style: none; }
+.map-unmapped-head { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 9px; min-height: 44px; cursor: pointer; list-style: none; }
 .map-unmapped-head::-webkit-details-marker { display: none; }
 .map-unmapped details[open] .map-unmapped-head { margin-bottom: 12px; }
 .map-unmapped-head .icon { width: var(--wp-icon-md); height: var(--wp-icon-md); color: var(--wp-action-accent); margin-top: 2px; }
@@ -149,3 +149,21 @@
 .map-range-slider.handles-overlap { height: 90px; }
 .map-range-slider.handles-overlap .map-range-input[data-map-range-handle="end"] { top: 44px; }
 .map-range-slider.handles-overlap .map-range-handle-label.is-end { top: 68px; }
+
+/* Large drag targets preserve the existing dual-handle range interaction. */
+.map-range-slider { height: 82px; }
+.map-range-rail, .map-range-fill { top: 49px; }
+.map-range-input { top: 30px; height: 44px; }
+.map-range-input::-webkit-slider-thumb { width: 44px; height: 44px; margin-top: -19px; border-width: 8px; }
+.map-range-input::-moz-range-thumb { width: 28px; height: 28px; border-width: 8px; }
+.map-range-slider.labels-overlap .map-range-handle-label.is-end { top: 22px; }
+.map-range-slider.labels-overlap .map-range-input { top: 48px; }
+.map-range-slider.labels-overlap .map-range-rail, .map-range-slider.labels-overlap .map-range-fill { top: 67px; }
+.map-range-slider.labels-overlap { height: 100px; }
+.map-range-slider.handles-overlap { height: 136px; }
+.map-range-slider.handles-overlap .map-range-input { top: 30px; }
+.map-range-slider.handles-overlap .map-range-rail, .map-range-slider.handles-overlap .map-range-fill { top: 49px; }
+.map-range-slider.handles-overlap .map-range-input[data-map-range-handle="end"] { top: 84px; }
+.map-range-slider.handles-overlap .map-range-handle-label.is-end { top: 68px; }
+.map-range-summary { flex-wrap: wrap; }
+.map-unmapped-title, .map-unmapped-reason { overflow-wrap: anywhere; }

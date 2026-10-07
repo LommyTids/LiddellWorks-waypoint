@@ -68,7 +68,8 @@ async function assertHttpAssets() {
     for (const match of assets) {
       const asset = await fetch(new URL(match[2], url));
       assert.strictEqual(asset.status, 200, 'Asset did not load: ' + match[2]);
-      const mime = match[1] === 'script' ? /^(?:text|application)\/javascript(?:;|$)/ : /^text\/css(?:;|$)/;
+      const mime = match[1] === 'script' ? /^(?:text|application)\/javascript(?:;|$)/ :
+        /\.png$/.test(match[2]) ? /^image\/png(?:;|$)/ : /^text\/css(?:;|$)/;
       assert(mime.test(asset.headers.get('content-type') || ''), 'Incorrect asset MIME: ' + match[2]);
       assert((await asset.text()).trim(), 'Asset is empty: ' + match[2]);
     }
@@ -160,6 +161,7 @@ async function runEngine(label, engine) {
     await page.locator('[data-action="open-trip"][data-id="asset-test-trip"]').click();
 
     // Exercise the application's save pipeline, then reload from the mock API.
+    await page.locator('.atlas-rail [data-tab="settings"]').click();
     await page.locator('[data-action="edit-trip"]').first().click();
     const savedName = 'Saved Pacific trip ' + label;
     await page.locator('#entity-form input[name="name"]').fill(savedName);
@@ -175,6 +177,9 @@ async function runEngine(label, engine) {
       await page.locator('[data-action="open-trip"][data-id="asset-test-trip"]').click();
     }
 
+    if (!(await page.locator('#trip-nav-map').count())) {
+      await page.locator('.atlas-rail [data-destination="overview"]').click();
+    }
     await page.locator('#trip-nav-map').click();
     await assertMap(page);
     assert(boundaryRequests > 0, 'Boundary failure path was not exercised');

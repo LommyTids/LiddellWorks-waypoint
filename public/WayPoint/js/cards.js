@@ -59,8 +59,8 @@ var ITEM_META_CAP = 3;
    all empty does not render at all. `spacer` pushes what follows to the
    right edge and never keeps a line alive by itself. */
 var ITEM_CARD_LAYOUTS = {
-  plan:     [['time', 'icon', 'spacer', 'cost', 'actions'], ['title', 'badges'], ['metadata'], ['supporting'], ['status'], ['people']],
-  timeline: [['time', 'icon', 'spacer', 'cost', 'actions'], ['title', 'badges'], ['supporting'], ['status']],
+  plan:     [['icon', 'title', 'badges', 'spacer', 'cost', 'actions'], ['metadata'], ['people'], ['supporting'], ['status']],
+  timeline: [['time', 'icon', 'title', 'badges', 'spacer', 'cost', 'actions'], ['people'], ['supporting'], ['status']],
   map:      [['icon', 'spacer', 'actions'], ['title', 'badges'], ['datetime', 'location'], ['supporting'], ['people']],
   person:   [['avatar', 'icon', 'spacer', 'actions'], ['title', 'badges'], ['metadata'], ['supporting'], ['status']]
 };
@@ -144,13 +144,11 @@ var ITEM_CARD_SLOTS = {
     return extra + own;
   },
   spacer: function () { return '<span class="item-row-spacer"></span>'; },
-  // People scroll sideways rather than wrapping: a record with six
-  // companions otherwise added six rows to every card in the list.
-  // Focusable so the run can be panned from the keyboard.
+  // Wrap participant names so every assignment remains visible.
   people: function (trip, model) {
     var tags = companionTags(trip, (model.metadata && model.metadata.people) || []);
-    if (!tags) return '';
-    return '<div class="item-people" tabindex="0" role="group" aria-label="People on this record">' + tags + '</div>';
+    if (!tags && ['destination', 'activity', 'transport', 'accommodation'].indexOf(model.section) === -1) return '';
+    return '<div class="item-people" role="group" aria-label="People on this record">' + (tags || '<span class="tag tag-unassigned">No people assigned</span>') + '</div>';
   },
   metadata: function (trip, model, groups) {
     return itemMetaBlockHtml(trip, model.metadata || {}, groups, ITEM_META_CAP);
@@ -172,7 +170,7 @@ var ITEM_CARD_SLOTS = {
 
 // The other four groups can also be placed individually, so a context can
 // spread them across lines (the Map does). `people` is not among them --
-// it has its own scrolling slot above.
+// it has its own wrapping slot above.
 ['datetime', 'location', 'category', 'commerce'].forEach(function (metaSlot) {
   ITEM_CARD_SLOTS[metaSlot] = function (trip, model) {
     return itemMetaBlockHtml(trip, model.metadata || {}, [metaSlot], 0);

@@ -205,22 +205,13 @@
 .item-meta-more-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
 .item-meta-more-rest { display: flex; flex-wrap: wrap; gap: 5px 6px; margin-top: 5px; }
 
-/* People get their own line along the bottom and scroll sideways rather
-   than wrapping, so a record with two companions and one with twelve are
-   the same height. Focusable so the run can be panned from the keyboard,
-   and the only part of a card allowed to scroll horizontally. */
+/* Names remain visible on a shared record; a larger group wraps naturally. */
 .item-people {
   flex: 1 1 auto; min-width: 0;
-  display: flex; gap: 6px; flex-wrap: nowrap;
-  margin-top: 3px; padding-top: 7px; padding-bottom: 2px;
-  border-top: 1px solid var(--wp-border-default);
-  overflow-x: auto; overscroll-behavior-x: contain;
-  scrollbar-width: thin; scrollbar-color: var(--wp-border-strong) transparent;
+  display: flex; gap: 5px 6px; flex-wrap: wrap;
+  margin-top: 2px; padding-top: 4px; padding-bottom: 2px;
 }
-.item-people::-webkit-scrollbar { height: 6px; }
-.item-people::-webkit-scrollbar-thumb { background: var(--wp-border-strong); border-radius: 999px; }
-.item-people::-webkit-scrollbar-track { background: transparent; }
-.item-people .tag { flex: 0 0 auto; }
+.item-people .tag { flex: 0 1 auto; max-width: 100%; overflow-wrap: anywhere; background: var(--wp-context-location-subtle); color: var(--wp-context-location); }
 
 .item-supporting { color: var(--wp-text-secondary); font: var(--wp-type-meta); overflow-wrap: anywhere; }
 .item-status { color: var(--wp-state-danger); font: var(--wp-type-meta); display: flex; align-items: center; gap: 5px; }
@@ -312,7 +303,7 @@
 .timeline-progress strong { color: var(--wp-text-primary); }
 .timeline-progress-track { width: 88px; height: 4px; border-radius: 999px; background: var(--wp-border-default); overflow: hidden; }
 .timeline-progress-fill { display: block; height: 100%; width: var(--wp-timeline-progress, 0%); border-radius: 999px; background: var(--wp-action-accent); }
-.timeline-tool { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 6px 12px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-micro); cursor: pointer; }
+.timeline-tool { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-surface); color: var(--wp-text-secondary); font: var(--wp-type-label); cursor: pointer; }
 .timeline-tool:hover { border-color: var(--wp-text-muted); color: var(--wp-text-primary); }
 .timeline-tool .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
 .timeline-tool.is-today { border-color: var(--wp-action-accent-strong); color: var(--wp-action-accent-strong); }
@@ -372,13 +363,13 @@
    rather than its opacity, so it is never an invisible target a pointer can
    land on or a screen reader can reach ahead of sighted readers. */
 .day-add { position: relative; flex: 0 0 auto; }
-.day-add-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 5px 11px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--wp-text-muted); font: var(--wp-type-micro); cursor: pointer; list-style: none; transition: color .14s ease, border-color .14s ease; }
+.day-add-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 44px; padding: 8px 11px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-muted); font: var(--wp-type-label); cursor: pointer; list-style: none; transition: color .14s ease, border-color .14s ease; }
 .day-card:hover .day-add-btn, .day-card:focus-within .day-add-btn, .day-add[open] .day-add-btn { border-color: var(--wp-border-default); background: var(--wp-bg-surface); color: var(--wp-text-secondary); }
 .day-add-btn::-webkit-details-marker { display: none; }
 .day-add-btn:hover { border-color: var(--wp-action-accent-strong); color: var(--wp-action-accent-strong); }
 .day-add-btn .icon { width: var(--wp-icon-xs); height: var(--wp-icon-xs); }
 .day-add-menu { position: absolute; z-index: 18; top: calc(100% + 6px); right: 0; min-width: 172px; padding: 6px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); box-shadow: var(--wp-shadow-surface); }
-.day-add-item { width: 100%; display: flex; align-items: center; gap: 9px; min-height: 38px; padding: 8px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-primary); font: var(--wp-type-label); text-align: left; cursor: pointer; }
+.day-add-item { width: 100%; display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-primary); font: var(--wp-type-label); text-align: left; cursor: pointer; }
 .day-add-item:hover { background: var(--wp-bg-subdued); }
 .day-add-item .icon { width: var(--wp-icon-sm); height: var(--wp-icon-sm); color: var(--wp-text-secondary); }
 
@@ -448,7 +439,7 @@ tr:last-child td { border-bottom: none; }
 
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--wp-action-primary); color: var(--wp-text-on-strong); padding: 10px 18px; border-radius: 999px; font: var(--wp-type-label); box-shadow: var(--wp-shadow-surface); z-index: 200; opacity: 0; transition: opacity .2s; }
 .toast.show { opacity: 1; }
-.toast.toast-error { background: var(--wp-state-danger); color: var(--wp-color-paper-0); border-radius: var(--radius-sm); }
+.toast.toast-error { background: var(--wp-state-danger); color: var(--wp-text-on-strong); border-radius: var(--radius-sm); }
 
 @media (max-width: 640px) {
   .flight-lookup-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -516,3 +507,131 @@ tr:last-child td { border-bottom: none; }
 .companion-filter.is-selected .avatar-marker { outline: 2px solid var(--wp-action-accent); outline-offset: 2px; }
 .companion-filter:not(.is-selected) .avatar-marker { opacity: .35; filter: grayscale(1); }
 .companion-filter-note { color: var(--wp-text-secondary); font: var(--wp-type-meta); }
+
+/* Atlas trip workspace: one hierarchy across the web and compact shell. */
+body.is-trip-view .page { max-width: 1480px; padding: 20px 24px 64px; }
+.atlas-trip-layout { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 24px; align-items: start; }
+.atlas-rail { position: sticky; top: calc(var(--wp-shell-bar-height, 64px) + var(--wp-shell-banner-height, 0px) + 20px); display: flex; flex-direction: column; gap: 5px; padding: 14px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-surface); }
+.atlas-rail button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 44px; padding: 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-secondary); text-align: left; font: var(--wp-type-label); cursor: pointer; }
+.atlas-rail button:hover { background: var(--wp-bg-subdued); color: var(--wp-text-primary); }
+.atlas-rail button.active, .atlas-rail button[aria-current="page"] { border-color: var(--wp-action-accent-subtle); background: var(--wp-action-accent-subtle); color: var(--wp-action-accent-strong); }
+.atlas-rail .back-link { margin-bottom: 7px; border-bottom: 1px solid var(--wp-border-default); border-radius: 0; }
+.atlas-rail .nav-group-label { margin: 4px 0; padding: 8px 10px; overflow-wrap: anywhere; }
+.atlas-mobile-back { display: none; }
+.atlas-rail-title, .atlas-rail-label { padding: 8px 10px; color: var(--wp-text-muted); font: var(--wp-type-micro); overflow-wrap: anywhere; }
+.atlas-trip-main { min-width: 0; }
+.atlas-trip-identity { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin: 0; padding: 18px 22px; border: 1px solid var(--wp-border-default); border-left: 5px solid var(--wp-action-accent); border-radius: var(--radius) var(--radius) 0 0; background: var(--wp-bg-subdued); }
+.atlas-trip-identity .trip-title-row { display: contents; }
+.atlas-trip-identity .trip-title-row > div:first-child { flex: 1 1 220px; min-width: 0; }
+.atlas-trip-identity .nav-group-label { margin: 0 0 4px; }
+.atlas-trip-identity h1 { font: var(--wp-type-heading); overflow-wrap: anywhere; }
+.atlas-trip-identity .trip-heading-line { flex: 1 1 240px; min-width: 0; }
+.atlas-trip-identity .trip-meta { display: flex; justify-content: flex-end; align-items: center; gap: 8px 16px; margin: 0; flex: 0 1 auto; }
+.atlas-trip-identity .trip-date-range { color: var(--wp-text-primary); }
+.atlas-trip-identity .card-actions { flex: 0 0 auto; }
+.atlas-add-strip { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 22px; border: 1px solid var(--wp-border-default); border-top: 0; background: var(--wp-bg-surface); }
+.atlas-add-strip > span, .atlas-add-strip > strong, .atlas-add-label { flex: 0 0 auto; font: var(--wp-type-label); }
+.atlas-add-actions, .atlas-add-strip > div, .atlas-add-strip .head-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.atlas-add-strip .nav-group-label { margin: 0; color: var(--wp-text-primary); }
+.atlas-companion-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 22px; border: 1px solid var(--wp-border-default); border-top: 0; background: var(--wp-bg-surface); }
+.atlas-companion-bar .companion-filters { padding: 0; gap: 6px; }
+.atlas-filter-heading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-basis: 100%; font: var(--wp-type-label); }
+.atlas-filter-heading span { color: var(--wp-text-muted); font-weight: 400; }
+.atlas-companion-bar .companion-filter { flex-direction: row; min-width: 0; max-width: 100%; min-height: 44px; gap: 6px; border: 1px solid var(--wp-border-default); padding: 6px 10px; font: var(--wp-type-label); }
+.atlas-companion-bar .companion-filter .avatar-marker { width: 26px; height: 26px; }
+.atlas-companion-bar .companion-filter.is-selected { border-color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); color: var(--wp-action-accent-strong); }
+.atlas-companion-bar .companion-filter.is-selected .avatar-marker { outline: 0; }
+.atlas-companion-bar .companion-filter:not(.is-selected) .avatar-marker { opacity: 1; filter: none; }
+.atlas-companion-bar .companion-filter span { min-width: 0; overflow-wrap: anywhere; }
+.atlas-companion-bar .companion-filter-note { flex-basis: 100%; font: var(--wp-type-label); }
+.atlas-section-controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px 22px; border: 1px solid var(--wp-border-default); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); background: var(--wp-bg-surface); margin-bottom: 18px; }
+.atlas-itinerary-switch { display: flex; gap: 4px; flex-wrap: wrap; padding: 4px; border: 1px solid var(--wp-border-default); border-radius: var(--radius); background: var(--wp-bg-subdued); }
+.atlas-itinerary-switch button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; min-width: 132px; padding: 10px 18px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--wp-text-primary); font-size: var(--wp-type-body-size); line-height: var(--wp-type-body-leading); font-weight: 600; cursor: pointer; box-shadow: none; }
+.atlas-itinerary-switch button .icon { width: var(--wp-icon-lg); height: var(--wp-icon-lg); color: currentColor; }
+.atlas-itinerary-switch button.active, .atlas-itinerary-switch button[aria-current="page"], .atlas-itinerary-switch button[aria-pressed="true"] { background: var(--wp-action-accent-strong); border-color: var(--wp-action-accent-strong); color: var(--wp-text-on-strong); }
+.atlas-local-nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.atlas-local-nav button { min-height: 44px; padding: 10px 12px; border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--wp-text-secondary); background: transparent; font: var(--wp-type-label); cursor: pointer; }
+.atlas-local-nav button.active, .atlas-local-nav button[aria-current="page"] { border-color: var(--wp-action-accent); background: var(--wp-action-accent-subtle); color: var(--wp-action-accent-strong); }
+.atlas-trip-main .trip-panel { min-width: 0; }
+.atlas-trip-main .timeline-toolbar { margin-bottom: 12px; padding: 10px 0; }
+.item-row { padding: 10px 12px; gap: 5px; }
+.item-row-line { flex-wrap: wrap; gap: 6px 8px; }
+.item-row-line .item-title { flex: 1 1 140px; }
+.item-row-line[data-item-line="title"] .item-title { flex: 1 1 140px; }
+.item-row-line[data-item-line="icon"] .item-title { flex: 1 1 140px; }
+.item-row .item-actions { margin-left: auto; }
+.item-people .tag { font-family: var(--wp-font-body); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); padding: 4px 7px; }
+.item-people .tag .avatar-marker { width: 18px; height: 18px; }
+.item-people-unassigned { color: var(--wp-text-muted); font: var(--wp-type-meta); }
+.item-row--timeline .item-title { font-size: var(--wp-type-body-size); line-height: var(--wp-type-body-leading); }
+.toast { max-width: min(560px, calc(100vw - 32px)); white-space: normal; overflow-wrap: anywhere; }
+
+/* Each related departure stays independently readable and editable. */
+.timeline-journey-group, .departure-group { border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-surface); overflow: clip; }
+.timeline-journey-group-head, .departure-group-head { padding: 10px 12px; background: var(--wp-bg-subdued); border-bottom: 1px solid var(--wp-border-default); }
+.timeline-journey-group-head h4, .departure-group-head h4 { font: var(--wp-type-label); }
+.timeline-journey-group-head p, .departure-group-head p { margin-top: 3px; font: var(--wp-type-meta); color: var(--wp-text-secondary); }
+.timeline-journey-group-list, .departure-group-list { display: flex; flex-direction: column; }
+.timeline-journey-leg, .timeline-journey { border: 1px solid var(--wp-border-default); border-radius: var(--radius-sm); background: var(--wp-bg-surface); min-width: 0; }
+.timeline-journey-group-list > .timeline-journey-leg, .departure-group-list > .timeline-journey { border: 0; border-radius: 0; }
+.timeline-journey-group-list > .timeline-journey-leg + .timeline-journey-leg, .departure-group-list > .timeline-journey + .timeline-journey { border-top: 1px solid var(--wp-border-default); }
+.timeline-journey-summary, .journey-summary { display: grid; grid-template-columns: 100px minmax(0, 1fr) minmax(90px, 160px) var(--wp-icon-md); align-items: center; gap: 10px; min-height: 56px; padding: 10px 12px; cursor: pointer; list-style: none; }
+.timeline-journey-summary::-webkit-details-marker, .journey-summary::-webkit-details-marker { display: none; }
+.timeline-journey-summary:hover, .journey-summary:hover { background: var(--wp-bg-subdued); }
+.timeline-journey-moment, .journey-time { font: var(--wp-type-meta); font-variant-numeric: tabular-nums; color: var(--wp-text-secondary); overflow-wrap: anywhere; }
+.timeline-journey-zone { display: block; font: var(--wp-type-micro); }
+.timeline-journey-place, .journey-route { min-width: 0; font: var(--wp-type-label); overflow-wrap: anywhere; }
+.timeline-journey-people, .journey-people { min-width: 0; color: var(--wp-context-location); font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); overflow-wrap: anywhere; }
+.timeline-journey-summary > .icon, .journey-summary > .icon { color: var(--wp-text-secondary); transition: transform .16s ease; }
+.timeline-journey-leg[open] > .timeline-journey-summary > .icon, .timeline-journey[open] > .journey-summary > .icon { transform: rotate(180deg); }
+.timeline-journey-detail { padding: 0 10px 10px; }
+.timeline-journey-detail .item-row { border: 0; border-radius: 0; }
+.timeline-date-jump { display: inline-flex; align-items: center; gap: 8px; margin: 0; font: var(--wp-type-label); }
+.timeline-date-jump input { width: 160px; }
+.day-summary-people { overflow-wrap: anywhere; }
+.overnight-note { flex-wrap: wrap; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--wp-bg-subdued); }
+.overnight-people { display: inline-flex; flex-wrap: wrap; gap: 5px; color: var(--wp-context-location); font: var(--wp-type-meta); overflow-wrap: anywhere; }
+
+@media (max-width: 1024px) and (min-width: 769px) {
+  body.is-trip-view .page { padding: 16px; }
+  .atlas-trip-layout { grid-template-columns: 168px minmax(0, 1fr); gap: 16px; }
+  .atlas-add-strip { align-items: flex-start; flex-direction: column; }
+  .atlas-trip-identity .trip-meta { justify-content: flex-start; }
+  .timeline-journey-summary, .journey-summary { grid-template-columns: 86px minmax(0, 1fr) var(--wp-icon-md); }
+  .timeline-journey-people, .journey-people { grid-column: 2; grid-row: 2; }
+  .timeline-journey-summary > .icon, .journey-summary > .icon { grid-column: 3; grid-row: 1 / 3; }
+}
+@media (max-width: 768px) {
+  body.is-trip-view .page { padding: 0 12px calc(92px + env(safe-area-inset-bottom)); }
+  .atlas-trip-layout { display: block; }
+  .atlas-rail { display: none; }
+  .atlas-trip-identity { position: static; display: flex; border-radius: 0; margin: 0 -12px; padding: 12px 16px; gap: 7px; }
+  .atlas-trip-identity h1 { white-space: normal; overflow: visible; text-overflow: clip; font: var(--wp-type-heading); }
+  .atlas-trip-identity .trip-meta { width: 100%; justify-content: flex-start; font: var(--wp-type-meta); }
+  .atlas-trip-identity .trip-spend-meta, .atlas-trip-identity .card-actions { display: none; }
+  .atlas-trip-identity .back-link { min-height: 44px; }
+  .atlas-mobile-back { display: inline-flex; flex-basis: 100%; margin-bottom: 0; }
+  .atlas-add-strip { flex-direction: column; align-items: stretch; padding: 10px 12px; margin: 0 -12px; }
+  .atlas-add-actions, .atlas-add-strip > div, .atlas-add-strip .head-btn-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .atlas-add-actions .btn, .atlas-add-strip > div .btn, .atlas-add-strip .head-btn-row .btn { flex-direction: column; gap: 4px; padding: 8px 3px; font-size: var(--wp-type-meta-size); line-height: var(--wp-type-meta-leading); }
+  .atlas-companion-bar { padding: 12px; margin: 0 -12px; }
+  .atlas-companion-bar .companion-filter { padding: 6px 8px; }
+  .atlas-section-controls { padding: 14px 12px; margin: 0 -12px 14px; border-radius: 0; }
+  .atlas-itinerary-switch { width: 100%; flex-wrap: nowrap; }
+  .atlas-itinerary-switch button { flex: 1 1 0; min-width: 0; min-height: 50px; padding: 10px 12px; }
+  .atlas-local-nav { width: 100%; }
+  .atlas-local-nav button { flex: 1 1 auto; }
+  .atlas-trip-main .mobile-trip-shell { display: contents; }
+  .atlas-trip-main .mobile-child-nav { margin: 0; }
+  .atlas-trip-main .trip-panel { padding-top: 2px; }
+  .item-row-line[data-item-line="title"] .item-title, .item-row-line[data-item-line="icon"] .item-title { flex-basis: 100px; }
+  .item-row-line .item-row-spacer { display: none; }
+  .timeline-date-jump { flex-wrap: wrap; }
+  .timeline-date-jump input { width: 150px; }
+  .timeline-journey-summary, .journey-summary { grid-template-columns: 70px minmax(0, 1fr) var(--wp-icon-sm); gap: 6px 8px; padding: 10px; }
+  .timeline-journey-people, .journey-people { grid-column: 2; grid-row: 2; }
+  .timeline-journey-summary > .icon, .journey-summary > .icon { grid-column: 3; grid-row: 1 / 3; }
+  .timeline-journey-detail { padding: 0 4px 8px; }
+  body.is-trip-view .toast { bottom: calc(82px + env(safe-area-inset-bottom)); }
+  .copy-btn { width: 44px; height: 44px; }
+}

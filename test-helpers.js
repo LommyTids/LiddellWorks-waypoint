@@ -10,22 +10,19 @@ const DEFAULT_ADMIN = { username: 'admin', password: 'testpass123' };
 // DEFAULT_ADMIN in mock-server.js) and waits for the dashboard to
 // actually appear — most tests just need this once, right after
 // page.goto(), before doing anything else.
+// Bootstrap legacy in-memory mock sessions through their test API. Production
+// phone authentication is exercised by tests/backend-v1/setup-browser.test.mjs.
 async function loginAsAdmin(page) {
-  await page.waitForSelector('#login-form', { timeout: 5000 });
-  await page.fill('#login-form input[name="username"]', DEFAULT_ADMIN.username);
-  await page.fill('#login-form input[name="password"]', DEFAULT_ADMIN.password);
-  await page.click('#login-form button[type="submit"]');
-  await page.waitForSelector('.empty-state, .trip-grid', { timeout: 5000 });
+  await loginAs(page, DEFAULT_ADMIN.username, DEFAULT_ADMIN.password);
 }
 
-// Logs in as an arbitrary already-created account (viewer/user roles, or
-// a second admin) — used by the roles/permissions tests, which create
-// their own accounts via the Manage Users screen first.
 async function loginAs(page, username, password) {
-  await page.waitForSelector('#login-form', { timeout: 5000 });
-  await page.fill('#login-form input[name="username"]', username);
-  await page.fill('#login-form input[name="password"]', password);
-  await page.click('#login-form button[type="submit"]');
+  const response = await page.request.post(new URL('/WayPoint/api/login', page.url()).href, {
+    data: { username, password }
+  });
+  if (!response.ok()) throw new Error('Mock session bootstrap failed: ' + response.status());
+  await page.reload();
+  await page.waitForSelector('.empty-state, .trip-grid', { timeout: 5000 });
 }
 
 // Waits for the app's own in-page trip-content save to actually finish,

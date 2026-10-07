@@ -1,11 +1,9 @@
 // Regression checks for the Timeline tab: the condensed event card, the day
 // disclosure, and the day-level context added on top of them.
 //
-// "Condensed" still means what it did in September — a Timeline card carries a
-// headline and its own context, never the metadata pill row that belongs on the
-// Plan lists. What changed is that the *day heading* now carries area, spend and
-// a today/outside-trip flag, which the original condensing had removed
-// wholesale. Those two assertions are inverted here deliberately, not lost.
+// Condensed rows retain named participants: separate travellers can have
+// different journeys and plans. Other detailed metadata belongs on Plan lists.
+// Day headings carry area, spend, people and the today/outside-trip flag.
 const { loadAppSources } = require('./test-source');
 const assert = require('assert');
 const vm = require('vm');
@@ -23,7 +21,7 @@ const timelineRenderer = source.slice(timelineStart, timelineEnd);
 
 /* ---- the condensed card ------------------------------------------------ */
 
-assert(eventRenderer.includes('model.metadata = {};'), 'Timeline rows still expose ItemRow metadata tags');
+assert(eventRenderer.includes('model.metadata = { people: ev.data.companions || [] };'), 'Timeline rows must retain participant identities without restoring all metadata');
 assert(eventRenderer.includes('return itemRowHtml('), 'Timeline event cards bypass the shared ItemRow');
 assert(!timelineRenderer.includes('day-areas'), 'Timeline day headings still render destination chips');
 
@@ -47,7 +45,7 @@ const layouts = (source.match(/var ITEM_CARD_LAYOUTS = \{([\s\S]*?)\n\};/) || []
 const timelineLayout = (layouts.match(/timeline:\s*(\[.*\])/) || [])[1] || '';
 assert(timelineLayout, 'The Timeline has no entry in the card layout table');
 assert(!timelineLayout.includes("'metadata'"), 'Timeline cards took the metadata run back');
-assert(!timelineLayout.includes("'people'"), 'Timeline cards took a people line');
+assert(timelineLayout.includes("'people'"), 'Timeline cards must name their participants');
 assert(timelineLayout.includes("'cost'"), 'Timeline cards lost their converted cost');
 
 /* ---- the day disclosure ------------------------------------------------ */

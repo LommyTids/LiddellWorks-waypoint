@@ -41,10 +41,9 @@ function eventRowHtml(trip, ev) {
   var section = ev.kind === 'activity' ? 'activity' : ((ev.kind === 'checkin' || ev.kind === 'checkout') ? 'accommodation' : 'transport');
   var model = recordItemRowModel(trip, section, ev.data, 'timeline');
   model.leadingTime = ev.displayTime || ev.time;
-  // Timeline is the quick chronological scan. Full metadata remains on the
-  // Plan lists and Map popovers; omitting it here keeps each event to one clear
-  // headline without address, destination, companion or commerce tag pills.
-  model.metadata = {};
+  // People are part of the itinerary scan, including for split journeys.
+  // Keep the other metadata in the detailed Plan/Map representations.
+  model.metadata = { people: ev.data.companions || [] };
   model.expandableNote = true;
   // Shown only on the day that owns it, so nothing bills twice.
   if (!timelineEventCarriesCost(ev)) model.cost = null;
@@ -60,6 +59,144 @@ function eventRowHtml(trip, ev) {
     model.supporting = timelineDetail('Journey by ' + (ev.data.mode || 'travel') + (ev.data.flightNumber ? ' ' + ev.data.flightNumber : '') + ' from ' + formatDateShort(dateOnly(ev.data.departDateTime)), ev.data.notes);
   }
   return itemRowHtml(trip, model);
+}
+
+// A visual group is never a combined booking: the members remain the exact
+// event objects supplied by eventsForDay(), and all editing uses their own ids.
+var TIMELINE_DEPARTURE_WINDOW_MINUTES = 60;
+var timelineJourneyExpansion = {};
+var timelineJumpDates = {};
+
+function timelineJourneyKey(tripId, transportId) {
+  return JSON.stringify([tripId, transportId]);
+}
+
+function timelinePeopleLabel(trip, events) {
+  var ids = [], unassigned = false;
+  events.forEach(function (ev) {
+    var tagged = ev.data.companions || [];
+    if (!tagged.length) unassigned = true;
+    tagged.forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); });
+  });
+  var names = ids.map(function (id) {
+    var person = taggablePersonById(trip, id);
+    return person ? person.name : 'Unknown traveller';
+  });
+  if (unassigned) names.push('No people assigned');
+  return names.join(', ');
+}
+
+function timelineDepartureOrigin(transport) {
+  var mode = String(transport.mode || 'Transport');
+  var label = String(transport.fromLocation || '').trim();
+  if (!label) return null;
+  var code = mode === 'Flight' && /^([A-Z]{3})\b/.exec(label);
+  return {
+    key: mode + '|' + (code ? 'airport:' + code[1] : (transport.fromLocationRef ? 'ref:' + transport.fromLocationRef : 'text:' + label.toLowerCase().replace(/\s+/g, ' '))),
+    label: code ? code[1] : label
+  };
+}
+
+function timelineDepartureMoment(transport) {
+  var values = transportDisplayValues(transport);
+  if (!values.departDate || !/^\d{2}:\d{2}$/.test(values.departTime)) return null;
+  var zone = resolveTransportTimezone(values, false);
+  if (zone) {
+    var resolved = zonedInstant(values.departDate, values.departTime, zone, values.departOccurrence);
+    // A repeated or nonexistent local time is not guessed into a group.
+    return resolved.error ? null : { minutes: resolved.minutes, basis: 'instant', zone: zone };
+  }
+  var wall = journeyUtcMinutes(values.departDate, values.departTime);
+  return wall === null ? null : { minutes: wall, basis: 'local', zone: '' };
+}
+
+function timelineEventGroups(events) {
+  var departures = events.map(function (ev, index) {
+    if (ev.kind !== 'depart') return null;
+    var origin = timelineDepartureOrigin(ev.data), moment = timelineDepartureMoment(ev.data);
+    return origin && moment ? { ev: ev, index: index, origin: origin, moment: moment, day: dateOnly(ev.data.departDateTime) } : null;
+  }).filter(Boolean).sort(function (a, b) {
+    return a.moment.minutes - b.moment.minutes || a.index - b.index;
+  });
+  var clusters = [];
+  departures.forEach(function (departure) {
+    var cluster = clusters.find(function (candidate) {
+      return candidate.origin.key === departure.origin.key && candidate.day === departure.day &&
+        candidate.basis === departure.moment.basis &&
+        departure.moment.minutes - candidate.start <= TIMELINE_DEPARTURE_WINDOW_MINUTES;
+    });
+    if (cluster) cluster.members.push(departure);
+    else clusters.push({ origin: departure.origin, day: departure.day, basis: departure.moment.basis, start: departure.moment.minutes, members: [departure] });
+  });
+  var byIndex = {};
+  clusters.filter(function (cluster) { return cluster.members.length > 1; }).forEach(function (cluster) {
+    cluster.firstIndex = Math.min.apply(null, cluster.members.map(function (member) { return member.index; }));
+    cluster.members.forEach(function (member) { byIndex[member.index] = cluster; });
+  });
+  return events.reduce(function (groups, ev, index) {
+    var cluster = byIndex[index];
+    if (!cluster) groups.push({ kind: 'event', event: ev });
+    else if (cluster.firstIndex === index) groups.push({
+      kind: 'departures', origin: cluster.origin.label, basis: cluster.basis,
+      events: cluster.members.map(function (member) { return member.ev; }),
+      zones: cluster.members.map(function (member) { return member.moment.zone; }).filter(function (zone, i, all) { return zone && all.indexOf(zone) === i; })
+    });
+    return groups;
+  }, []);
+}
+
+function timelineDepartureGroupHtml(trip, group) {
+  var events = group.events;
+  var first = events[0], last = events[events.length - 1];
+  var headingId = 'departures-' + slug(trip.tripId) + '-' + slug(first.data.transportId);
+  var firstTime = timeOnly(first.data.departDateTime), lastTime = timeOnly(last.data.departDateTime);
+  var timeRange = group.zones.length > 1 ? '' : firstTime + (firstTime !== lastTime ? '–' + lastTime : '') + ' · ';
+  var context = group.basis === 'local' ? 'Local departure times · timezone unknown' :
+    (group.zones.length === 1 ? group.zones[0] + ' · local departure times' : 'Each journey uses its departure timezone');
+  return '<section class="timeline-journey-group" aria-labelledby="' + headingId + '">' +
+    '<div class="timeline-journey-group-head"><h4 id="' + headingId + '">' + events.length + ' departures from ' + esc(group.origin) + '</h4>' +
+      '<p>' + esc(timeRange + context) + '</p></div>' +
+    '<div class="timeline-journey-group-list">' + events.map(function (ev) {
+      return '<details class="timeline-journey-leg" data-timeline-journey="' + esc(ev.data.transportId) + '" data-timeline-trip="' + esc(trip.tripId) + '"' +
+        (timelineJourneyExpansion[timelineJourneyKey(trip.tripId, ev.data.transportId)] ? ' open' : '') + '>' +
+        '<summary class="timeline-journey-summary"><span class="timeline-journey-moment">' + esc(ev.displayTime || ev.time) +
+          (group.zones.length > 1 ? '<span class="timeline-journey-zone">' + esc(resolveTransportTimezone(transportDisplayValues(ev.data), false)) + '</span>' : '') + '</span>' +
+          '<span class="timeline-journey-place">' + esc(timelineTransportTitle(ev.data)) + '</span>' +
+          '<span class="timeline-journey-people">' + esc(timelinePeopleLabel(trip, [ev])) + '</span>' + icon('collapse', 'timeline-journey-chevron') + '</summary>' +
+        '<div class="timeline-journey-detail">' + eventRowHtml(trip, ev) + '</div></details>';
+    }).join('') + '</div></section>';
+}
+
+function timelineEventsHtml(trip, events) {
+  return timelineEventGroups(events).map(function (group) {
+    return group.kind === 'departures' ? timelineDepartureGroupHtml(trip, group) : eventRowHtml(trip, group.event);
+  }).join('');
+}
+
+function timelineOvernightRecords(trip, day) {
+  // A split trip can have several stays and an overnight journey on the same
+  // night. Draw only records in the supplied (already scoped) trip; never pick
+  // one traveller's accommodation as the answer for everybody.
+  var stays = (trip.accommodation || []).filter(function (stay) {
+    return dateOnly(stay.checkIn) <= day && day < dateOnly(stay.checkOut);
+  });
+  var journeys = (trip.transport || []).filter(function (journey) {
+    return dateOnly(journey.departDateTime) <= day && day < dateOnly(journey.arriveDateTime);
+  });
+  return stays.map(function (stay) {
+    return { data: stay, label: 'Sleeping at ' + stay.name };
+  }).concat(journeys.map(function (journey) {
+    return { data: journey, label: 'Overnight ' + (journey.mode || 'travel').toLowerCase() + ' to ' + journey.toLocation };
+  }));
+}
+
+function timelineOvernightHtml(trip, day) {
+  var rows = timelineOvernightRecords(trip, day);
+  if (!rows.length) return '<div class="overnight-note is-unbooked">' + icon('overnight') + 'No accommodation logged for tonight</div>';
+  return rows.map(function (row) {
+    return '<div class="overnight-note">' + icon('overnight') + '<span>' + esc(row.label) + '</span>' +
+      '<span class="overnight-people">' + esc(timelinePeopleLabel(trip, [row])) + '</span></div>';
+  }).join('');
 }
 
 function timelineDaySeed(trip, day) {
@@ -108,10 +245,11 @@ function timelineDayFlag(trip, day, today) {
 // What a day says about itself while collapsed -- previously a collapsed day
 // was 38px of nothing, so an empty day and a packed one looked identical. The
 // area is deliberately not repeated here; it already sits beside the date.
-function timelineDaySummaryHtml(trip, eventCount, spend) {
+function timelineDaySummaryHtml(trip, eventCount, spend, events) {
   var parts = [eventCount ? eventCount + (eventCount === 1 ? ' event' : ' events') : 'Nothing planned'];
   if (spend && spend.known > 0) parts.push('<span class="day-summary-spend">' + money(spend.known, trip.homeCurrency) + '</span>');
   if (spend && spend.unknown) parts.push('<span class="rate-missing">' + spend.unknown + ' need rate</span>');
+  if (events && events.length) parts.push('<span class="day-summary-people">' + esc(timelinePeopleLabel(trip, events)) + '</span>');
   return '<span class="day-summary">' + parts.join('<span class="day-summary-dot"></span>') + '</span>';
 }
 
@@ -145,6 +283,7 @@ function timelineToolbarHtml(trip, days, today) {
       '<span class="timeline-progress-track"><span class="timeline-progress-fill" style="--wp-timeline-progress: ' + Math.round((current / total) * 100) + '%"></span></span></span>';
   }
   return '<div class="timeline-toolbar">' + progress +
+    '<label class="timeline-date-jump">Jump to date <input type="date" data-timeline-jump-date min="' + esc(days[0]) + '" max="' + esc(days[days.length - 1]) + '" value="' + esc(days.indexOf(timelineJumpDates[trip.tripId]) !== -1 ? timelineJumpDates[trip.tripId] : tripFocusDay(days, today)) + '"></label>' +
     (days.indexOf(today) !== -1 ? '<button type="button" class="timeline-tool is-today" data-action="timeline-jump-today">' + icon('date') + ' Jump to today</button>' : '') +
     '<button type="button" class="timeline-tool" data-action="timeline-toggle-all" data-expand="' + String(anyCollapsed) + '">' +
       icon(anyCollapsed ? 'expand' : 'collapse') + (anyCollapsed ? ' Expand all' : ' Collapse all') + '</button>' +
@@ -211,7 +350,6 @@ function renderTimelineTab(trip) {
   var spendByDay = timelineSpendByDay(trip);
   var cards = days.map(function (day, i) {
     var events = eventsForDay(trip, day);
-    var stay = overnightStay(trip, day);
     var isLast = i === days.length - 1;
     var expanded = timelineDayExpanded(trip.tripId, day, today);
     var dayHeading = formatDateHeading(day);
@@ -219,14 +357,9 @@ function renderTimelineTab(trip) {
     var area = timelineDayAreaLabel(trip, day);
     var flag = timelineDayFlag(trip, day, today);
     var eventsHtml = events.length
-      ? '<div class="day-events">' + events.map(function (ev) { return eventRowHtml(trip, ev); }).join('') + '</div>'
+      ? '<div class="day-events">' + timelineEventsHtml(trip, events) + '</div>'
       : '<div class="no-day-events">' + icon('date') + ' Nothing planned for this day.</div>';
-    var overnightHtml = '';
-    if (!isLast) {
-      if (stay && stay.kind === 'stay') overnightHtml = '<div class="overnight-note">' + icon('overnight') + 'Sleeping at ' + esc(stay.data.name) + '</div>';
-      else if (stay && stay.kind === 'transit') overnightHtml = '<div class="overnight-note">' + icon('overnight') + 'Overnight ' + esc((stay.data.mode || 'travel').toLowerCase()) + ' to ' + esc(stay.data.toLocation) + '</div>';
-      else overnightHtml = '<div class="overnight-note is-unbooked">' + icon('overnight') + 'No accommodation logged for tonight</div>';
-    }
+    var overnightHtml = isLast ? '' : timelineOvernightHtml(trip, day);
     // The date badge is no longer the control: the heading row beside it is,
     // which gives the disclosure a 44px target instead of a 34px circle and
     // an accessible name carrying the date, area, flag and day summary.
@@ -238,7 +371,7 @@ function renderTimelineTab(trip) {
             '<span class="day-date">' + esc(dayHeading) + '</span>' +
             (area ? '<span class="day-area">' + esc(area) + '</span>' : '') +
             (flag ? '<span class="day-flag' + (flag.quiet ? ' is-quiet' : '') + '">' + esc(flag.label) + '</span>' : '') +
-          '</span>' + timelineDaySummaryHtml(trip, events.length, spendByDay[day]) + '</span>' +
+          '</span>' + timelineDaySummaryHtml(trip, events.length, spendByDay[day], events.concat(timelineOvernightRecords(trip, day))) + '</span>' +
           '<span class="day-chevron">' + icon('collapse') + '</span>' +
         '</button>' +
         timelineDayActionsHtml(trip, day) + '</div>' +
@@ -247,4 +380,3 @@ function renderTimelineTab(trip) {
   // A single-day trip has nothing to navigate, so the toolbar would be noise.
   return (days.length > 1 ? timelineToolbarHtml(trip, days, today) : '') + cards;
 }
-

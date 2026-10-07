@@ -3,10 +3,15 @@
 const { chromium, webkit } = require('playwright');
 const { spawn } = require('child_process');
 const http = require('http');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { loginAsAdmin } = require('./test-helpers');
 
 const PORT = 8821;
 const BASE = 'http://127.0.0.1:' + PORT + '/WayPoint';
+const SCREENSHOTS = '/private/tmp/waypoint-atlas-qa';
+fs.mkdirSync(SCREENSHOTS, { recursive: true });
 
 function waitForServer(tries = 40) {
   return new Promise((resolve, reject) => {
@@ -34,7 +39,33 @@ function fixture(role) {
   };
 }
 
-async function seedView(page, role, tab, theme) {
+function departuresFixture(role = 'superuser') {
+  const trip = fixture(role);
+  trip.tripId = 'qa-six-cdg';
+  trip.name = 'Six separate departures';
+  trip.companions = Array.from({ length: 6 }, (_, i) => ({ companionId: 'cdg-person-' + i, name: 'CDG Traveller ' + (i + 1), notes: '' }));
+  trip.destinations = [];
+  trip.activities = [];
+  trip.accommodation = [];
+  trip.expenses = [];
+  const airports = ['LHR', 'JFK', 'HND', 'FCO', 'AMS', 'ATH'];
+  trip.transport = trip.companions.map((person, i) => ({
+    transportId: 'cdg-leg-' + i, mode: 'Flight', carrier: 'Synthetic Air', flightNumber: 'AF' + (100 + i),
+    fromLocation: 'CDG — Paris Charles de Gaulle', toLocation: airports[i] + ' — Synthetic destination',
+    departDateTime: '2030-04-04T09:' + String(i * 10).padStart(2, '0'), arriveDateTime: '2030-04-04T18:00',
+    departTimezone: 'Europe/Paris', arriveTimezone: 'Europe/Paris',
+    fromLat: 49.0097, fromLng: 2.5479, toLat: 51.47 + i * 0.01, toLng: -0.4543,
+    bookingRef: 'CDG-BOOKING-' + i, companions: [person.companionId], notes: 'Independent booking ' + i
+  }));
+  if (role === 'user' || role === 'viewer') {
+    trip.myGrant.companionId = trip.companions[0].companionId;
+    // Model the server boundary: scoped accounts never receive other legs.
+    trip.transport = trip.transport.slice(0, 1);
+  }
+  return trip;
+}
+
+async function seedView(page, role, tab, theme, trip = fixture(role)) {
   await page.evaluate(({ trip, tab, theme, role }) => {
     document.documentElement.dataset.theme = theme;
     state = { trips: [trip] };
@@ -43,13 +74,156 @@ async function seedView(page, role, tab, theme) {
     connectionState = 'online';
     currentUser = { id: 'qa-user', username: role + '-qa', isUberUser: role === 'superuser', avatar: { color: 'teal', animal: 'owl' } };
     currentView = 'trip'; currentTripId = trip.tripId; currentTab = tab;
+    timelineDayExpansion = {};
+    timelineJourneyExpansion = {};
+    timelineJumpDates = {};
+    timelineOpenedOn = '';
+    companionSelection = {};
+    itemScopePreference = {};
     applyAuthUI(); updateSystemFeedback(); render();
-  }, { trip: fixture(role), tab, theme, role });
+  }, { trip, tab, theme, role });
 }
 
 async function assertNoOverflow(page, label) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   if (overflow > 1) throw new Error(label + ' has ' + overflow + 'px horizontal overflow');
+}
+
+async function assertAtlasGeometry(page, label, viewport) {
+  const layout = await page.evaluate(() => {
+    const main = document.querySelector('.atlas-trip-main');
+    const selectors = ['.atlas-add-strip', '.atlas-companion-bar', '.atlas-section-controls', '#trip-panel'];
+    const bands = selectors.map(selector => {
+      const element = document.querySelector(selector);
+      if (!element) return {selector, missing: true};
+      const rect = element.getBoundingClientRect();
+      return {selector, directChild: element.parentElement === main, x: rect.x, top: rect.top, bottom: rect.bottom, width: rect.width};
+    });
+    const viewButtons = ['timeline', 'map'].map(tab => {
+      const button = document.querySelector('.atlas-itinerary-switch [data-tab="' + tab + '"]');
+      if (!button) return {missing: true};
+      const rect = button.getBoundingClientRect();
+      return {top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, width: rect.width};
+    });
+    return {bands, viewButtons};
+  });
+  for (const band of layout.bands) {
+    assert.equal(band.missing, undefined, label + ': missing ' + band.selector);
+    assert.equal(band.directChild, true, label + ': ' + band.selector + ' must be a direct child of .atlas-trip-main, not nested inside another band');
+  }
+  for (let i = 1; i < layout.bands.length; i++) {
+    assert(layout.bands[i].top >= layout.bands[i - 1].bottom - 1, label + ': ' + layout.bands[i].selector + ' must stack beneath the preceding band');
+  }
+  const panel = layout.bands.at(-1);
+  if (viewport.width === 1440) assert(panel.width > 900, label + ': itinerary panel is too narrow (' + panel.width + 'px)');
+  if (viewport.width === 390) assert(panel.width > 330, label + ': mobile itinerary panel is too narrow (' + panel.width + 'px)');
+  const [agenda, map] = layout.viewButtons;
+  assert(!agenda.missing && !map.missing, label + ': Agenda and Map controls are missing');
+  assert(Math.abs(agenda.top - map.top) <= 1, label + ': Agenda and Map must share a row');
+  assert(agenda.right <= map.left + 1, label + ': Agenda and Map controls overlap');
+  assert(agenda.width >= 44 && map.width >= 44, label + ': itinerary view controls are not usable touch targets');
+}
+
+async function checkAtlasDepartures(page, engineName, viewports) {
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    for (const theme of ['light', 'dark']) {
+      await seedView(page, 'superuser', 'timeline', theme, departuresFixture());
+      const label = engineName + ' six CDG departures ' + viewport.width + ' ' + theme;
+      const group = page.locator('.timeline-journey-group');
+      const legs = group.locator('.timeline-journey-leg');
+      assert.equal(await group.count(), 1, label + ': expected one visual group');
+      assert.match(await group.locator('h4').innerText(), /6 departures from CDG/);
+      assert.deepEqual(await legs.evaluateAll(els => els.map(el => el.dataset.timelineJourney)), Array.from({length: 6}, (_, i) => 'cdg-leg-' + i), label + ': bookings lost or merged');
+      for (let i = 0; i < 6; i++) {
+        const leg = legs.nth(i);
+        assert.equal(await leg.evaluate(el => el.open), false, label + ': starts compact');
+        const summary = leg.locator('summary');
+        assert(summary && await summary.isVisible(), label + ': hidden journey summary');
+        const summaryText = await summary.innerText();
+        assert(summaryText.includes('CDG Traveller ' + (i + 1)), label + ': wrong or missing named participant');
+        assert(summaryText.includes('AF' + (100 + i)), label + ': missing independent flight number');
+        assert(summaryText.includes('09:' + String(i * 10).padStart(2, '0')), label + ': missing departure time');
+        assert.equal(await leg.locator('[data-action="edit-transport"][data-id="cdg-leg-' + i + '"]').count(), 1, label + ': edit identity changed');
+      }
+      await assertNoOverflow(page, label);
+      await assertAtlasGeometry(page, label, viewport);
+      if (theme === 'light' && (viewport.width === 390 || viewport.width === 1440)) {
+        await page.screenshot({ path: path.join(SCREENSHOTS, engineName.toLowerCase() + '-agenda-six-cdg-' + viewport.width + '-light.png'), fullPage: true });
+      }
+
+      // Native disclosures work by keyboard, retain each booking separately,
+      // and survive a real filter control's render rather than a fixed delay.
+      await legs.nth(0).locator('summary').focus();
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => document.querySelector('[data-timeline-journey="cdg-leg-0"]').open);
+      assert.equal(await legs.nth(1).evaluate(el => el.open), false, label + ': opening one journey opened another');
+      await page.locator('.atlas-companion-bar [data-action="show-all-people"]').click();
+      assert.equal(await legs.nth(0).evaluate(el => el.open), true, label + ': rendering lost the open booking');
+      await legs.nth(1).locator('summary').focus();
+      await page.keyboard.press('Space');
+      await page.waitForFunction(() => document.querySelector('[data-timeline-journey="cdg-leg-1"]').open);
+      await legs.nth(0).locator('summary').click();
+      assert.equal(await legs.nth(0).evaluate(el => el.open), false);
+      assert.equal(await legs.nth(1).evaluate(el => el.open), true, label + ': disclosures are not independent');
+
+      // Source editing opens one original booking and its own assignment.
+      await legs.nth(2).locator('summary').click();
+      await legs.nth(2).locator('[data-action="edit-transport"]').click();
+      assert.equal(await page.locator('#entity-form input[name="flightNumber"]').inputValue(), 'AF102');
+      assert.equal(await page.locator('#entity-form input[name="bookingRef"]').inputValue(), 'CDG-BOOKING-2');
+      assert.equal(await page.locator('#entity-form input[data-tag-person-id="cdg-person-2"]').isChecked(), true);
+      assert.equal(await page.locator('#entity-form input[data-tag-person-id="cdg-person-1"]').isChecked(), false);
+      await page.locator('.modal-head [data-action="close-modal"]').click();
+      await page.waitForSelector('#entity-form', {state: 'detached'});
+
+      // Collapse/expand all remains keyboard operable after replacing the page.
+      const all = page.locator('[data-action="timeline-toggle-all"]');
+      await all.focus();
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => [...document.querySelectorAll('.day-content')].every(el => el.hidden));
+      assert.match(await all.innerText(), /Expand all/);
+      await page.waitForFunction(() => document.activeElement && document.activeElement.dataset.action === 'timeline-toggle-all');
+      assert.equal(await all.evaluate(el => el === document.activeElement), true, label + ': collapse all lost keyboard focus');
+      await page.keyboard.press('Space');
+      await page.waitForFunction(() => [...document.querySelectorAll('.day-content')].every(el => !el.hidden));
+      assert.match(await all.innerText(), /Collapse all/);
+
+      const day = page.locator('[data-timeline-day="2030-04-04"]');
+      await day.locator('.day-head').focus();
+      await page.keyboard.press('Enter');
+      assert.equal(await day.locator('.day-content').evaluate(el => el.hidden), true);
+      assert.match(await day.locator('.day-head').innerText(), /CDG Traveller 6/, label + ': collapsed day lost participant context');
+      // Use the visible formatted date field exactly as a keyboard user would.
+      // Native fill can itself commit and rebuild the input, so dispatching a
+      // second change onto the replacement would jump to its initial date.
+      const jump = page.locator('.timeline-date-jump input[type="text"]');
+      await jump.fill('04/Apr/2030');
+      await jump.press('Tab');
+      await page.waitForFunction(() => {
+        const head = document.querySelector('[data-timeline-day="2030-04-04"] .day-head');
+        return head.getAttribute('aria-expanded') === 'true' && document.activeElement === head;
+      });
+      assert.equal(await page.locator('[data-timeline-jump-date]').inputValue(), '2030-04-04', label + ': date jump lost the selected date after rendering');
+
+      // The local filter narrows only the view and the count. Assignments and
+      // independent booking records survive; reset returns all six journeys.
+      await page.locator('.atlas-companion-bar [data-action="toggle-companion-filter"][data-id="cdg-person-0"]').click();
+      assert.equal(await page.locator('.timeline-journey-group').count(), 0, label + ': a one-person result still implies six departures');
+      assert.equal(await page.locator('[data-action="edit-transport"][data-id="cdg-leg-0"]').count(), 1);
+      assert.equal(await page.locator('[data-action="edit-transport"][data-id="cdg-leg-1"]').count(), 0, label + ': hidden plan still rendered');
+      assert.equal(await page.evaluate(() => currentTrip().transport.length), 6, label + ': a view filter mutated source bookings');
+      await page.locator('.atlas-companion-bar [data-action="show-all-people"]').click();
+      assert.equal(await page.locator('.timeline-journey-leg').count(), 6);
+    }
+  }
+  for (const role of ['user', 'viewer']) {
+    await seedView(page, role, 'timeline', 'light', departuresFixture(role));
+    assert.equal(await page.locator('.timeline-journey-group').count(), 0, role + ': restricted response should not imply hidden group size');
+    assert.equal(await page.locator('[data-id="cdg-leg-1"]').count(), 0, role + ': another person’s leg was rendered');
+    assert.equal(await page.locator('.atlas-add-strip').count(), 0, role + ': forbidden itinerary creation shown');
+    assert(!await page.locator('#trip-panel').innerText().then(text => text.includes('CDG Traveller 2')), role + ': hidden traveller plan leaked');
+  }
 }
 
 async function runEngine(engineName, browserType) {
@@ -70,8 +244,12 @@ async function runEngine(engineName, browserType) {
         for (const role of roles) {
           await seedView(page, role, 'timeline', theme);
           await assertNoOverflow(page, engineName + ' ' + viewport.width + ' ' + theme + ' ' + role);
-          const editTripCount = await page.locator('[data-action="edit-trip"]').count();
-          if ((role === 'superuser' || role === 'admin') !== (editTripCount > 0)) throw new Error(role + ' trip edit controls are wrong');
+          const full = role === 'superuser' || role === 'admin';
+          if (full) await assertAtlasGeometry(page, engineName + ' Atlas ' + viewport.width + ' ' + theme + ' ' + role, viewport);
+          for (const action of ['new-destination', 'new-transport', 'new-accommodation', 'new-activity']) {
+            const count = await page.locator('.atlas-add-strip [data-action="' + action + '"]').count();
+            if (full !== (count > 0)) throw new Error(role + ' Atlas ' + action + ' authorization is wrong');
+          }
           const editActivityCount = await page.locator('[data-action="edit-activity"]').count();
           if (role === 'viewer' && editActivityCount) throw new Error('viewer received an edit action');
           if (role === 'user' && !editActivityCount) throw new Error('tagged user lost their item edit action');
@@ -86,6 +264,13 @@ async function runEngine(engineName, browserType) {
         await assertNoOverflow(page, engineName + ' expenses ' + viewport.width + ' ' + theme);
       }
     }
+
+    await checkAtlasDepartures(page, engineName, viewports);
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await seedView(page, 'superuser', 'map', 'dark');
+    await page.waitForSelector('.leaflet-container');
+    await page.screenshot({ path: path.join(SCREENSHOTS, engineName.toLowerCase() + '-map-1440-dark.png'), fullPage: true });
 
     await page.setViewportSize({ width: 390, height: 844 });
     await seedView(page, 'superuser', 'map', 'light');
@@ -106,7 +291,7 @@ async function runEngine(engineName, browserType) {
     for (const action of ['new-destination', 'new-activity', 'new-transport', 'new-accommodation']) {
       const tab = action.replace('new-', '').replace('destination', 'destinations').replace('activity', 'activities');
       await seedView(page, 'superuser', tab, 'dark');
-      await page.click('[data-action="' + action + '"]');
+      await page.locator('[data-action="' + action + '"]').first().click();
       if (!(await page.locator('#entity-form .journey').count())) throw new Error(action + ' did not use Journey');
       await page.click('#entity-form button[type="submit"]');
       await page.waitForSelector('#entity-form .field-error');
@@ -150,7 +335,7 @@ async function runEngine(engineName, browserType) {
     await seedView(page, 'superuser', 'timeline', 'light');
     await page.evaluate(() => window.dispatchEvent(new Event('offline')));
     if (!(await page.locator('#system-banner.is-visible[data-kind="offline"]').count())) throw new Error('offline banner missing');
-    if (!(await page.locator('[data-action="edit-trip"]').isDisabled())) throw new Error('offline edit control remained enabled');
+    if (!(await page.locator('.atlas-add-strip [data-action="new-activity"]').isDisabled())) throw new Error('offline Atlas Add control remained enabled');
 
     if (errors.length) throw new Error(engineName + ' page errors: ' + errors.join(' | '));
     console.log(engineName + ' responsive, role, workflow and state checks passed');

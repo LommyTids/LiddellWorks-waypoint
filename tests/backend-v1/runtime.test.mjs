@@ -140,7 +140,10 @@ test('canonical pages redirect, documents use lowercase URLs and images remain u
  }
  for(const path of ['/waypoint/','/waypoint/js/auth.js','/waypoint/js/core.js','/waypoint/staging/d1-client.js','/waypoint/styles/base.css']) {
   const response=await router.fetch(new Request('https://liddellworks.com'+path),env,{});
-  assert.equal(response.status,200);const body=await response.text();assert(!body.includes('/WayPoint/'),path);assert(body.includes('/waypoint/'),path);
+  assert.equal(response.status,200);const body=await response.text();assert(!body.includes('/WayPoint/'),path);
+  const sourcePath=path==='/waypoint/'?'/WayPoint/index.html':path.replace('/waypoint/','/WayPoint/');
+  const original=await readFile(new URL('../../public'+sourcePath,import.meta.url),'utf8');
+  assert.equal(body,original.replaceAll('/WayPoint','/waypoint'),path+' must rewrite only the canonical URL prefix');
   assert.equal(response.headers.get('ETag'),null);assert.equal(response.headers.get('Content-Length'),null);
  }
  for(const name of ['app-icon.png','waypoint-mark.png']) {

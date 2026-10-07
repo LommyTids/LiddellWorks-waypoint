@@ -245,7 +245,22 @@ function mapUnmappedHtml(trip) {
   // dominate the map. Native <details> supplies keyboard and screen-reader
   // disclosure behaviour, and omitting `open` makes it collapsed each time
   // the Map tab is mounted, as requested.
-  return '<aside class="map-unmapped" aria-labelledby="map-unmapped-title"><details><summary class="map-unmapped-head">' + icon('warning') + '<div><h3 id="map-unmapped-title">Locations needing attention</h3><p>These records stay in the itinerary but cannot be shown reliably on the map.</p></div><span class="map-unmapped-summary">' + records.length + ' record' + (records.length === 1 ? '' : 's') + icon('collapse') + '</span></summary><div class="map-unmapped-list">' + rows + '</div></details></aside>';
+  return '<aside class="map-unmapped" aria-labelledby="map-unmapped-title"><details><summary class="map-unmapped-head">' + icon('warning') + '<h3 id="map-unmapped-title">Locations needing review</h3><span class="map-unmapped-summary">' + records.length + ' record' + (records.length === 1 ? '' : 's') + icon('collapse') + '</span></summary><p class="field-hint">These records stay in the itinerary but need a saved location to appear reliably on the map.</p><div class="map-unmapped-list">' + rows + '</div></details></aside>';
+}
+
+// The range slider refreshes Leaflet without remounting the workspace. Keep
+// its optional repair disclosure in that same range and people selection.
+function updateMapRecoveryUi(trip) {
+  var recovery = document.getElementById('map-location-recovery');
+  if (!recovery) return;
+  var disclosure = recovery.querySelector('details');
+  var wasOpen = disclosure && disclosure.open;
+  var html = mapUnmappedHtml(trip);
+  if (recovery.__mapRecoveryHtml === html) return;
+  recovery.innerHTML = html;
+  recovery.__mapRecoveryHtml = html;
+  var updated = recovery.querySelector('details');
+  if (updated && wasOpen) updated.open = true;
 }
 
 function renderMapTab(trip) {
@@ -258,7 +273,7 @@ function renderMapTab(trip) {
   }
 
   return (
-    '<div class="map-workspace">' +
+    '<div class="map-workspace map-workspace-fullwidth">' +
       '<div class="map-toolbar">' +
         '<div class="map-actions">' + mapFiltersHtml(trip) +
           '<button type="button" class="btn btn-ghost" data-action="map-fit-selection">Fit selection</button>' +
@@ -267,9 +282,9 @@ function renderMapTab(trip) {
         mapRangeControlsHtml(trip) +
       '</div>' +
       '<div id="map-shell" class="map-shell">' +
-        '<div id="map-canvas" class="map-canvas"></div>' +
-        '<div id="map-status" class="map-status">Loading map…</div>' +
-      '</div>' + mapUnmappedHtml(trip) +
+        '<div id="map-canvas" class="map-canvas" role="region" aria-label="Interactive trip map"></div>' +
+        '<div id="map-status" class="map-status" role="status" aria-live="polite" aria-atomic="true">Loading map…</div>' +
+      '</div><div id="map-location-recovery">' + mapUnmappedHtml(trip) + '</div>' +
     '</div>'
   );
 }
@@ -605,6 +620,8 @@ function fitMapToSelection() {
 }
 
 function updateMapRangeUi(trip) {
+  trip = scopedTripForRender(trip);
+  updateMapRecoveryUi(trip);
   var days = ensureMapRange(trip);
   if (!days.length) return;
   var startIndex = days.indexOf(mapState.rangeStart), endIndex = days.indexOf(mapState.rangeEnd), max = days.length - 1;
@@ -687,6 +704,10 @@ async function initMap(trip) {
   if (!canvas) return;
   try {
     ensureMapRange(trip);
+    if (mapState.refreshFrame) {
+      cancelAnimationFrame(mapState.refreshFrame);
+      mapState.refreshFrame = null;
+    }
     mapState.generation++;
     var myGeneration = mapState.generation;
     if (mapState.instance) { mapState.instance.remove(); mapState.instance = null; mapState.layers = null; }
@@ -740,4 +761,3 @@ function mapPopupOptions() {
   var viewport = (typeof window !== 'undefined' && window.innerHeight) || 800;
   return { maxHeight: Math.max(160, Math.min(280, Math.round(viewport * 0.42))) };
 }
-
