@@ -57,7 +57,7 @@ function eventRowHtml(trip, ev) {
     model.supporting = timelineDetail(overnight ? 'Arrives ' + formatDateShort(dateOnly(ev.data.arriveDateTime)) + ' at ' + timeOnly(ev.data.arriveDateTime) : 'Arrives ' + timeOnly(ev.data.arriveDateTime), ev.data.notes);
   } else if (ev.kind === 'arrive') {
     model.title = timelineArrivalTitle(ev.data);
-    model.supporting = timelineDetail('Overnight ' + (ev.data.mode || 'travel') + (ev.data.flightNumber ? ' ' + ev.data.flightNumber : '') + ' from ' + formatDateShort(dateOnly(ev.data.departDateTime)), ev.data.notes);
+    model.supporting = timelineDetail('Journey by ' + (ev.data.mode || 'travel') + (ev.data.flightNumber ? ' ' + ev.data.flightNumber : '') + ' from ' + formatDateShort(dateOnly(ev.data.departDateTime)), ev.data.notes);
   }
   return itemRowHtml(trip, model);
 }

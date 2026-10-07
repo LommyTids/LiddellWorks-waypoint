@@ -245,6 +245,10 @@ function activityItemRowModel(trip, activity, context) {
 
 function transportItemRowModel(trip, transport, context) {
   var contact = transport.contactId ? byId(trip.contacts, transport.contactId, 'contactId') : null;
+  var timingValues = transportDisplayValues(transport);
+  var zoneDetails = transportLocalLabel(timingValues, false) + ' → ' + transportLocalLabel(timingValues, true);
+  var elapsed = transportElapsed(timingValues);
+  if (!elapsed.error) zoneDetails += ' · ' + journeyDurationModel({ transport: true, startDateKey: 'departDate', endDateKey: 'arriveDate', startTimeKey: 'departTime', endTimeKey: 'arriveTime' }, timingValues).label;
   var overnight = dateOnly(transport.departDateTime) !== dateOnly(transport.arriveDateTime);
   var category = [{ icon: transportIconKey(transport.mode), text: transport.mode || 'Transport' }];
   if (transport.carrier) category.push({ text: transport.carrier });
@@ -256,7 +260,7 @@ function transportItemRowModel(trip, transport, context) {
   if (contact) commerce.push({ icon: 'person', text: contact.name });
   if (transport.pointsAmount) commerce.push({ icon: 'points', text: transport.pointsAmount + (transport.pointsProgram ? ' ' + transport.pointsProgram : ' points') });
   if (transport.receiptRef) commerce.push({ icon: 'receipt', text: transport.receiptRef, copyValue: transport.receiptRef, copyLabel: 'receipt reference' });
-  return { context: context, section: 'transport', item: transport, cost: recordCostLabel(trip, transport), icon: transportIconKey(transport.mode), tone: 'transport', title: transport.fromLocation + ' → ' + transport.toLocation, metadata: { datetime: [{ icon: 'time', text: formatDateShort(dateOnly(transport.departDateTime)) + ' ' + timeOnly(transport.departDateTime) + ' → ' + formatDateShort(dateOnly(transport.arriveDateTime)) + ' ' + timeOnly(transport.arriveDateTime) }], location: [{ icon: 'location', text: transport.fromLocation + ' → ' + transport.toLocation }], category: category, people: transport.companions || [], commerce: commerce }, supporting: transport.notes || '', status: transport.fromLocationStale || transport.toLocationStale ? { text: 'One or more locations need review' } : null };
+  return { context: context, section: 'transport', item: transport, cost: recordCostLabel(trip, transport), icon: transportIconKey(transport.mode), tone: 'transport', title: transport.fromLocation + ' → ' + transport.toLocation, metadata: { datetime: [{ icon: 'time', text: formatDateShort(dateOnly(transport.departDateTime)) + ' ' + timeOnly(transport.departDateTime) + ' → ' + formatDateShort(dateOnly(transport.arriveDateTime)) + ' ' + timeOnly(transport.arriveDateTime) }], location: [{ icon: 'location', text: transport.fromLocation + ' → ' + transport.toLocation }], category: category, people: transport.companions || [], commerce: commerce }, supporting: zoneDetails + (transport.notes ? ' · ' + transport.notes : ''), status: transport.fromLocationStale || transport.toLocationStale ? { text: 'One or more locations need review' } : null };
 }
 
 function accommodationItemRowModel(trip, accommodation, context) {

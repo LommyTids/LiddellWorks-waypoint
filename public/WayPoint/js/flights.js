@@ -146,7 +146,7 @@ function performFlightLookup(button) {
       // mergeFlightLookupNotes() now saves it into Notes so it's still
       // there next time this leg is opened.
       var noteLines = [];
-      noteLines.push(flightNumber + ' on ' + departDate + (data.airline ? ' (' + data.airline + ')' : ''));
+      noteLines.push(flightNumber + ' on ' + formatDateShort(departDate) + (data.airline ? ' (' + data.airline + ')' : ''));
       if (data.aircraft) noteLines.push('Aircraft: ' + data.aircraft);
       if (data.departure && (data.departure.terminal || data.departure.gate)) {
         noteLines.push('Departs' + (data.departure.terminal ? ' terminal ' + data.departure.terminal : '') + (data.departure.gate ? ', gate ' + data.departure.gate : ''));

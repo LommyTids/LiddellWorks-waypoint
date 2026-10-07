@@ -150,8 +150,14 @@ function transportSectionsForMode(values) {
       .concat(modeFields, [
       { key: 'fromLocation', label: 'From', type: 'location-picker', wide: true, required: true, placeholder: mode === 'Flight' ? 'e.g. LHR or Heathrow' : 'e.g. station, port or address', locationPrefix: 'from', locationContext: locationContext, locationKind: 'point', summaryLabel: 'Departure location' },
       { key: 'toLocation', label: 'To', type: 'location-picker', wide: true, required: true, placeholder: mode === 'Flight' ? 'e.g. JFK or JFK Airport' : 'e.g. station, port or address', locationPrefix: 'to', locationContext: locationContext, locationKind: 'point', summaryLabel: 'Arrival location' },
-      { key: 'transportJourney', label: 'Journey', type: 'journey', wide: true, journey: { startDateKey: 'departDate', startTimeKey: 'departTime', endDateKey: 'arriveDate', endTimeKey: 'arriveTime', startLabel: 'Depart', endLabel: 'Arrive', startLocalLabel: 'Departure local time', endLocalLabel: 'Arrival local time', defaultEndOffsetDays: 0 } }
+      { key: 'transportJourney', label: 'Journey', type: 'journey', wide: true, journey: { transport: true, startDateKey: 'departDate', startTimeKey: 'departTime', endDateKey: 'arriveDate', endTimeKey: 'arriveTime', startLabel: 'Depart', endLabel: 'Arrive', startLocalLabel: 'Departure local time', endLocalLabel: 'Arrival local time', defaultEndOffsetDays: 0 } }
     ]) },
+    { title: 'Timezones', hint: 'Detected from each location. Override if needed, especially near timezone borders. Leave blank for automatic lookup.', collapsible: true, fields: [
+      { key: 'departTimezoneOverride', label: 'Departure timezone override', type: 'timezone', placeholder: 'Automatic from departure location' },
+      { key: 'arriveTimezoneOverride', label: 'Arrival timezone override', type: 'timezone', placeholder: 'Automatic from arrival location' },
+      { key: 'departOccurrence', label: 'Departure when clocks repeat', type: 'select', options: ['', 'earlier', 'later'], hint: 'Only needed for a local time that occurs twice when clocks go back.' },
+      { key: 'arriveOccurrence', label: 'Arrival when clocks repeat', type: 'select', options: ['', 'earlier', 'later'], hint: 'Choose the first (earlier) or second (later) occurrence.' }
+    ] },
     bookingContactSection('Optional confirmation details and the operator contact.'),
     { title: 'Payment and receipt', hint: 'Optional cash, points and receipt details.', collapsible: true, fields: transportPaymentFields(values).concat([
       { key: 'receiptRef', label: 'Receipt reference', type: 'text', wide: true },

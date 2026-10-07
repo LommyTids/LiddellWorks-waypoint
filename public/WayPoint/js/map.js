@@ -139,9 +139,7 @@ function mapLegsForTrip(trip) {
 }
 
 function mapRangeDateLabel(day) {
-  if (!day) return '';
-  var parts = day.split('-').map(Number);
-  return parts[2] + ' ' + MONTHS[parts[1] - 1];
+  return formatDateShort(day);
 }
 
 function mapRangeDayCount(trip) {
