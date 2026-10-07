@@ -65,7 +65,8 @@ function renderExpensesTab(trip) {
   }).join('');
 
   return head +
-    '<div class="stat-row"><div class="stat-tile"><div class="stat-label">Total (' + trip.homeCurrency + ')</div><div class="stat-value">' + money(spend.known, trip.homeCurrency) + '</div></div>' + catTiles + '</div>' +
+    '<p class="intro-note">Linked costs follow the people filter. Standalone expenses remain included; shared costs are shown in full.</p>' +
+    '<div class="stat-row"><div class="stat-tile"><div class="stat-label">Visible recorded costs (' + esc(trip.homeCurrency) + ')</div><div class="stat-value">' + money(spend.known, trip.homeCurrency) + '</div></div>' + catTiles + '</div>' +
     (spend.unknownCount ? '<div class="intro-note expense-rate-warning"><strong>' + spend.unknownCount + ' item(s)</strong> are in a currency with no exchange rate set — <button class="warn-link" data-action="switch-tab" data-tab="settings">set one in Settings</button> to include them in the total.</div>' : '') +
     '<div class="table-wrap expense-table"><table><caption class="sr-only">Expenses for ' + esc(trip.name) + '</caption><thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Description</th><th scope="col" class="num">Amount</th><th scope="col" class="num">' + esc(trip.homeCurrency) + '</th><th scope="col">Actions</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     '<div class="expense-ledger" aria-label="Expenses grouped by date, newest first">' + ledger + '</div>';

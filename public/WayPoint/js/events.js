@@ -70,12 +70,15 @@ document.addEventListener('click', function (e) {
     var id = el.dataset.id;
     if (action === 'show-all-people') excluded = [];
     else if (taggablePersonById(trip, id)) {
-      var index = excluded.indexOf(id);
-      if (index === -1) excluded.push(id); else excluded.splice(index, 1);
+      var ids = taggablePeople(trip).map(function (person) { return person.companionId; });
+      var selected = excluded.length ? ids.filter(function (personId) { return excluded.indexOf(personId) === -1; }) : [];
+      var index = selected.indexOf(id);
+      if (index === -1) selected.push(id); else selected.splice(index, 1);
+      excluded = selected.length ? ids.filter(function (personId) { return selected.indexOf(personId) === -1; }) : [];
     }
     companionSelection[trip.tripId] = excluded;
     itemScopePreference[trip.tripId] = 'everything';
-    pendingRenderFocus = (el.closest('.mobile-trip-shell') ? '.mobile-trip-shell ' : '.desktop-trip-nav ') + '[data-action="' + action + '"]' + (id ? '[data-id="' + CSS.escape(id) + '"]' : '');
+    pendingRenderFocus = '.atlas-companion-bar ' + '[data-action="' + action + '"]' + (id ? '[data-id="' + CSS.escape(id) + '"]' : '');
     render();
     return;
   }
@@ -126,6 +129,7 @@ document.addEventListener('click', function (e) {
     tripDayList(trip).forEach(function (day) {
       timelineDayExpansion[timelineDayKey(trip.tripId, day)] = expandAll;
     });
+    pendingRenderFocus = '[data-action="timeline-toggle-all"]';
     render();
     return;
   }
@@ -504,7 +508,29 @@ document.addEventListener('input', function (e) {
   if (form && (e.target.type === 'time' || /^(depart|arrive)TimezoneOverride$/.test(e.target.name))) updateJourneyPresentation(form);
 });
 
+document.addEventListener('toggle', function (e) {
+  if (e.target.matches('.timeline-journey-leg')) {
+    timelineJourneyExpansion[timelineJourneyKey(e.target.dataset.timelineTrip, e.target.dataset.timelineJourney)] = e.target.open;
+  }
+}, true);
+
 document.addEventListener('change', function (e) {
+  if (e.target.matches('[data-timeline-jump-date]')) {
+    var jumpTrip = currentTrip(), jumpDay = e.target.value;
+    if (!jumpTrip || tripDayList(jumpTrip).indexOf(jumpDay) === -1) return;
+    timelineJumpDates[jumpTrip.tripId] = jumpDay;
+    timelineDayExpansion[timelineDayKey(jumpTrip.tripId, jumpDay)] = true;
+    render();
+    requestAnimationFrame(function () {
+      var card = document.querySelector('[data-timeline-day="' + jumpDay + '"]');
+      if (!card) return;
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+      var head = card.querySelector('.day-head');
+      if (head) head.focus({ preventScroll: true });
+    });
+    return;
+  }
   var form = e.target.closest('#entity-form');
   var journey = form && e.target.closest('[data-journey]');
   if (journey) {

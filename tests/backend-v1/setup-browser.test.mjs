@@ -51,7 +51,7 @@ test('tablet web app creates a trip and activity through D1 and reloads saved da
  await page.locator('[data-action="new-trip"]').first().click();await page.locator('#entity-form [name="name"]').fill('D1 browser trip');await page.getByRole('button',{name:'Create trip',exact:true}).click();
  await page.waitForFunction(()=>!saveInFlight&&stateIsTrustworthy&&state.trips.length===1&&state.trips[0].name==='D1 browser trip');
  // Open the real activity editor; its form and save use the unmodified web UI.
- await page.evaluate(()=>openActivityForm(state.trips[0]));
+ await page.locator('.atlas-add-strip [data-action="new-activity"]').click();
  await page.locator('#entity-form [name="title"]').fill('Museum from browser');
  await page.locator('#entity-form [name="startDate"]').fill('2026-09-25');
  await page.locator('#entity-form [name="endDate"]').fill('2026-09-25');
@@ -93,22 +93,43 @@ test('production browser signs in to imported trips, shows pause and blocks edit
  await page.waitForFunction(()=>stateIsTrustworthy&&state.trips[0]?.activities.some(a=>a.title==='Preserved activity'));
  await page.getByText('Migration preview · Saving is paused',{exact:true}).waitFor();
  await page.locator('[data-action="open-trip"]').click();
- const people=page.locator('.desktop-trip-nav .companion-filter');
- assert.equal(await people.count(),5,'Four companions plus the virtual owner should have circles');
+ await page.locator('#trip-panel').getByRole('button',{name:'Expand all',exact:true}).click();
+ const people=page.locator('.atlas-companion-bar .companion-filter');
+ const allPeople=page.locator('.atlas-companion-bar [data-action="show-all-people"]');
+ // Locators for individual chips include their accessible name, rather than
+ // coupling to the old sidebar or treating All as an extra avatar.
+ const namedPerson=name=>page.locator('.atlas-companion-bar').getByRole('button',{name:'Show items for '+name,exact:true});
+ assert.equal(await people.count(),6,'All plus four companions and the virtual owner should have chips');
  assert.equal(await people.locator('.avatar-marker').count(),5,'Missing custom avatars still need a circle');
- const visibleJourneys=()=>page.evaluate(()=>{
-  const trip=scopedTripForRender(currentTrip());
-  return {map:mapLegsForTrip(trip).map(l=>l.item.transportId),timeline:renderTimelineTab(trip)};
+ assert.equal(await allPeople.getAttribute('aria-pressed'),'true','The default must show all people');
+ assert.equal(await namedPerson('Tom').getAttribute('aria-pressed'),'false');
+ const visibleJourneys=async()=>({
+  map:await page.evaluate(()=>mapLegsForTrip(scopedTripForRender(currentTrip())).map(l=>l.item.transportId)),
+  timeline:await page.locator('#trip-panel').innerText()
  });
- let journeys=await visibleJourneys();assert.deepEqual(journeys.map,['ams-hnd','pek-nrt']);assert(journeys.timeline.includes('AMS-HND'));assert(journeys.timeline.includes('PEK-NRT'));
- await people.filter({hasText:'Tom'}).click();
- journeys=await visibleJourneys();assert.deepEqual(journeys.map,['ams-hnd','pek-nrt']);
- await people.filter({hasText:'Farrah'}).click();
+ let journeys=await visibleJourneys();assert.deepEqual(journeys.map,['ams-hnd','pek-nrt']);assert(journeys.timeline.includes('AMS-HND'),journeys.timeline);assert(journeys.timeline.includes('PEK-NRT'));
+ await namedPerson('Tom').click();
+ journeys=await visibleJourneys();assert.deepEqual(journeys.map,['ams-hnd']);assert(journeys.timeline.includes('AMS-HND'));assert(!journeys.timeline.includes('PEK-NRT'));
+ assert.equal(await namedPerson('Tom').getAttribute('aria-pressed'),'true');assert.equal(await allPeople.getAttribute('aria-pressed'),'false');
+ await namedPerson('Farrah').click();
+ assert.deepEqual((await visibleJourneys()).map,['ams-hnd'],'Selecting two people on the same journey must not duplicate it');
+ assert.equal(await namedPerson('Farrah').getAttribute('aria-pressed'),'true');
+ await namedPerson('Jon').click();
+ journeys=await visibleJourneys();assert.deepEqual(journeys.map,['ams-hnd','pek-nrt']);assert(journeys.timeline.includes('AMS-HND'));assert(journeys.timeline.includes('PEK-NRT'));
+ await namedPerson('Tom').click();await namedPerson('Farrah').click();
  journeys=await visibleJourneys();assert.deepEqual(journeys.map,['pek-nrt']);assert(!journeys.timeline.includes('AMS-HND'));assert(journeys.timeline.includes('PEK-NRT'));
- assert.equal(await people.filter({hasText:'Farrah'}).getAttribute('aria-pressed'),'false');
- await page.locator('.desktop-trip-nav [data-action="show-all-people"]').click();
+ await namedPerson('Jon').click();
+ assert.equal(await allPeople.getAttribute('aria-pressed'),'true','Deselecting the last person must restore All');
  assert.deepEqual((await visibleJourneys()).map,['ams-hnd','pek-nrt']);
- assert.equal(await page.locator('.desktop-trip-nav .tab-group').filter({has:page.locator('.tab-group-label',{hasText:'Manage'})}).getByRole('button',{name:'Contacts',exact:true}).count(),1);
+ await namedPerson('Rachel').click();await allPeople.click();
+ assert.deepEqual((await visibleJourneys()).map,['ams-hnd','pek-nrt']);
+ assert.equal(await namedPerson('Rachel').getAttribute('aria-pressed'),'false');
+ await page.locator('.atlas-rail').getByRole('button',{name:'People',exact:true}).click();
+ const contacts=page.locator('.atlas-section-controls').getByRole('button',{name:'Contacts',exact:true});
+ assert.equal(await contacts.count(),1,'Contacts belongs in People local navigation');await contacts.click();
+ await page.locator('#trip-panel').getByRole('heading',{name:'No contacts yet',exact:true}).waitFor();
+ assert.equal(await contacts.getAttribute('aria-current'),'page');
+ assert.equal(await page.locator('.atlas-rail').getByRole('button',{name:'Contacts',exact:true}).count(),0);
 
  const rejected=await page.evaluate(async()=>{const r=await fetch('/WayPoint/api/v1/sync/mutations',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});return r.status;});assert.equal(rejected,503);
  await page.reload();await page.waitForFunction(()=>stateIsTrustworthy&&state.trips[0]?.name==='Real imported trip');
@@ -116,7 +137,9 @@ test('production browser signs in to imported trips, shows pause and blocks edit
  await db.prepare("UPDATE rehearsal_control SET state='active' WHERE id=1").run();env.WAYPOINT_WRITES_PAUSED='false';
  await page.reload();await page.waitForFunction(()=>stateIsTrustworthy&&state.trips.length===1);
  assert.equal(await page.getByText('Migration preview · Saving is paused',{exact:true}).count(),0);
- await page.evaluate(()=>openActivityForm(state.trips[0],state.trips[0].activities[0]));
+ await page.locator('.atlas-rail').getByRole('button',{name:'Plan',exact:true}).click();
+ await page.locator('.atlas-section-controls').getByRole('button',{name:'Activities',exact:true}).click();
+ await page.locator('#trip-panel [data-action="edit-activity"]').click();
  await page.locator('#entity-form [name="title"]').fill('Edited production activity');
  await page.locator('#entity-form [name="startDate"]').fill('2026-10-03');await page.locator('#entity-form [name="endDate"]').fill('2026-10-03');
  await page.locator('#entity-form button[type="submit"]').click();

@@ -2,7 +2,7 @@
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid var(--wp-border-default); background: var(--wp-bg-surface); color: var(--wp-text-primary);
-  border-radius: 999px; padding: 8px 16px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); font-weight: 600;
+  min-height: 44px; border-radius: var(--radius-sm); padding: 9px 14px; font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); font-weight: 600;
   cursor: pointer; transition: border-color .15s, background .15s;
 }
 .btn:hover { border-color: var(--wp-text-muted); }
@@ -11,14 +11,14 @@
 .btn-accent { background: var(--wp-action-accent-strong); color: var(--wp-text-on-strong); border-color: var(--wp-action-accent-strong); }
 .btn-danger { background: transparent; color: var(--wp-state-danger); border-color: var(--wp-state-danger-subtle); }
 .btn-danger:hover { background: var(--wp-state-danger-subtle); }
-.btn-icon { width: 38px; height: 38px; padding: 0; justify-content: center; border-radius: 8px; }
+.btn-icon { width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: var(--radius-sm); }
 .btn-ghost { border-color: transparent; background: transparent; }
 .btn-ghost:hover { background: var(--wp-bg-subdued); }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 
 label { display: block; font: var(--wp-type-label); color: var(--wp-text-secondary); margin-bottom: 4px; }
-input[type="text"], input[type="number"], input[type="date"], input[type="time"], input[type="password"], select, textarea {
-  width: 100%; padding: 9px 10px; border: 1px solid var(--wp-border-strong); border-radius: var(--radius-sm);
+input[type="text"], input[type="tel"], input[type="email"], input[type="url"], input[type="search"], input[type="number"], input[type="date"], input[type="time"], input[type="password"], select, textarea {
+  width: 100%; min-width: 0; min-height: 44px; padding: 9px 10px; border: 1px solid var(--wp-border-strong); border-radius: var(--radius-sm);
   background: var(--wp-bg-surface); color: var(--wp-text-primary);
 }
 .field-error { margin-top: 4px; color: var(--wp-state-danger); font: var(--wp-type-label); }
@@ -27,8 +27,8 @@ input[type="text"], input[type="number"], input[type="date"], input[type="time"]
 textarea { resize: vertical; min-height: 60px; }
 .field { margin-bottom: 14px; }
 .field-wide { grid-column: 1 / -1; }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.field-hint { font: var(--wp-type-micro); color: var(--wp-text-muted); margin-top: 3px; }
+.field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.field-hint { font-size: var(--wp-type-label-size); line-height: var(--wp-type-label-leading); font-weight: 400; color: var(--wp-text-muted); margin-top: 5px; overflow-wrap: anywhere; }
 /* The part-trip warning under a People picker. Advisory, not an error: it
    uses the location accent rather than the danger colour, because nothing
    is wrong and the save is not blocked -- somebody may genuinely be joining
@@ -79,6 +79,8 @@ textarea { resize: vertical; min-height: 60px; }
   padding: 6px 10px; border: 1px solid var(--wp-border-default); border-radius: 999px; background: var(--wp-bg-subdued);
 }
 .tag-picker-item input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--wp-action-accent); }
+.tag-picker-item { min-height: 44px; max-width: 100%; overflow-wrap: anywhere; }
+.tag-picker-item input[type="checkbox"], .checkbox-field input[type="checkbox"] { flex: 0 0 auto; width: 18px; height: 18px; min-height: 0; }
 .tag-picker-role, .tag-role {
   color: var(--wp-action-accent); font: var(--wp-type-micro); letter-spacing: .04em; text-transform: uppercase;
 }
@@ -157,4 +159,4 @@ textarea { resize: vertical; min-height: 60px; }
 .formatted-date { display: flex; position: relative; align-items: center; gap: 4px; min-width: 0; width: 100%; }
 .formatted-date > input[type="text"] { min-width: 0; width: 100%; }
 .formatted-date > .date-calendar-native { position: absolute; width: 1px; height: 1px; padding: 0; opacity: 0; bottom: 0; right: 0; pointer-events: none; }
-.date-calendar-button { flex-shrink: 0; min-width: 36px; min-height: 40px; border: 1px solid var(--wp-border-default); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.date-calendar-button { flex-shrink: 0; min-width: 44px; min-height: 44px; border: 1px solid var(--wp-border-strong); border-radius: var(--radius-sm); background: transparent; color: inherit; cursor: pointer; }

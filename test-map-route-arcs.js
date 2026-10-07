@@ -3,6 +3,7 @@
 // run in a minimal local checkout where a browser binary is unavailable.
 const { loadAppSources } = require('./test-source');
 const assert = require('assert');
+const vm = require('vm');
 
 const { source: html, style: mapStyle } = loadAppSources();
 const start = html.indexOf('function normalizeLongitude');
@@ -77,4 +78,54 @@ assert(controls.includes('handles-overlap'), 'Final-day handles must use separat
 assert.strictEqual((controls.match(/value="2"/g) || []).length, 2, 'Both handles should still point to the final day');
 assert(controls.includes('data-action="map-show-all"'), 'The collapsed range needs Show all');
 assert(/\.handles-overlap \.map-range-input\[data-map-range-handle="end"\]\s*\{\s*top: 44px/.test(mapStyle), 'The ending handle must be offset below the start');
+
+// Moving the date range must update the optional location-repair disclosure
+// without replacing the map, retaining an already-open disclosure. Records
+// outside the range and viewer-only repair controls must never leak into it.
+const repairTrip = {
+  activities: [
+    { activityId: 'unmapped-first', title: 'First day', startDate: days[0], endDate: days[0] },
+    { activityId: 'unmapped-last', title: 'Final day', startDate: days[2], endDate: days[2] }
+  ]
+};
+let disclosure = { open: true };
+const recovery = {
+  innerHTML: '',
+  querySelector: () => disclosure
+};
+const repairContext = {
+  mapState: { rangeStart: days[0], rangeEnd: days[0] },
+  document: { getElementById: () => recovery },
+  activityStartDate: item => item.startDate,
+  activityEndDate: item => item.endDate,
+  dateOnly: value => String(value || '').slice(0, 10),
+  canEditItem: () => true,
+  ENTITY_ID_FIELDS: { activity: 'activityId' },
+  esc: value => String(value || ''),
+  icon: () => '',
+  mapLayerIconName: () => 'activity'
+};
+vm.createContext(repairContext);
+vm.runInContext(
+  html.slice(html.indexOf('function mapRangeVisible'), html.indexOf('function mapPointsForTrip')) +
+  html.slice(html.indexOf('function mapUnmappedRecords'), html.indexOf('function renderMapTab')),
+  repairContext
+);
+repairContext.updateMapRecoveryUi(repairTrip);
+assert(recovery.innerHTML.includes('First day') && !recovery.innerHTML.includes('Final day'), 'Repair disclosure must use the selected map dates');
+assert(recovery.innerHTML.includes('data-action="review-map-location"'), 'Editors need a repair action');
+repairContext.mapState.rangeStart = repairContext.mapState.rangeEnd = days[2];
+disclosure = { open: false };
+const queryDisclosure = recovery.querySelector;
+let reads = 0;
+recovery.querySelector = () => ++reads === 1 ? { open: true } : queryDisclosure();
+repairContext.updateMapRecoveryUi(repairTrip);
+assert(!recovery.innerHTML.includes('First day') && recovery.innerHTML.includes('Final day'), 'Slider updates must replace stale repair records');
+assert(disclosure.open, 'Range updates must retain an expanded repair disclosure');
+repairContext.canEditItem = () => false;
+repairContext.updateMapRecoveryUi(repairTrip);
+assert(!recovery.innerHTML.includes('data-action="review-map-location"') && recovery.innerHTML.includes('Ask an editor'), 'Read-only users must not receive a repair mutation');
+repairContext.mapState.rangeStart = repairContext.mapState.rangeEnd = days[1];
+repairContext.updateMapRecoveryUi(repairTrip);
+assert.strictEqual(recovery.innerHTML, '', 'No stale repair panel should remain in a clean range');
 console.log('map range and route-arc regression checks passed');

@@ -9,9 +9,9 @@ function bookingContactSection(hint) {
 }
 
 function peopleNotesSection(label, hint) {
-  var people = { key: 'companions', label: label, type: 'tag-picker', wide: true };
+  var people = { key: 'companions', label: 'Who is this for?', type: 'tag-picker', wide: true };
   if (hint) people.hint = hint;
-  return { title: 'People and notes', collapsible: true, fields: [
+  return { title: 'People and notes', fields: [
     people, { key: 'notes', label: 'Notes', type: 'textarea', wide: true }
   ] };
 }

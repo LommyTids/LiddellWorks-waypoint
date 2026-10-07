@@ -29,7 +29,7 @@
   --wp-color-teal-100: #dcefe9;
   --wp-color-red-700: #b24444;
   --wp-color-red-100: #f6e1df;
-  --wp-color-green-700: #2f7d4f;
+  --wp-color-green-700: #23633c;
   --wp-color-green-100: #dff0e3;
   --wp-color-night-950: #12161c;
   --wp-color-night-900: #1b212b;
@@ -47,32 +47,55 @@
   --wp-color-red-900: #3a2020;
   --wp-color-green-400: #6fcb94;
   --wp-color-green-900: #1c3527;
-  --wp-color-map-blue: #1e88ff;
-  --wp-color-map-pink: #ff2d78;
-  --wp-color-map-orange: #ff8c1a;
+  --wp-color-map-blue: #1765b3;
+  --wp-color-map-pink: #a93968;
+  --wp-color-map-orange: #b75700;
   --wp-color-map-blue-dark: #63adff;
   --wp-color-map-pink-dark: #ff6aa0;
   --wp-color-map-orange-dark: #ffad5c;
 
+  /* Atlas: the blue and turquoise family of the WayPoint mark. */
+  --wp-color-atlas-canvas: #edf3f6;
+  --wp-color-atlas-soft: #e9f1f5;
+  --wp-color-atlas-ink: #17374c;
+  --wp-color-atlas-muted: #4a6474;
+  --wp-color-atlas-line: #b8cbd5;
+  --wp-color-atlas-border: #73817e;
+  --wp-color-atlas-teal: #006b7e;
+  --wp-color-atlas-teal-soft: #def2f3;
+  --wp-color-atlas-night: #0f1d2b;
+  --wp-color-atlas-night-surface: #172b3b;
+  --wp-color-atlas-night-soft: #243b4a;
+  --wp-color-atlas-night-line: #4b6779;
+  --wp-color-atlas-night-border: #849a94;
+  --wp-color-atlas-paper: #edf6fa;
+  --wp-color-atlas-slate: #b3c9d5;
+  --wp-color-atlas-aqua: #72d9dc;
+  --wp-color-atlas-aqua-soft: #164651;
+  --wp-color-atlas-danger: #9c3039;
+  --wp-color-atlas-danger-soft: #fae9eb;
+  --wp-color-atlas-danger-night: #f2a6b0;
+  --wp-color-atlas-danger-night-soft: #38272f;
+
   /* Semantic colour roles used by application components. */
-  --wp-bg-canvas: var(--wp-color-mist-100);
+  --wp-bg-canvas: var(--wp-color-atlas-canvas);
   --wp-bg-surface: var(--wp-color-paper-0);
-  --wp-bg-subdued: var(--wp-color-mist-200);
-  --wp-text-primary: var(--wp-color-ink-900);
-  --wp-text-secondary: var(--wp-color-ink-600);
-  --wp-text-muted: var(--wp-color-ink-500);
+  --wp-bg-subdued: var(--wp-color-atlas-soft);
+  --wp-text-primary: var(--wp-color-atlas-ink);
+  --wp-text-secondary: var(--wp-color-atlas-muted);
+  --wp-text-muted: var(--wp-color-atlas-muted);
   --wp-text-on-strong: var(--wp-color-paper-0);
-  --wp-border-default: var(--wp-color-line-300);
-  --wp-border-strong: var(--wp-color-ink-400);
-  --wp-action-primary: var(--wp-color-ink-900);
-  --wp-action-accent: var(--wp-color-brass-600);
-  --wp-action-accent-strong: var(--wp-color-brass-700);
-  --wp-action-accent-subtle: var(--wp-color-brass-100);
-  --wp-focus-ring: var(--wp-color-teal-700);
-  --wp-context-location: var(--wp-color-teal-700);
-  --wp-context-location-subtle: var(--wp-color-teal-100);
-  --wp-state-danger: var(--wp-color-red-700);
-  --wp-state-danger-subtle: var(--wp-color-red-100);
+  --wp-border-default: var(--wp-color-atlas-line);
+  --wp-border-strong: var(--wp-color-atlas-border);
+  --wp-action-primary: var(--wp-color-atlas-ink);
+  --wp-action-accent: var(--wp-color-atlas-teal);
+  --wp-action-accent-strong: var(--wp-color-atlas-teal);
+  --wp-action-accent-subtle: var(--wp-color-atlas-teal-soft);
+  --wp-focus-ring: var(--wp-color-atlas-teal);
+  --wp-context-location: var(--wp-color-atlas-teal);
+  --wp-context-location-subtle: var(--wp-color-atlas-teal-soft);
+  --wp-state-danger: var(--wp-color-atlas-danger);
+  --wp-state-danger-subtle: var(--wp-color-atlas-danger-soft);
   --wp-state-success: var(--wp-color-green-700);
   --wp-state-success-subtle: var(--wp-color-green-100);
   --wp-map-destination: var(--wp-context-location);
@@ -99,8 +122,8 @@
   --wp-type-label-leading: 20px;
   --wp-type-meta-size: 12px;
   --wp-type-meta-leading: 18px;
-  --wp-type-micro-size: 11px;
-  --wp-type-micro-leading: 16px;
+  --wp-type-micro-size: 12px;
+  --wp-type-micro-leading: 18px;
   --wp-type-display: 700 var(--wp-type-display-size)/var(--wp-type-display-leading) var(--wp-font-display);
   --wp-type-heading: 600 var(--wp-type-heading-size)/var(--wp-type-heading-leading) var(--wp-font-display);
   --wp-type-body: 400 var(--wp-type-body-size)/var(--wp-type-body-leading) var(--wp-font-body);
@@ -127,24 +150,24 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --wp-bg-canvas: var(--wp-color-night-950);
-    --wp-bg-surface: var(--wp-color-night-900);
-    --wp-bg-subdued: var(--wp-color-night-800);
-    --wp-text-primary: var(--wp-color-paper-50);
-    --wp-text-secondary: var(--wp-color-slate-300);
-    --wp-text-muted: var(--wp-color-slate-400);
-    --wp-text-on-strong: var(--wp-color-night-950);
-    --wp-border-default: var(--wp-color-night-line);
-    --wp-border-strong: var(--wp-color-slate-500);
-    --wp-action-primary: var(--wp-color-paper-50);
-    --wp-action-accent: var(--wp-color-brass-400);
-    --wp-action-accent-strong: var(--wp-color-brass-400);
-    --wp-action-accent-subtle: var(--wp-color-brass-900);
-    --wp-focus-ring: var(--wp-color-brass-400);
-    --wp-context-location: var(--wp-color-teal-400);
-    --wp-context-location-subtle: var(--wp-color-teal-900);
-    --wp-state-danger: var(--wp-color-red-400);
-    --wp-state-danger-subtle: var(--wp-color-red-900);
+    --wp-bg-canvas: var(--wp-color-atlas-night);
+    --wp-bg-surface: var(--wp-color-atlas-night-surface);
+    --wp-bg-subdued: var(--wp-color-atlas-night-soft);
+    --wp-text-primary: var(--wp-color-atlas-paper);
+    --wp-text-secondary: var(--wp-color-atlas-slate);
+    --wp-text-muted: var(--wp-color-atlas-slate);
+    --wp-text-on-strong: var(--wp-color-atlas-night);
+    --wp-border-default: var(--wp-color-atlas-night-line);
+    --wp-border-strong: var(--wp-color-atlas-night-border);
+    --wp-action-primary: var(--wp-color-atlas-paper);
+    --wp-action-accent: var(--wp-color-atlas-aqua);
+    --wp-action-accent-strong: var(--wp-color-atlas-aqua);
+    --wp-action-accent-subtle: var(--wp-color-atlas-aqua-soft);
+    --wp-focus-ring: var(--wp-color-atlas-aqua);
+    --wp-context-location: var(--wp-color-atlas-aqua);
+    --wp-context-location-subtle: var(--wp-color-atlas-aqua-soft);
+    --wp-state-danger: var(--wp-color-atlas-danger-night);
+    --wp-state-danger-subtle: var(--wp-color-atlas-danger-night-soft);
     --wp-state-success: var(--wp-color-green-400);
     --wp-state-success-subtle: var(--wp-color-green-900);
     --wp-map-transport: var(--wp-color-map-blue-dark);
@@ -154,24 +177,24 @@
   }
 }
 :root[data-theme="dark"] {
-  --wp-bg-canvas: var(--wp-color-night-950);
-  --wp-bg-surface: var(--wp-color-night-900);
-  --wp-bg-subdued: var(--wp-color-night-800);
-  --wp-text-primary: var(--wp-color-paper-50);
-  --wp-text-secondary: var(--wp-color-slate-300);
-  --wp-text-muted: var(--wp-color-slate-400);
-  --wp-text-on-strong: var(--wp-color-night-950);
-  --wp-border-default: var(--wp-color-night-line);
-  --wp-border-strong: var(--wp-color-slate-500);
-  --wp-action-primary: var(--wp-color-paper-50);
-  --wp-action-accent: var(--wp-color-brass-400);
-  --wp-action-accent-strong: var(--wp-color-brass-400);
-  --wp-action-accent-subtle: var(--wp-color-brass-900);
-  --wp-focus-ring: var(--wp-color-brass-400);
-  --wp-context-location: var(--wp-color-teal-400);
-  --wp-context-location-subtle: var(--wp-color-teal-900);
-  --wp-state-danger: var(--wp-color-red-400);
-  --wp-state-danger-subtle: var(--wp-color-red-900);
+  --wp-bg-canvas: var(--wp-color-atlas-night);
+  --wp-bg-surface: var(--wp-color-atlas-night-surface);
+  --wp-bg-subdued: var(--wp-color-atlas-night-soft);
+  --wp-text-primary: var(--wp-color-atlas-paper);
+  --wp-text-secondary: var(--wp-color-atlas-slate);
+  --wp-text-muted: var(--wp-color-atlas-slate);
+  --wp-text-on-strong: var(--wp-color-atlas-night);
+  --wp-border-default: var(--wp-color-atlas-night-line);
+  --wp-border-strong: var(--wp-color-atlas-night-border);
+  --wp-action-primary: var(--wp-color-atlas-paper);
+  --wp-action-accent: var(--wp-color-atlas-aqua);
+  --wp-action-accent-strong: var(--wp-color-atlas-aqua);
+  --wp-action-accent-subtle: var(--wp-color-atlas-aqua-soft);
+  --wp-focus-ring: var(--wp-color-atlas-aqua);
+  --wp-context-location: var(--wp-color-atlas-aqua);
+  --wp-context-location-subtle: var(--wp-color-atlas-aqua-soft);
+  --wp-state-danger: var(--wp-color-atlas-danger-night);
+  --wp-state-danger-subtle: var(--wp-color-atlas-danger-night-soft);
   --wp-state-success: var(--wp-color-green-400);
   --wp-state-success-subtle: var(--wp-color-green-900);
   --wp-map-transport: var(--wp-color-map-blue-dark);
@@ -191,16 +214,7 @@ body {
   font: var(--wp-type-body);
   -webkit-font-smoothing: antialiased;
 }
-body::before {
-  content: "";
-  position: fixed;
-  inset: 12vh -8vw 0;
-  background: url('/WayPoint/branding/waypoint-mark.png') center / min(85vw, 1000px) auto no-repeat;
-  opacity: .06;
-  pointer-events: none;
-  z-index: -1;
-}
-.brand-logo { display: block; width: 32px; height: 32px; border-radius: 7px; }
+.brand-logo { display: block; width: 40px; height: 40px; border-radius: 9px; }
 h1 { font: var(--wp-type-display); }
 h2, h3, h4 { font: var(--wp-type-heading); }
 h1, h2, h3, h4 { margin: 0; text-wrap: balance; }
@@ -256,7 +270,7 @@ input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-si
 .account-label-inline { margin-right: 0; }
 .account-desktop-actions { display: flex; align-items: center; gap: 8px; }
 .account-menu { display: none; position: relative; }
-.account-menu-toggle { padding: 3px; min-width: 38px; min-height: 38px; justify-content: center; }
+.account-menu-toggle { padding: 3px; min-width: 44px; min-height: 44px; justify-content: center; }
 .account-popover {
   position: absolute; z-index: 40; top: calc(100% + 8px); right: 0; width: min(260px, calc(100vw - 24px));
   padding: 6px; border: 1px solid var(--wp-border-default); border-radius: var(--radius);
@@ -288,7 +302,7 @@ input, select, textarea { font-family: inherit; font-size: var(--wp-type-body-si
 .avatar-marker-smiley { font-size: var(--wp-glyph-xs); font-weight: 700; }
 .avatar-row { display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; }
 .account-avatar-btn {
-  display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; background: none;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; border: 1px solid transparent; background: none;
   border-radius: 999px; padding: 3px 8px 3px 3px; cursor: pointer; color: var(--wp-text-primary);
 }
 .account-avatar-btn:hover { border-color: var(--wp-border-default); background: var(--wp-bg-subdued); }
