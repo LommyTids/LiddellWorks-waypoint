@@ -1,6 +1,19 @@
 /* ---------- 23. Top-level render dispatcher ------------------------------------ */
 
 var pendingRenderFocus = null;
+var tripControlsObserver = null;
+
+function observeTripControls() {
+  if (tripControlsObserver) tripControlsObserver.disconnect();
+  if (typeof ResizeObserver !== 'undefined') {
+    if (!tripControlsObserver) tripControlsObserver = new ResizeObserver(updateStickyShellOffsets);
+    var controls = document.querySelector('.atlas-floating-header');
+    if (controls) tripControlsObserver.observe(controls);
+    var toolbar = document.querySelector('.timeline-toolbar');
+    if (toolbar) tripControlsObserver.observe(toolbar);
+  }
+  updateStickyShellOffsets();
+}
 
 function render() {
   var app = document.getElementById('app');
@@ -13,6 +26,7 @@ function render() {
     app.innerHTML = (currentView === 'trip' && currentTripId) ? renderTripView() : renderDashboard();
   }
   enhanceAccessibility(app);
+  observeTripControls();
 
   if (pendingRenderFocus) {
     var focusSelector = pendingRenderFocus;

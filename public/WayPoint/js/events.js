@@ -143,7 +143,7 @@ document.addEventListener('click', function (e) {
       // The reduced-motion media query governs CSS scrolling, not this
       // option, so the preference is honoured explicitly.
       var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      todayCard.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+      scrollTimelineDayIntoView(todayCard, reduceMotion ? 'auto' : 'smooth');
       var todayHead = todayCard.querySelector('.day-head');
       if (todayHead) todayHead.focus({ preventScroll: true });
     });
@@ -525,7 +525,7 @@ document.addEventListener('change', function (e) {
       var card = document.querySelector('[data-timeline-day="' + jumpDay + '"]');
       if (!card) return;
       var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+      scrollTimelineDayIntoView(card, reduceMotion ? 'auto' : 'smooth');
       var head = card.querySelector('.day-head');
       if (head) head.focus({ preventScroll: true });
     });
@@ -700,4 +700,24 @@ window.addEventListener('online', function () {
   // state before unlocking edits so an unsent optimistic change is never
   // mistaken for confirmed data.
   retryConnection({ silent: false });
+});
+
+// Native keyboard focus must remain below the floating trip controls and
+// above the phone navigation even when the browser auto-scrolls a button.
+document.addEventListener('focusin', function (event) {
+  var target = event.target;
+  if (!target.closest('#trip-panel') || target.closest('.timeline-toolbar') || !target.matches('button, summary, input, select, textarea, a[href]')) return;
+  requestAnimationFrame(function () {
+    if (!target.isConnected || document.activeElement !== target || document.body.classList.contains('has-modal')) return;
+    var top = 12;
+    ['.topbar', '#system-banner', '.atlas-floating-header', '.timeline-toolbar'].forEach(function (selector) {
+      var element = document.querySelector(selector);
+      if (element) top += element.getBoundingClientRect().height;
+    });
+    var nav = document.querySelector('.mobile-destination-nav');
+    var bottom = nav && getComputedStyle(nav).position === 'fixed' ? nav.getBoundingClientRect().top - 12 : window.innerHeight - 12;
+    var rect = target.getBoundingClientRect();
+    if (rect.top < top) window.scrollBy({ top: rect.top - top, behavior: 'auto' });
+    else if (rect.bottom > bottom) window.scrollBy({ top: rect.bottom - bottom, behavior: 'auto' });
+  });
 });

@@ -60,6 +60,10 @@ function contrast(a, b) {
 }
 
 const contrastPairs = [
+  ['#995900', '#ffffff', 4.5, 'light amendment outline and label'],
+  ['#f1bd78', '#172b3b', 4.5, 'dark amendment outline and label'],
+  ['#006b7e', '#def2f3', 4.5, 'light selected control'],
+  ['#72d9dc', '#164651', 4.5, 'dark selected control'],
   ['#5c6676', '#ffffff', 4.5, 'light muted text'],
   ['#8c97aa', '#1b212b', 4.5, 'dark muted text'],
   ['#966820', '#ffffff', 4.5, 'light accent button'],

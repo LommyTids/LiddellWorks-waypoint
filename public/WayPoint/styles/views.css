@@ -635,3 +635,70 @@ body.is-trip-view .page { max-width: 1480px; padding: 20px 24px 64px; }
   body.is-trip-view .toast { bottom: calc(82px + env(safe-area-inset-bottom)); }
   .copy-btn { width: 44px; height: 44px; }
 }
+
+/* Selection always means turquoise; amendments always use an amber box. */
+.atlas-trip-layout button.wp-selection, .mobile-destination-nav button.wp-selection,
+button.wp-selection {
+  border: 1px solid var(--wp-border-strong); border-radius: var(--radius-sm);
+  background: var(--wp-bg-surface); color: var(--wp-text-secondary);
+  box-shadow: none;
+}
+.atlas-trip-layout button.wp-selection:is([aria-pressed="true"], [aria-current="page"]),
+.mobile-destination-nav button.wp-selection[aria-current="page"],
+button.wp-selection[aria-pressed="true"],
+.tag-picker-item:has(input:checked), .avatar-swatch-radio:checked + .avatar-swatch-btn {
+  border-color: var(--wp-action-accent); background: var(--wp-action-accent-subtle);
+  color: var(--wp-action-accent-strong); border-radius: var(--radius-sm);
+}
+button.wp-selection:hover, .tag-picker-item:hover { border-color: var(--wp-action-accent); }
+.tag-picker-item { border-radius: var(--radius-sm); background: var(--wp-bg-surface); border-color: var(--wp-border-strong); }
+button.wp-amendment, .day-add > summary.wp-amendment {
+  border: 2px solid var(--wp-action-amendment); border-radius: var(--radius-sm);
+  background: var(--wp-bg-surface); color: var(--wp-action-amendment);
+  box-shadow: none;
+}
+button.wp-amendment:hover, .day-add > summary.wp-amendment:hover {
+  border-color: var(--wp-action-amendment); background: var(--wp-action-amendment-subtle); opacity: 1;
+}
+.modal.wp-amendment-dialog { border: 2px solid var(--wp-action-amendment); }
+.day-add > summary.wp-amendment { padding: 7px 10px; }
+
+/* Identity scrolls away; Add, people and current-view controls float together. */
+.atlas-floating-header {
+  position: sticky; top: calc(var(--wp-shell-bar-height, 64px) + var(--wp-shell-banner-height, 0px));
+  z-index: 18; background: var(--wp-bg-surface); border-radius: 0 0 var(--radius) var(--radius);
+  max-height: 45dvh; overflow: auto; overscroll-behavior: contain;
+  margin-bottom: 18px; box-shadow: var(--wp-shadow-surface);
+}
+.atlas-floating-header .atlas-section-controls { margin-bottom: 0; }
+.atlas-trip-main .timeline-toolbar {
+  position: sticky; z-index: 17;
+  top: calc(var(--wp-shell-bar-height, 64px) + var(--wp-shell-banner-height, 0px) + var(--wp-trip-controls-height, 0px));
+}
+@media (max-width: 768px) {
+  .atlas-floating-header { margin: 0 -12px 14px; border-radius: 0; }
+  .atlas-floating-header :is(.atlas-add-strip, .atlas-companion-bar, .atlas-section-controls) { margin-left: 0; margin-right: 0; }
+  .atlas-floating-header .atlas-section-controls { margin-bottom: 0; padding: 10px 12px; }
+  .atlas-floating-header .atlas-section-controls h2 { font: var(--wp-type-label); }
+  .atlas-floating-header .atlas-companion-bar { padding: 8px 12px; gap: 6px; }
+  .atlas-floating-header .atlas-filter-heading { font: var(--wp-type-meta); }
+  .atlas-floating-header .companion-filters { flex-wrap: nowrap; overflow-x: auto; min-width: 0; width: 100%; padding: 3px; overscroll-behavior-x: contain; }
+  .atlas-floating-header .companion-filter { flex: 0 0 auto; }
+  .atlas-floating-header .companion-filter-note { display: none; }
+  .atlas-floating-header .atlas-itinerary-switch { width: auto; flex: 1 1 180px; }
+  .atlas-floating-header .atlas-itinerary-switch button { min-height: 44px; }
+}
+
+html {
+  scroll-padding-top: calc(var(--wp-shell-bar-height, 64px) + var(--wp-shell-banner-height, 0px) + var(--wp-trip-controls-height, 0px) + var(--wp-trip-toolbar-height, 0px) + 12px);
+}
+@media (max-width: 768px) {
+  html { scroll-padding-bottom: calc(82px + env(safe-area-inset-bottom)); }
+}
+/* Keep the date label and its enhanced calendar on one line. */
+.timeline-date-jump { flex-wrap: nowrap; white-space: nowrap; max-width: 100%; }
+.timeline-date-jump .formatted-date { width: 210px; flex: 0 1 210px; }
+.timeline-date-jump .formatted-date > input[type="text"] { width: 160px; }
+@media (max-width: 768px) {
+  .timeline-date-jump { font: var(--wp-type-meta); gap: 6px; }
+}

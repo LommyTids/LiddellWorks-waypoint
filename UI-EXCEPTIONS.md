@@ -19,6 +19,11 @@ The remaining inline styles are intentional data-driven exceptions:
   toolbar's fill element, the same mechanism the map range controls use; no
   fixed token can express a value that changes with the date.
 
+- Sticky shell, floating trip controls and timeline toolbar heights are measured
+  from their rendered boxes and passed as CSS custom properties. They follow
+  text wrapping, viewport size and connection banners so neither sticky
+  content nor keyboard focus obscures the itinerary.
+
 Any new exception should be added here with the reason it cannot use a shared
 class or semantic token. Static spacing, sizing, colour, and typography styles
 are not exceptions.

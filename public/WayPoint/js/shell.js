@@ -194,7 +194,7 @@ function renderTripView() {
     '<div class="trip-title-row"><div><div class="nav-group-label">Your trip</div><h1 data-page-heading tabindex="-1">' + esc(trip.name) + '</h1></div>' +
     '<div class="trip-meta"><span class="trip-date-range">' + (trip.startDate ? formatDateShort(trip.startDate) : 'Dates not set') + (trip.endDate ? ' – ' + formatDateShort(trip.endDate) : '') + '</span><div>' + tripAccessBadgeHtml(trip) + '</div>' +
     (canFullyEditTrip(trip) ? '<span class="trip-spend-meta">' + money(spend.known, trip.homeCurrency) + ' whole-trip recorded costs' + (spend.unknownCount ? ' · <button class="warn-link" data-action="switch-tab" data-tab="settings">' + spend.unknownCount + ' need a rate</button>' : '') + '</span>' : '') + '</div></div></header>' +
-    atlasAddStripHtml(trip) + (['overview', 'plan'].indexOf(section) !== -1 || currentTab === 'expenses' ? '<div class="atlas-companion-bar">' + companionFiltersHtml(trip) + itemScopeIndicatorHtml(trip) + '</div>' : '') +
+    '<div class="atlas-floating-header" role="region" aria-label="Trip controls">' + atlasAddStripHtml(trip) + (['overview', 'plan'].indexOf(section) !== -1 || currentTab === 'expenses' ? '<div class="atlas-companion-bar">' + companionFiltersHtml(trip) + itemScopeIndicatorHtml(trip) + '</div>' : '') +
     '<div class="atlas-section-controls"><h2>' + names[section] + '</h2>' + controls + (section === 'more' && currentTab !== 'more' ? '<button class="back-link mobile-more-return" data-action="switch-mobile-destination" data-destination="more">' + icon('back') + ' More</button>' : '') + '</div>' +
-    '<section id="trip-panel" class="trip-panel" tabindex="-1" aria-label="' + names[section] + '">' + panel + '</section></div></div>' + renderMobileDestinationNav(trip);
+    '</div><section id="trip-panel" class="trip-panel" tabindex="-1" aria-label="' + names[section] + '">' + panel + '</section></div></div>' + renderMobileDestinationNav(trip);
 }

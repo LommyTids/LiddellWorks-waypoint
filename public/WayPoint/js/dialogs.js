@@ -94,6 +94,24 @@ function enhanceAccessibility(scope) {
     if (isMutationAction(control.dataset.action)) control.disabled = !editingAvailable();
   });
   updateSubmitAvailability(scope);
+  enhanceControlDesign(scope);
+}
+
+// Selection changes the view; amendment controls open or save record changes.
+// Shared hooks keep identical controls consistent in every list and editor.
+function enhanceControlDesign(scope) {
+  Array.prototype.forEach.call(scope.querySelectorAll('button[aria-pressed], button[aria-current], .atlas-local-nav button, .atlas-rail-button, .mobile-destination-btn'), function (button) {
+    button.classList.add('wp-selection');
+  });
+  Array.prototype.forEach.call(scope.querySelectorAll('[data-action]'), function (control) {
+    if (/^(new-|edit-|timeline-add-|link-companion$)/.test(control.dataset.action) ||
+        ['apply-location-input', 'review-map-location', 'set-location-pin', 'use-typed-location', 'open-avatar-picker'].indexOf(control.dataset.action) !== -1) control.classList.add('wp-amendment');
+  });
+  Array.prototype.forEach.call(scope.querySelectorAll('form:not(#login-form):not(#setup-form) button[type="submit"], .day-add > summary'), function (control) {
+    control.classList.add('wp-amendment');
+  });
+  var editor = scope.matches && scope.matches('.modal') ? scope : scope.querySelector('.modal');
+  if (editor && editor.querySelector('form:not(#login-form):not(#setup-form)')) editor.classList.add('wp-amendment-dialog');
 }
 
 function updateSubmitAvailability(scope) {

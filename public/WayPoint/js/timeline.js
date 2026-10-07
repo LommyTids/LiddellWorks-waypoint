@@ -283,7 +283,7 @@ function timelineToolbarHtml(trip, days, today) {
       '<span class="timeline-progress-track"><span class="timeline-progress-fill" style="--wp-timeline-progress: ' + Math.round((current / total) * 100) + '%"></span></span></span>';
   }
   return '<div class="timeline-toolbar">' + progress +
-    '<label class="timeline-date-jump">Jump to date <input type="date" data-timeline-jump-date min="' + esc(days[0]) + '" max="' + esc(days[days.length - 1]) + '" value="' + esc(days.indexOf(timelineJumpDates[trip.tripId]) !== -1 ? timelineJumpDates[trip.tripId] : tripFocusDay(days, today)) + '"></label>' +
+    '<label class="timeline-date-jump">Jump to date <input type="date" aria-label="Jump to date" data-timeline-jump-date min="' + esc(days[0]) + '" max="' + esc(days[days.length - 1]) + '" value="' + esc(days.indexOf(timelineJumpDates[trip.tripId]) !== -1 ? timelineJumpDates[trip.tripId] : tripFocusDay(days, today)) + '"></label>' +
     (days.indexOf(today) !== -1 ? '<button type="button" class="timeline-tool is-today" data-action="timeline-jump-today">' + icon('date') + ' Jump to today</button>' : '') +
     '<button type="button" class="timeline-tool" data-action="timeline-toggle-all" data-expand="' + String(anyCollapsed) + '">' +
       icon(anyCollapsed ? 'expand' : 'collapse') + (anyCollapsed ? ' Expand all' : ' Collapse all') + '</button>' +
@@ -312,6 +312,19 @@ function markTruncatedNotes() {
   });
 }
 
+// Align a focused date beneath both sticky control layers, including wrapped
+// people filters and offline banners. Scrolling a tall day card by its centre
+// can hide its heading behind those layers.
+function scrollTimelineDayIntoView(card, behavior) {
+  var head = card.querySelector('.day-head') || card;
+  var offset = 12;
+  ['.topbar', '#system-banner', '.atlas-floating-header', '.timeline-toolbar'].forEach(function (selector) {
+    var element = document.querySelector(selector);
+    if (element) offset += element.getBoundingClientRect().height;
+  });
+  window.scrollTo({ top: Math.max(0, window.scrollY + head.getBoundingClientRect().top - offset), behavior: behavior || 'auto' });
+}
+
 // The Timeline opens on today while a trip is under way, at its start
 // otherwise. Only on arrival at the tab: re-running this on every render
 // would yank the page back after each edit. Instant rather than smooth --
@@ -329,7 +342,7 @@ function focusTimelineOpeningDay(trip) {
   // down, and scrolling the card itself into view hides the trip header.
   if (target === days[0]) { window.scrollTo(0, 0); return; }
   var card = document.querySelector('[data-timeline-day="' + target + '"]');
-  if (card) card.scrollIntoView({ behavior: 'auto', block: 'center' });
+  if (card) scrollTimelineDayIntoView(card, 'auto');
 }
 
 // The day add menu is a transient popover. Closing it explicitly matters most
