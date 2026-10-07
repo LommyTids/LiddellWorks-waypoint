@@ -139,7 +139,8 @@ function locationPickerHtml(field, val, req, trip, allValues) {
   var locationInputHtml = '<div class="location-input-panel" data-location-input-panel id="' + esc(inputId + '-panel') + '" hidden>' +
     '<label for="' + esc(inputId) + '">Coordinates, Plus Code or map link</label>' +
     '<input type="text" id="' + esc(inputId) + '" data-location-input maxlength="2048" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="' + esc(inputId + '-help') + ' ' + esc(inputId + '-hint') + '" placeholder="51.5074, -0.1278 or 9C3XGV4C+XV">' +
-    '<p class="field-hint" id="' + esc(inputId + '-help') + '">Latitude first, longitude second. Use decimal coordinates, degrees/minutes/seconds, a full Plus Code, or a Google Maps link containing coordinates.</p>' +
+    '<p class="field-hint" id="' + esc(inputId + '-help') + '">Latitude first, longitude second. Use decimal coordinates, degrees/minutes/seconds, a full Plus Code, a short code with its town (e.g. 7X4W+XH Hakone, Kanagawa, Japan), or a Google Maps link containing coordinates.</p>' +
+    '<div class="location-results" data-location-locality-results hidden role="region" aria-label="Plus Code reference places" aria-live="polite"></div>' +
     '<div class="location-reference-row" data-location-reference-row hidden><label class="checkbox-field"><input type="checkbox" data-location-reference><span data-location-reference-label>Use the selected destination as the nearby reference for a short Plus Code</span></label></div>' +
     '<button type="button" class="btn location-input-preview" data-action="preview-location-input">Preview location</button>' +
     '<div class="field-hint" id="' + esc(inputId + '-hint') + '" data-location-input-hint role="status" aria-live="polite" aria-atomic="true"></div>' +

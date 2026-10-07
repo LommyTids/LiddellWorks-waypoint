@@ -66,6 +66,9 @@ assert.equal(parse('9C3W9QCJ+2VX').usedReference, undefined);
 assert.equal(invalid('CJ+2VX').needsReference, true);
 assert.equal(invalid('CJ+2VX', { lat: '', lng: '' }).needsReference, true);
 assert.equal(invalid('CJ+2VX', { lat: 91, lng: 0 }).needsReference, true);
+assert.equal(invalid('7X4W+XH Hakone, Kanagawa, Japan').locality, 'Hakone, Kanagawa, Japan');
+assert.equal(point('7X4W+XH Hakone, Kanagawa, Japan', 35.2574375, 138.9964375, 'plus-code', { lat: 35.2324, lng: 139.1069 }).code, '8Q7W7X4W+XH');
+point('8Q7W7X4W+XH Hakone, Kanagawa, Japan', 35.2574375, 138.9964375, 'plus-code');
 for (const code of ['CJ+2VX London', '8FVC9G8F+6', '8FVC9G8F+6!', 'ZZZZZZZZ+ZZ']) invalid(code);
 for (const [lat, lng] of [[90, 180], [-90, -180]]) {
   const code = context.encodeLocationPlusCode(lat, lng);

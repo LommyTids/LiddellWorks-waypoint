@@ -83,6 +83,13 @@ function parseLocationMapsLink(text) {
   return point;
 }
 
+// Google Maps displays shortened codes followed by their reference locality.
+function splitLocationPlusCode(text) {
+  if (typeof text !== 'string') return null;
+  var match = /^([23456789CFGHJMPQRVWX0]{0,8}\+[23456789CFGHJMPQRVWX]{2,7})(?:\s+(.+))?$/i.exec(text.trim());
+  return match ? { code: match[1].toUpperCase(), locality: (match[2] || '').trim() } : null;
+}
+
 function parseLocationInput(text, reference) {
   try {
     if (typeof text !== 'string' || !text.trim()) return locationInputError('Paste coordinates, a Plus Code or a Google Maps coordinate link.');
@@ -102,13 +109,16 @@ function parseLocationInput(text, reference) {
     var cardinal = parseLocationCardinalPair(text);
     if (cardinal) return cardinal;
     if (text.indexOf('+') !== -1) {
-      if (/\s/.test(text)) return locationInputError('For a short Plus Code, remove the place name and select a nearby destination, or paste the full Plus Code.');
+      var pastedCode = splitLocationPlusCode(text);
+      if (!pastedCode) return locationInputError('Check the Plus Code. You can include its town, region and country after the code.');
       if (typeof OpenLocationCode === 'undefined') return locationInputError('Plus Code support has not loaded. Reload or enter coordinates.');
-      var code = text.toUpperCase();
+      var code = pastedCode.code;
       var usedReference = false;
       if (OpenLocationCode.isShort(code)) {
         if (!reference || !validLocationInputPoint(reference.lat, reference.lng)) {
-          return locationInputError('This is a short Plus Code. Select a nearby destination to complete it, or paste the full Plus Code.', true);
+          var missingReference = locationInputError(pastedCode.locality ? 'Look up the place after this short Plus Code to complete it.' : 'Add the town, region and country after this short Plus Code, select a nearby destination, or paste the full Plus Code.', true);
+          if (pastedCode.locality) missingReference.locality = pastedCode.locality;
+          return missingReference;
         }
         code = OpenLocationCode.recoverNearest(code, reference.lat, reference.lng);
         usedReference = true;
@@ -117,6 +127,7 @@ function parseLocationInput(text, reference) {
       var area = OpenLocationCode.decode(code);
       var point = locationInputPoint(area.latitudeCenter, area.longitudeCenter, 'plus-code');
       point.code = code;
+      if (pastedCode.locality) point.locality = pastedCode.locality;
       point.label = code + ' · ' + point.label;
       if (usedReference) point.usedReference = true;
       return point;

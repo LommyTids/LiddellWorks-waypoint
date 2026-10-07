@@ -30,6 +30,7 @@ function environment(options = {}) {
   ] };
   const context = vm.createContext({
     AbortController, URL, URLSearchParams, Event, Number,
+    fetch: options.fetch, esc: text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;'),
     currentTrip: () => trip, byId: (items, id, key) => items.find(item => item[key] === id),
     editingAvailable: () => options.editable !== false,
     document: { addEventListener(type, fn) { (listeners[type] ||= []).push(fn); } },
@@ -69,7 +70,7 @@ function environment(options = {}) {
     for (const selector of [
       '[data-location-input]', '[data-location-reference]', '[data-location-reference-row]',
       '[data-location-reference-label]', '[data-location-input-panel]', '[data-location-candidate]',
-      '[data-location-candidate-label]', '[data-location-candidate-map]', '[data-location-input-hint]',
+      '[data-location-candidate-label]', '[data-location-candidate-map]', '[data-location-input-hint]', '[data-location-locality-results]',
       '[data-location-pin-map]', '[data-location-query]', '[data-location-results]',
       '[data-location-summary]', '[data-location-hint]', '.location-picker-actions',
       '[data-action="toggle-location-input"]', '[data-action="search-location"]'
@@ -277,10 +278,77 @@ test('Enter in the auxiliary input previews without submitting the form', () => 
   assert.deepEqual(p.savedValues(), before);
 });
 
+
+const hakone = { name: 'Hakone', formattedAddress: 'Hakone, Kanagawa, Japan', lat: 35.2324, lng: 139.1069 };
+function lookupResponse(results, error) {
+  return { ok: !error, json: async () => error ? { error } : { results, attribution: { label: 'LocationIQ' } } };
+}
+test('named short code resolves and applies without any destination', async () => {
+  const requests = [];
+  const env = environment({ fetch: async (url) => { requests.push(new URL(url, 'https://test')); return lookupResponse([hakone]); } });
+  const p = env.picker(); p.destination.value = ''; env.trip.destinations = [];
+  const before = p.savedValues(); p.input.value = '7X4W+XH Hakone, Kanagawa, Japan';
+  await env.api.previewLocationInput(p.wrapper);
+  assert.equal(requests[0].searchParams.get('q'), 'Hakone, Kanagawa, Japan');
+  assert.equal(requests[0].searchParams.get('lat'), null);
+  assert.equal(p.wrapper._locationCandidate.point.code, '8Q7W7X4W+XH');
+  assert.deepEqual(p.savedValues(), before); assert.match(p.hint.textContent, /LocationIQ/);
+  assert.match(p.nodes['[data-location-candidate-label]'].textContent, /Hakone/);
+  p.nodes['[data-location-query]'].value = '';
+  // Re-preview after changing the venue text; applying must use a current snapshot.
+  await env.api.previewLocationInput(p.wrapper); env.api.applyLocationInput(p.wrapper);
+  assert.equal(Number(p.fields.locationLat.value), 35.2574375);
+  assert.equal(p.nodes['[data-location-query]'].value, '8Q7W7X4W+XH Hakone, Kanagawa, Japan');
+  assert.equal(env.trip.destinations.length, 0);
+});
+test('pasted locality takes precedence over an opted-in destination', async () => {
+  const env = environment({ fetch: async () => lookupResponse([hakone]) }), p = env.picker();
+  p.reference.checked = true; p.input.value = '7X4W+XH Hakone, Kanagawa, Japan';
+  await env.api.previewLocationInput(p.wrapper);
+  assert.equal(p.wrapper._locationCandidate.point.code, '8Q7W7X4W+XH');
+});
+test('full Plus Code with place suffix remains offline', () => {
+  const env = environment({ fetch: () => { throw new Error('Unexpected lookup'); } }), p = env.picker();
+  p.destination.value = ''; p.input.value = '8Q7W7X4W+XH Hakone, Kanagawa, Japan';
+  env.api.previewLocationInput(p.wrapper);
+  assert.equal(p.wrapper._locationCandidate.point.code, '8Q7W7X4W+XH');
+});
+test('ambiguous localities require a selection and preserve stored values', async () => {
+  const env = environment({ fetch: async () => lookupResponse([hakone, { ...hakone, name: '<Other place>' }]) }), p = env.picker();
+  p.input.value = '7X4W+XH Hakone'; const before = p.savedValues();
+  await env.api.previewLocationInput(p.wrapper);
+  assert.equal(p.wrapper._locationCandidate, null); assert.deepEqual(p.savedValues(), before);
+  assert.match(p.nodes['[data-location-locality-results]'].innerHTML, /&lt;Other place>/);
+  env.api.choosePlusCodeLocality(p.wrapper, 0);
+  assert.equal(p.wrapper._locationCandidate.point.code, '8Q7W7X4W+XH');
+});
+test('lookup failures and empty results leave the location untouched', async () => {
+  for (const response of [lookupResponse([], 'Location search is not configured yet.'), lookupResponse([])]) {
+    const env = environment({ fetch: async () => response }), p = env.picker(), before = p.savedValues();
+    p.input.value = '7X4W+XH Hakone'; await env.api.previewLocationInput(p.wrapper);
+    assert.equal(p.wrapper._locationCandidate, null); assert.deepEqual(p.savedValues(), before);
+    assert.equal(p.input.attributes['aria-invalid'], 'true');
+  }
+});
+test('changed inputs and disposal prevent late lookup results becoming candidates', async () => {
+  for (const dispose of [false, true]) {
+    let finish, signal;
+    const env = environment({ fetch: (_url, options) => { signal = options.signal; return new Promise(resolve => { finish = resolve; }); } });
+    const p = env.picker(); p.input.value = '7X4W+XH Hakone';
+    const pending = env.api.previewLocationInput(p.wrapper);
+    if (dispose) { env.api.disposeLocationPickers({ querySelectorAll: () => [p.wrapper] }); assert(signal.aborted); }
+    else p.input.value = '7X4W+XH Somewhere else';
+    finish(lookupResponse([hakone])); await pending;
+    assert.equal(p.wrapper._locationCandidate, null);
+  }
+});
+
+(async () => {
 let failed = 0;
 for (const { name, run } of cases) {
-  try { run(); console.log('PASS ' + name); }
+  try { await run(); console.log('PASS ' + name); }
   catch (error) { failed++; console.error('FAIL ' + name + ': ' + error.stack); }
 }
 console.log(`${cases.length - failed}/${cases.length} location entry regressions passed`);
 if (failed) process.exitCode = 1;
+})();

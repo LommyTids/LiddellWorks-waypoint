@@ -248,6 +248,11 @@ document.addEventListener('click', function (e) {
     if (searchPicker) searchLocationPicker(searchPicker);
     return;
   }
+  if (action === 'select-plus-code-locality') {
+    var localityPicker = el.closest('[data-location-picker]');
+    if (localityPicker) choosePlusCodeLocality(localityPicker, Number(el.dataset.localityIndex));
+    return;
+  }
   if (action === 'select-location-result') {
     var resultPicker = el.closest('[data-location-picker]');
     var resultIndex = Number(el.dataset.locationIndex);

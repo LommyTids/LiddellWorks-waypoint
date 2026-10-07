@@ -106,6 +106,7 @@ function renderLocationResults(wrapper, results) {
 }
 
 async function searchLocationPicker(wrapper) {
+  clearLocationInputPreview(wrapper);
   abortLocationSearch(wrapper);
   var query = wrapper.querySelector('[data-location-query]');
   if (!query) return;
