@@ -40,7 +40,7 @@ private struct TripsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     WayPointBrand()
                     Text(model.isDemo ? "A little inspiration" : "Hello, \(model.accountName)")
-                        .font(.system(.title2, design: .serif, weight: .semibold))
+                        .font(WayPointType.heading)
                         .foregroundStyle(WayPointStyle.navy)
                     Text(model.isDemo ? "Explore a sample itinerary and try an offline edit." : "Your places, plans, and moments ahead.")
                         .foregroundStyle(.secondary)
@@ -57,6 +57,7 @@ private struct TripsView: View {
                                 TripCard(trip: trip, draftCount: model.workspace?.mutations.filter { $0.tripID == trip.id }.count ?? 0)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("trip-" + trip.id)
                         }
                     }
                 }
@@ -94,18 +95,18 @@ private struct TripCard: View {
     let draftCount: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: "globe.europe.africa.fill")
-                    .font(.system(size: 32))
+                    .font(.system(size: 24))
                     .foregroundStyle(WayPointStyle.teal)
-                    .padding(14)
-                    .background(WayPointStyle.teal.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
+                    .padding(10)
+                    .background(WayPointStyle.teal.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(trip.name).font(.system(.title3, design: .serif, weight: .semibold)).foregroundStyle(WayPointStyle.navy)
+                    Text(trip.name).font(WayPointType.heading).foregroundStyle(WayPointStyle.navy)
                     Text(LocalTripDate.range(start: trip.startDate, end: trip.endDate))
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(WayPointType.meta).foregroundStyle(WayPointStyle.muted)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
@@ -121,8 +122,8 @@ private struct TripCard: View {
                     .font(.caption.weight(.semibold)).foregroundStyle(WayPointStyle.amber)
             }
         }
-        .padding(20)
-        .atlasCard()
+        .padding(16)
+        .atlasCard(cornerRadius: 12)
         .accessibilityElement(children: .combine)
     }
 }

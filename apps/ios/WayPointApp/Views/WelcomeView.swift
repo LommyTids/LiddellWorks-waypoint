@@ -14,10 +14,10 @@ struct WelcomeView: View {
                             .frame(maxWidth: .infinity)
                             .accessibilityHidden(true)
                         Text("Every journey.\nOne shared adventure.")
-                            .font(.system(.title, design: .serif, weight: .semibold))
+                            .font(WayPointType.display)
                             .fixedSize(horizontal: false, vertical: true)
                         Text("Bring every stop, stay and plan together. Keep your itinerary close, wherever the trip takes you.")
-                            .font(.body).foregroundStyle(.white.opacity(0.85))
+                            .font(WayPointType.body).foregroundStyle(.white.opacity(0.85))
                     }
                     .foregroundStyle(.white)
                     .padding(26)
@@ -73,8 +73,8 @@ struct WelcomeView: View {
                 .background(WayPointStyle.tealSoft, in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline).foregroundStyle(WayPointStyle.navy)
-                Text(detail).font(.subheadline).foregroundStyle(WayPointStyle.muted)
+                Text(title).font(WayPointType.label).foregroundStyle(WayPointStyle.navy)
+                Text(detail).font(WayPointType.body).foregroundStyle(WayPointStyle.muted)
             }
         }
     }
@@ -92,13 +92,13 @@ struct SignInView: View {
                 WayPointBrand()
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Welcome back.")
-                        .font(.system(.largeTitle, design: .serif, weight: .semibold))
+                        .font(.custom("Fraunces-SemiBold", size: 34, relativeTo: .largeTitle))
                         .foregroundStyle(WayPointStyle.navy)
                     Text("Your next adventure is waiting.")
-                        .font(.title3).foregroundStyle(WayPointStyle.muted)
+                        .font(WayPointType.body).foregroundStyle(WayPointStyle.muted)
                 }
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Log in to your account").font(.headline).foregroundStyle(WayPointStyle.navy)
+                    Text("Log in to your account").font(WayPointType.label).foregroundStyle(WayPointStyle.navy)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Enter login code here").font(.subheadline.weight(.medium))
                             .foregroundStyle(WayPointStyle.navy)
@@ -166,7 +166,7 @@ struct SignInView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         Text("Let’s get you back to your plans.")
-                            .font(.system(.title2, design: .serif, weight: .semibold))
+                            .font(WayPointType.heading)
                             .foregroundStyle(WayPointStyle.navy)
                         Text("Use the same registered phone number you use to log in at liddellworks.com/WayPoint.")
                         Text("Don’t have an account or need your login details changed? Ask the site owner to set up or update your account.")

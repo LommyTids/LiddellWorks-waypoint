@@ -12,8 +12,8 @@ enum WayPointStyle {
     static let line = adaptive(0xb8cbd5, dark: 0x4b6779)
     static let teal = adaptive(0x006b7e, dark: 0x72d9dc)
     static let tealSoft = adaptive(0xdef2f3, dark: 0x164651)
-    static let amber = adaptive(0x995900, dark: 0xffca80)
-    static let amberSoft = adaptive(0xfff3df, dark: 0x49351c)
+    static let amber = adaptive(0x995900, dark: 0xf1bd78)
+    static let amberSoft = adaptive(0xfff3df, dark: 0x3b3025)
     static let danger = adaptive(0x9c3039, dark: 0xf2a6b0)
     static let brandBlue = Color(red: 23 / 255, green: 55 / 255, blue: 76 / 255)
 
@@ -37,15 +37,53 @@ enum WayPointStyle {
 }
 
 struct AtlasCard: ViewModifier {
+    var cornerRadius: CGFloat = 20
     func body(content: Content) -> some View {
         content
-            .background(WayPointStyle.surface, in: RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(WayPointStyle.line, lineWidth: 1))
+            .background(WayPointStyle.surface, in: RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(WayPointStyle.line, lineWidth: 1))
+    }
+}
+
+enum WayPointType {
+    static let display = Font.custom("Fraunces-SemiBold", size: 28, relativeTo: .title2)
+    static let heading = Font.custom("Fraunces-SemiBold", size: 20, relativeTo: .title3)
+    static let body = Font.custom("WorkSans-Regular", size: 15, relativeTo: .body)
+    static let label = Font.custom("WorkSansRoman-SemiBold", size: 14, relativeTo: .subheadline)
+    static let meta = Font.custom("IBMPlexMono-Medium", size: 12, relativeTo: .caption)
+    static let micro = Font.custom("WorkSans-Regular", size: 11, relativeTo: .caption2)
+}
+
+private struct AtlasGlass: ViewModifier {
+    var cornerRadius: CGFloat
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if reduceTransparency {
+            content.background(WayPointStyle.surface, in: shape)
+                .overlay(shape.stroke(WayPointStyle.line, lineWidth: 1))
+        } else {
+            #if compiler(>=6.2)
+            if #available(iOS 26.0, *) {
+                content.glassEffect(.regular, in: shape)
+            } else {
+                content.background(.regularMaterial, in: shape)
+                    .overlay(shape.stroke(WayPointStyle.line.opacity(0.6), lineWidth: 0.5))
+            }
+            #else
+            // Older Xcode SDKs can compile the supported material fallback.
+            content.background(.regularMaterial, in: shape)
+                .overlay(shape.stroke(WayPointStyle.line.opacity(0.6), lineWidth: 0.5))
+            #endif
+        }
     }
 }
 
 extension View {
-    func atlasCard() -> some View { modifier(AtlasCard()) }
+    func atlasCard(cornerRadius: CGFloat = 20) -> some View { modifier(AtlasCard(cornerRadius: cornerRadius)) }
+    func atlasGlass(cornerRadius: CGFloat = 30) -> some View { modifier(AtlasGlass(cornerRadius: cornerRadius)) }
     func atlasForm() -> some View {
         scrollContentBackground(.hidden)
             .background(WayPointStyle.canvas)
@@ -61,7 +99,7 @@ struct AtlasButtonStyle: ButtonStyle {
         let foreground = role == .primary ? Color.white : role == .amendment ? WayPointStyle.amber : role == .neutral ? WayPointStyle.muted : WayPointStyle.teal
         let background = role == .primary ? WayPointStyle.brandBlue : role == .amendment ? WayPointStyle.amberSoft : role == .neutral ? WayPointStyle.surface : WayPointStyle.tealSoft
         configuration.label
-            .font(.body.weight(.semibold))
+            .font(.custom("WorkSansRoman-SemiBold", size: 17, relativeTo: .body))
             .foregroundStyle(foreground)
             .padding(.horizontal, 16)
             .frame(minHeight: 48)
@@ -72,15 +110,25 @@ struct AtlasButtonStyle: ButtonStyle {
 }
 
 struct WayPointBrand: View {
+    var compact = false
     var body: some View {
-        HStack(spacing: 10) {
-            Image("WayPointMark").resizable().scaledToFit()
-                .frame(width: 38, height: 38)
-                .padding(5)
-                .background(WayPointStyle.brandBlue, in: RoundedRectangle(cornerRadius: 12))
-                .accessibilityHidden(true)
-            Text("WayPoint").font(.title3.weight(.semibold)).foregroundStyle(WayPointStyle.navy)
+        HStack(spacing: compact ? 6 : 10) {
+            WayPointMark(width: compact ? 28 : 44)
+            Text("WayPoint")
+                .font(.custom("Fraunces-SemiBold", size: compact ? 18 : 22, relativeTo: .title3))
+                .foregroundStyle(WayPointStyle.navy)
         }
+    }
+}
+
+struct WayPointMark: View {
+    var width: CGFloat = 30
+    var body: some View {
+        Image("WayPointMark").resizable().scaledToFit()
+            .frame(width: width, height: width * 0.75)
+            .padding(2)
+            .background(WayPointStyle.brandBlue, in: RoundedRectangle(cornerRadius: 7))
+            .accessibilityHidden(true)
     }
 }
 
@@ -116,6 +164,14 @@ struct TripParticipant: Identifiable {
 
     static func name(for id: String, in trip: TripSnapshot) -> String {
         all(in: trip).first(where: { $0.id == id })?.name ?? "Unavailable traveller"
+    }
+
+    static func canEdit(_ record: ItineraryRecord, in trip: TripSnapshot) -> Bool {
+        if trip.role.allowsAddingAndDeleting { return true }
+        guard trip.role == .user,
+              let current = trip.records.first(where: { $0.kind == record.kind && $0.id == record.id }) else { return false }
+        let companionID = identifier(trip.raw["myGrant"]?["companionId"])
+        return !companionID.isEmpty && current.companions.contains(companionID)
     }
 
     static func text(_ value: JSONValue?) -> String {

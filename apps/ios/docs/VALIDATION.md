@@ -1,6 +1,6 @@
 # Validation and first Mac run
 
-Updated 7 October 2026 for production D1 sync and the Atlas interface. See [native Atlas validation](ATLAS-DESIGN.md) for the executed Mac/simulator checks and current UI scope.
+Updated 8 October 2026 for production D1 sync and the Floating glass interface. See [Floating glass validation](FLOATING-GLASS.md) for the current executed Mac/simulator checks and [the earlier Atlas validation](ATLAS-DESIGN.md) for the initial interface update.
 
 ## Checked in the authoring workspace
 
@@ -14,7 +14,7 @@ Updated 7 October 2026 for production D1 sync and the Atlas interface. See [nati
 The authoring workspace checks are static. GitHub macOS CI runs the core tests, unsigned simulator app build and app-hosted tests using the runner’s selected Xcode. Review the latest workflow for the specific revision you build. These checks do not prove live authentication or device sync; perform the manual checks below with the production website account.
 ## Tests supplied
 
-The core tests cover original decoder/demo queue behavior plus D1 record revisions, patches preserving unknown fields, immutable retries, unrelated vs same-record conflicts, explicit reapply, complete bootstrap, quarantine on access changes, scoped permissions, trip/child dependency order, local creation cancellation and mutation wire shape. App-hosted tests cover login cookie parsing, unauthorized/permission-epoch errors, escaped cursors, mutation conflict results, account-isolated storage, retained legacy store and corrupt-file recovery.
+The core tests cover original decoder/demo queue behavior plus D1 record revisions, patches preserving unknown fields, immutable retries, unrelated vs same-record conflicts, explicit reapply, complete bootstrap, quarantine on access changes, scoped permissions, trip/child dependency order, local creation cancellation and mutation wire shape. App-hosted tests verify bundled font registration and current-assignment edit permissions, and cover login cookie parsing, unauthorized/permission-epoch errors, escaped cursors, mutation conflict results, account-isolated storage, retained legacy store and corrupt-file recovery.
 
 Run `bash scripts/check-mac.sh` for core tests and simulator build, then its `--test` option with an installed simulator destination for app tests. Record exact Xcode/SDK versions and results. Resolve compiler/SDK/runtime errors before treating this as a validated app.
 
@@ -34,4 +34,4 @@ Run `bash scripts/check-mac.sh` for core tests and simulator build, then its `--
 
 ## Remaining gates
 
-Mac build/core/API/storage/UI test execution has passed for the Atlas update. Remaining gates: actual production end-to-end native sync; device Keychain/file-protection checks; full timezone/expense/account-admin workflows as separately scoped; privacy/signing/distribution. The native app does not run migration workflows or authorize production editing. See the backend activation guide for those controls.
+Mac build/core/font/permission/API/storage/UI test execution has passed for the Floating glass update. Remaining gates: actual production end-to-end native sync; device Keychain/file-protection checks; full timezone/expense/account-admin workflows as separately scoped; privacy/signing/distribution. The native app does not run migration workflows or authorize production editing. See the backend activation guide for those controls.
