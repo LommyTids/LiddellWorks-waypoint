@@ -6,9 +6,13 @@ Native SwiftUI app for iPhone and iPad, iOS 17+, with Apple Maps, account-isolat
 
 The native app follows the web app’s blue/turquoise design language, with the existing WayPoint mark, serif headings, adaptive light/dark surfaces and amber Add/Edit/Save actions. Welcome, login and login help include loading, disabled and inline error states; account setup remains with the site owner.
 
-Trips use **Itinerary, Plan, People and More** navigation, with **Agenda/Map**, collapsible days and a date jump. Owner/Admin can select multiple travellers; either selected person matches, shared plans appear once, and unassigned plans stay visible. The same filter feeds Plan and Map. Scoped accounts keep their server-authorized snapshot. New records start with the selected people, or unassigned for All people, and changing destination preserves that choice. Participant controls include All current travellers and Clear people. Traveller/contact administration and expenses remain in the web app.
+Trips use the **Floating glass** layout: title and dates scroll away, while **People, Agenda/Map and Add** stay in a pinned toolbar. A small floating **Itinerary, Plan, People and More** dock uses the WayPoint mark for Itinerary. Cards keep time, title, location/route context and named assignments; tap for complete dates, addresses, timezone and notes, then choose Edit. Day collapse and date jump live in the calendar menu beside each day.
 
-See [Atlas implementation and validation](docs/ATLAS-DESIGN.md) for scope and simulator evidence.
+Owner/Admin can select multiple travellers; either selected person matches, shared plans appear once, and unassigned plans stay visible. The same filter feeds Plan and Map. Scoped accounts keep their server-authorized snapshot. New records start with the selected people, or unassigned for Everyone, and changing destination preserves that choice. Participant controls include All current travellers and Clear people. Traveller/contact administration and expenses remain in the web app.
+
+Fraunces, Work Sans and IBM Plex Mono are bundled for offline use, with their Open Font Licences. With Xcode 26+, navigation uses native Liquid Glass on iOS 26+, regular material on iOS 17–25, and opaque surfaces when Reduce Transparency is enabled. Older Xcode toolchains compile the material fallback. Content retains full Dynamic Type; the toolbar stacks at accessibility sizes. See [Floating glass implementation](docs/FLOATING-GLASS.md).
+
+The earlier Atlas implementation and simulator evidence remain in [the Atlas design notes](docs/ATLAS-DESIGN.md).
 
 ## Update and open on your Mac
 
@@ -52,7 +56,7 @@ WAYPOINT_TEST_DESTINATION='platform=iOS Simulator,name=YOUR EXACT SIMULATOR NAME
   bash scripts/check-mac.sh --test
 ```
 
-The shared scheme includes API/storage tests and native UI tests for login/help, demo navigation, traveller defaults and accessibility text. Test runs use ad hoc simulator signing: an unsigned simulator app cannot access Keychain and reports error −34018. Core tests also run independently with `swift test`. This project has no third-party Swift dependencies. GitHub macOS CI builds the simulator app and runs the tests; device signing and authenticated live sync also need an actual Mac/device check.
+The shared scheme includes font/permission and API/storage tests, plus native UI tests for login/help, demo navigation, traveller defaults, compact details, pinned actions and accessibility text. Test runs use ad hoc simulator signing: an unsigned simulator app cannot access Keychain and reports error −34018. Core tests also run independently with `swift test`. This project has no third-party Swift dependencies. GitHub macOS CI builds the simulator app and runs the tests; device signing and authenticated live sync also need an actual Mac/device check.
 
 ## App icon
 
