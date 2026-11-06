@@ -10,11 +10,17 @@ struct SavedSession: Codable, Equatable, Sendable {
     /// This is only a local expiry/shape check. Only the server can verify the
     /// signature and current account permissions; never trust these claims as grants.
     func validate(at now: Date = Date()) throws {
+        try validateShape()
+        guard expiresAt > now else { throw APIError.unauthorized }
+    }
+
+    /// Identity only, ignoring expiry: an expired session still names the account
+    /// whose offline copy may open, but `validate` keeps it off the network.
+    func validateShape() throws {
         let claims = try Self.claims(from: cookieValue)
         guard !account.id.isEmpty, !account.username.isEmpty,
               claims.uid == account.id,
               expiresAt.timeIntervalSince1970.isFinite,
-              expiresAt > now, claims.expiry > now,
               expiresAt <= claims.expiry else {
             throw APIError.unauthorized
         }
@@ -70,10 +76,13 @@ enum SessionStoreError: LocalizedError {
 final class KeychainSessionStore {
     // Endpoint identity is part of the key: a future environment must use its
     // own key, never reuse a production session on a different server.
-    private let service = "com.liddellworks.waypoint.session." + WayPointAPI.environmentID
+    private let service: String
     private let key = "wp_session.v1"
 
-    init() {}
+    /// Tests pass their own service so they never touch a real sign-in.
+    init(service: String? = nil) {
+        self.service = service ?? "com.liddellworks.waypoint.session." + WayPointAPI.environmentID
+    }
 
     private var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
@@ -96,7 +105,7 @@ final class KeychainSessionStore {
             throw SessionStoreError.corruptSession
         }
         do {
-            try session.validate()
+            try session.validateShape()
             return session
         } catch {
             try clear()
@@ -104,8 +113,8 @@ final class KeychainSessionStore {
         }
     }
 
-    func save(_ session: SavedSession) throws {
-        try session.validate()
+    func save(_ session: SavedSession, at now: Date = Date()) throws {
+        try session.validate(at: now)
         let data = try JSONEncoder().encode(session)
         let attributes: [String: Any] = [
             kSecValueData as String: data,

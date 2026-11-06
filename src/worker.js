@@ -171,6 +171,10 @@ const MAX_USERS = 200;
 // low-stakes personal app on trusted people's own devices.
 const SESSION_COOKIE_NAME = "wp_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+// People who keep using the app keep their sign-in: once a token is a day old,
+// whoami swaps it for a full-length one. `sv` carries over, so changing an
+// account's sessionVersion still ends every renewed session.
+const SESSION_RENEW_AFTER_SECONDS = 60 * 60 * 24; // 1 day
 
 // PBKDF2 password hashing parameters — 100,000 iterations of SHA-256 is
 // comfortably slow for guessing, instant for a real login. See
@@ -2438,6 +2442,16 @@ async function handleLogout(request, env) {
   });
 }
 
+// Older native clients ignore this header, so renewal needs no protocol change.
+async function renewedSessionCookie(request, env) {
+  const payload = await verifySession(getCookie(request, SESSION_COOKIE_NAME), env);
+  if (!payload) return null;
+  const age = SESSION_MAX_AGE_SECONDS * 1000 - (payload.exp - Date.now());
+  if (age < SESSION_RENEW_AFTER_SECONDS * 1000) return null;
+  const token = await signSession({ ...payload, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }, env);
+  return buildSessionCookieHeader(token);
+}
+
 // Always 200 -- `loggedIn` in the body carries session state rather than
 // the HTTP status, so the frontend's check is one plain fetch + read with
 // no special-casing a 401. `setupNeeded` (true only when no account
@@ -2449,9 +2463,12 @@ async function handleWhoami(request, env) {
     const usersDoc = await loadUsers(env);
     return new Response(JSON.stringify({ loggedIn: false, setupNeeded: usersDoc.users.length === 0 }), { status: 200, headers: { "Content-Type": "application/json" } });
   }
+  const headers = { "Content-Type": "application/json" };
+  const renewed = await renewedSessionCookie(request, env);
+  if (renewed) headers["Set-Cookie"] = renewed;
   return new Response(JSON.stringify({ loggedIn: true, id: user.id, username: user.username, isUberUser: !!user.isUberUser, avatar: resolveAccountAvatar(user) }), {
     status: 200,
-    headers: { "Content-Type": "application/json" },
+    headers,
   });
 }
 

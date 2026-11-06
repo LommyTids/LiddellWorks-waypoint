@@ -10,10 +10,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var isBusy = false
     @Published var message: String?
     @Published private(set) var isDemo = false
+    /// Saved trips are open, but the sign-in has expired so nothing can sync.
+    @Published private(set) var needsSignIn = false
+    @Published var showSignIn = false
 
     private var store: WorkspaceStore?
-    private let keychain = KeychainSessionStore()
-    private let api = WayPointAPI()
+    private let keychain: KeychainSessionStore
+    private let api: WayPointAPI
     private var session: SavedSession?
     private var d1: D1Workspace?
     private var hasStarted = false
@@ -22,10 +25,13 @@ final class AppModel: ObservableObject {
     var trips: [TripSnapshot] { workspace?.trips ?? [] }
     var pendingCount: Int { isDemo ? workspace?.mutations.count ?? 0 : d1?.outbox.count ?? 0 }
     var accountName: String { workspace?.account.username ?? "" }
-    var canRefresh: Bool { !isDemo && session != nil && !isBusy }
+    var canRefresh: Bool { !isDemo && session != nil && !needsSignIn && !isBusy }
 
-    init() {
-        do { store = try WorkspaceStore() }
+    /// Tests supply isolated services; the app uses the production defaults.
+    init(api: WayPointAPI? = nil, keychain: KeychainSessionStore? = nil, store: WorkspaceStore? = nil) {
+        self.api = api ?? WayPointAPI()
+        self.keychain = keychain ?? KeychainSessionStore()
+        do { self.store = try store ?? WorkspaceStore() }
         catch { storageFailure = "Could not open offline storage: \(error.localizedDescription)" }
     }
 
@@ -35,12 +41,13 @@ final class AppModel: ObservableObject {
         guard storageFailure == nil, let store else { message = storageFailure; return }
         do {
             guard let saved = try keychain.read() else { return }
-            try saved.validate()
             let cached = try store.loadD1(accountID: saved.account.id, as: D1Workspace.self)
             guard cached == nil || cached?.account.id == saved.account.id else { throw APIError.unauthorized }
             d1 = cached ?? D1Workspace(account: saved.account)
             session = saved
-            // Do not publish the private cache before online identity validation.
+            // Open the saved copy first so a slow or absent network cannot hold
+            // it back. The server's answer in refresh() can still close it.
+            publishSavedCopy()
             await refresh()
         } catch {
             session = nil; workspace = nil; d1 = nil
@@ -66,17 +73,19 @@ final class AppModel: ObservableObject {
             _ = try await api.whoAmI(session: saved)
             let cached = try store.loadD1(accountID: saved.account.id, as: D1Workspace.self)
             guard cached == nil || cached?.account.id == saved.account.id else { throw APIError.unauthorized }
-            d1 = cached ?? D1Workspace(account: saved.account)
-            d1?.account = saved.account
             // Store the session only after its account has been validated.
             try keychain.save(saved)
-            session = saved; isDemo = false
+            // An expired session may still be showing a different account's copy.
+            if d1?.account.id != saved.account.id { workspace = nil }
+            d1 = cached ?? D1Workspace(account: saved.account)
+            d1?.account = saved.account
+            session = saved; isDemo = false; needsSignIn = false; showSignIn = false
             try await synchronize(saved: saved)
-        } catch APIError.unauthorized { endExpiredSession() }
+        } catch APIError.unauthorized { endRefusedSession() }
         catch {
             // Failed synchronization never publishes an incomplete bootstrap.
             message = error.localizedDescription
-            if let state = d1, state.cursor != nil { workspace = try? state.presentationWorkspace() }
+            publishSavedCopy()
         }
     }
 
@@ -86,18 +95,26 @@ final class AppModel: ObservableObject {
         defer { isBusy = false }
         do {
             try saved.validate()
-            let account = try await api.whoAmI(session: saved)
-            guard account.id == saved.account.id else { throw APIError.unauthorized }
-            try await synchronize(saved: saved)
-        } catch APIError.unauthorized { endExpiredSession() }
+            let identity = try await api.whoAmI(session: saved)
+            guard identity.account.id == saved.account.id else { throw APIError.unauthorized }
+            try await synchronize(saved: adopt(identity.renewed) ?? saved)
+        } catch APIError.unauthorized { endSession(session ?? saved) }
         catch {
-            // Only a still-valid session can reopen its own complete offline cache.
-            // Cursor nil means authorization was invalidated; do not expose drafts.
-            if let state = d1, state.cursor != nil, saved.expiresAt > Date() {
-                workspace = try? state.presentationWorkspace()
-            }
+            publishSavedCopy()
             message = "Could not finish sync. Saved changes are retained. \(error.localizedDescription)"
         }
+    }
+
+    /// A renewal that cannot be stored is dropped: the current cookie still works
+    /// and the next identity check offers another.
+    private func adopt(_ renewed: SavedSession?) -> SavedSession? {
+        guard let renewed, (try? keychain.save(renewed)) != nil else { return nil }
+        session = renewed
+        return renewed
+    }
+
+    private func publishSavedCopy() {
+        if let state = d1, state.hasSnapshot { workspace = try? state.presentationWorkspace() }
     }
 
     private func synchronize(saved: SavedSession) async throws {
@@ -162,10 +179,10 @@ final class AppModel: ObservableObject {
                     throw APIError.invalidResponse
                 }
             } catch APIError.bootstrapRequired {
+                // Keep the old copy readable: if the download below fails, this
+                // may be the traveller's only itinerary. publishBootstrap replaces it.
                 guard var state = d1 else { throw AppStateError.unavailable }
-                state.invalidateAuthorization()
-                // Hide immediately even if writing the invalidation fails.
-                workspace = nil; d1 = state
+                state.markSnapshotStale()
                 try commit(state)
             }
         }
@@ -177,11 +194,23 @@ final class AppModel: ObservableObject {
         let presentation = try state.presentationWorkspace()
         try store.saveD1(state, accountID: state.account.id)
         d1 = state
-        workspace = state.cursor == nil && state.entities.isEmpty ? nil : presentation
+        workspace = state.hasSnapshot ? presentation : nil
     }
 
-    private func endExpiredSession() {
-        workspace = nil; d1 = nil; session = nil
+    /// A session past its own expiry was never refused by the server, so it says
+    /// nothing about revocation and keeps opening its own saved copy, with no time
+    /// limit. A refusal of a session still in date is the server's answer, and
+    /// closes the copy.
+    private func endSession(_ ended: SavedSession) {
+        guard ended.expiresAt <= Date(), d1?.hasSnapshot == true else {
+            return endRefusedSession()
+        }
+        publishSavedCopy()
+        needsSignIn = true
+    }
+
+    private func endRefusedSession() {
+        workspace = nil; d1 = nil; session = nil; needsSignIn = false; showSignIn = false
         do { try keychain.clear(); message = "Please sign in again. Your saved drafts are retained for the same account." }
         catch { message = "Sign-in ended, but the saved credential could not be removed: \(error.localizedDescription)" }
     }
@@ -191,8 +220,9 @@ final class AppModel: ObservableObject {
         let previous = session
         do { try keychain.clear() }
         catch { message = "Could not remove the saved sign-in: \(error.localizedDescription)"; return }
-        workspace = nil; d1 = nil; session = nil; isDemo = false; message = nil
-        if let previous {
+        workspace = nil; d1 = nil; session = nil; isDemo = false; message = nil; needsSignIn = false
+        // An expired cookie is never sent, and the server has nothing to end for it.
+        if let previous, previous.expiresAt > Date() {
             isBusy = true
             defer { isBusy = false }
             do { try await api.logout(session: previous) }
@@ -236,7 +266,7 @@ final class AppModel: ObservableObject {
             local.trips.append(TripSnapshot(id: id, name: name, startDate: startDate, endDate: endDate, role: .superuser))
             try store.save(local); workspace = local
         } else {
-            guard var state = d1, state.cursor != nil else { throw AppStateError.unavailable }
+            guard var state = d1, state.hasSnapshot else { throw AppStateError.unavailable }
             try state.createTrip(name: name, startDate: startDate, endDate: endDate); try commit(state)
         }
     }

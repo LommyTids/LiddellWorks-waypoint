@@ -19,8 +19,21 @@ struct RootView: View {
         }
         .tint(WayPointStyle.teal)
         .task { await model.start() }
+        .sheet(isPresented: $model.showSignIn, onDismiss: {
+            // A failed attempt was shown in the sheet; don't repeat it as an alert.
+            if model.needsSignIn { model.message = nil }
+        }) {
+            NavigationStack {
+                SignInView().toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { model.showSignIn = false }.disabled(model.isBusy)
+                    }
+                }
+            }
+            .interactiveDismissDisabled(model.isBusy)
+        }
         .alert("WayPoint", isPresented: Binding(
-            get: { model.workspace != nil && model.message != nil },
+            get: { model.workspace != nil && model.message != nil && !model.showSignIn },
             set: { if !$0 { model.message = nil } }
         )) {
             Button("OK", role: .cancel) { model.message = nil }
@@ -45,7 +58,7 @@ private struct TripsView: View {
                     Text(model.isDemo ? "Explore a sample itinerary and try an offline edit." : "Your places, plans, and moments ahead.")
                         .foregroundStyle(.secondary)
                 }
-                DraftNotice(isDemo: model.isDemo)
+                if model.needsSignIn { SignInNotice() } else { DraftNotice(isDemo: model.isDemo) }
                 if model.trips.isEmpty {
                     ContentUnavailableView("No trips yet", systemImage: "suitcase.rolling", description: Text("Tap the plus button to plan your first trip."))
                 } else {
@@ -86,6 +99,28 @@ private struct TripsView: View {
             }
         }
         .refreshable { if model.canRefresh && !model.isBusy { await model.refresh() } }
+    }
+}
+
+private struct SignInNotice: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Your sign-in has expired", systemImage: "person.crop.circle.badge.clock")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(WayPointStyle.navy)
+            Text("These trips are saved on this device and may be out of date. Anything you change stays here until you sign in.")
+                .font(.footnote).foregroundStyle(WayPointStyle.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Button { model.showSignIn = true } label: {
+                Text("Sign in to sync").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(AtlasButtonStyle())
+            .accessibilityIdentifier("offline-sign-in")
+        }
+        .padding(16)
+        .atlasCard()
     }
 }
 
@@ -137,6 +172,9 @@ private struct SettingsView: View {
                 Section("Account") {
                     LabeledContent("Signed in as", value: model.accountName)
                     LabeledContent("Mode", value: model.isDemo ? "Local demo" : "WayPoint account")
+                    if model.needsSignIn {
+                        Button("Sign in to sync") { model.showSignIn = true }
+                    }
                     if !model.isDemo {
                         LabeledContent("Server", value: URL(string: WayPointAPI.origin)?.host ?? WayPointAPI.origin)
                     }

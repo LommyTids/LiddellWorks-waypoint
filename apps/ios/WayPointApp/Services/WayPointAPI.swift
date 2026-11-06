@@ -95,8 +95,8 @@ final class WayPointAPI {
         return try extractSession(response: response, account: account)
     }
 
-    func whoAmI(session: SavedSession) async throws -> Account {
-        let (data, _) = try await send(.whoami, session: session)
+    func whoAmI(session: SavedSession) async throws -> IdentityCheck {
+        let (data, response) = try await send(.whoami, session: session)
         guard let result = try? decoder.decode(IdentityResponse.self, from: data) else {
             throw APIError.invalidResponse
         }
@@ -104,7 +104,11 @@ final class WayPointAPI {
         guard let id = result.id, let username = result.username,
               !id.isEmpty, !username.isEmpty else { throw APIError.invalidResponse }
         guard id == session.account.id else { throw APIError.unauthorized }
-        return Account(id: id, username: username)
+        // Renewal is optional: a missing or unusable cookie leaves the current
+        // session in place, and only a later expiry for this account is adopted.
+        let renewed = (try? extractSession(response: response, account: session.account))
+            .flatMap { $0.expiresAt > session.expiresAt ? $0 : nil }
+        return IdentityCheck(account: Account(id: id, username: username), renewed: renewed)
     }
 
     func capabilities(session: SavedSession) async throws -> D1Capabilities {
@@ -211,7 +215,7 @@ final class WayPointAPI {
     private func extractSession(response: HTTPURLResponse, account: Account) throws -> SavedSession {
         guard let url = response.url,
               url.scheme == "https", url.host == URL(string: Self.origin)?.host,
-              url.path == "/waypoint/api/login",
+              ["/waypoint/api/login", "/waypoint/api/whoami"].contains(url.path),
               let raw = response.value(forHTTPHeaderField: "Set-Cookie") else {
             throw APIError.invalidResponse
         }
@@ -255,6 +259,12 @@ private struct LoginResponse: Decodable { let status: String; let id: String; le
 private struct IdentityResponse: Decodable { let loggedIn: Bool; let id: String?; let username: String? }
 private struct StatusResponse: Decodable { let status: String }
 private struct ErrorResponse: Decodable { let error: String }
+
+/// `renewed` is a longer-lived replacement session, when the server offered one.
+struct IdentityCheck {
+    let account: Account
+    let renewed: SavedSession?
+}
 
 struct D1Capabilities: Decodable {
     let protocolVersion: Int

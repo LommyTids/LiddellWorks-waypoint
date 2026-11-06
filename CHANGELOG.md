@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — iOS offline resilience
+
+- Keep the saved itinerary readable when the server asks for a fresh snapshot,
+  until a complete download replaces it. Uploads and draft review stay blocked
+  until then, and a completed download still removes revoked records.
+- Open saved trips immediately at launch instead of waiting for the network.
+- Keep saved trips open after a sign-in expires, with a notice to sign in again.
+  Signing in as a different account hides them, and a session the server refuses
+  still closes them.
+- Renew the session cookie from `/whoami` once it is a day old, so people who
+  keep using the app stay signed in. Older iOS builds ignore the new cookie.
+- Stop an empty sync from invalidating open editors.
+
 ## Unreleased — Free coordinate and Plus Code entry
 
 - Add a shared Coordinates or code panel to every location picker, with a

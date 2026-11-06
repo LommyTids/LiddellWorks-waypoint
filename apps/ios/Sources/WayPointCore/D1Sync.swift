@@ -111,6 +111,12 @@ public struct D1Workspace: Codable, Equatable, Sendable {
     public private(set) var cursor: String?
     public private(set) var lastRefresh: Date?
     public private(set) var presentationRevision: Int
+    /// True while a superseded snapshot stays readable offline. Its cursor is gone,
+    /// so nothing uploads or advances until a complete bootstrap replaces it.
+    /// Optional for compatibility with caches written before this flag existed.
+    public private(set) var isSnapshotStale: Bool? = nil
+    /// Whether a complete snapshot exists to show, current or superseded.
+    public var hasSnapshot: Bool { cursor != nil || isSnapshotStale == true }
     public init(account: Account, entities: [D1Entity] = [], outbox: [D1OutboxEntry] = [], cursor: String? = nil) {
         self.account = account; self.entities = entities; self.outbox = outbox; self.cursor = cursor
         self.lastRefresh = nil; self.presentationRevision = 0
@@ -127,7 +133,7 @@ public struct D1Workspace: Codable, Equatable, Sendable {
         let tripIDs = Set(incoming.filter { $0.kind == .trip }.map(\.tripId))
         guard incoming.allSatisfy({ tripIDs.contains($0.tripId) }) else { throw D1SyncError.invalidResponse }
         var next = self
-        next.entities = incoming; next.cursor = sync; next.lastRefresh = date
+        next.entities = incoming; next.cursor = sync; next.lastRefresh = date; next.isSnapshotStale = nil
         next.pruneUnauthorizedDrafts(); next.presentationRevision += 1
         self = next
     }
@@ -146,15 +152,21 @@ public struct D1Workspace: Codable, Equatable, Sendable {
             }
         }
         next.cursor = page.cursor; next.lastRefresh = date
-        next.pruneUnauthorizedDrafts(); next.presentationRevision += 1
+        next.pruneUnauthorizedDrafts()
+        // An empty page changes nothing on screen, so open editors stay valid.
+        if !page.entities.isEmpty { next.presentationRevision += 1 }
         self = next
     }
-    public mutating func invalidateAuthorization() {
-        entities = []; cursor = nil; lastRefresh = nil; presentationRevision += 1
+    /// The server rejected this cursor. Entities stay so a failed re-download
+    /// cannot erase the only offline copy; publishBootstrap replaces them. Losing
+    /// the cursor keeps uploads and draft review blocked until then.
+    public mutating func markSnapshotStale() {
+        guard cursor != nil else { return }
+        cursor = nil; isSnapshotStale = true
     }
     public func presentationTrips() throws -> [TripSnapshot] {
         try validateAccount()
-        guard cursor != nil else { return [] }
+        guard hasSnapshot else { return [] }
         var visible = entities
         for entry in outbox where entry.status != .rejected && entry.status != .quarantined && entry.isQuarantined != true {
             let m = entry.mutation
@@ -287,6 +299,8 @@ public struct D1Workspace: Codable, Equatable, Sendable {
     /// Explicit user choice only: preserve the patch, assign a new mutation ID,
     /// and bind it to the latest record revision. Never used by automatic refresh.
     public mutating func reapply(id: UUID) throws {
+        // A stale snapshot cannot supply the latest revision or permissions.
+        guard cursor != nil else { throw D1SyncError.incompleteBootstrap }
         guard let index = outbox.firstIndex(where: { $0.id == id }), outbox[index].status == .conflict || outbox[index].status == .rejected || outbox[index].status == .quarantined else { throw D1SyncError.unresolvedConflict }
         let old = outbox[index].mutation
         let remote = entities.first(where: { $0.key == old.key && $0.operation == .upsert })

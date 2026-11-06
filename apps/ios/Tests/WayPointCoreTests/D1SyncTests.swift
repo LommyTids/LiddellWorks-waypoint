@@ -65,8 +65,7 @@ final class D1SyncTests: XCTestCase {
         var state = try workspace(); try state.stage(edited(state)); let old = state
         XCTAssertThrowsError(try state.publishBootstrap(pages: [D1BootstrapPage(protocolVersion: 1, entities: [trip()], complete: false, nextCursor: "page2", syncCursor: nil)]))
         XCTAssertEqual(state, old)
-        state.invalidateAuthorization()
-        XCTAssertEqual(try state.presentationTrips(), [])
+        state.markSnapshotStale()
         XCTAssertEqual(state.outbox.count, 1)
         XCTAssertThrowsError(try state.submitNext())
         try state.publishBootstrap(pages: [D1BootstrapPage(protocolVersion: 1, entities: [], complete: true, nextCursor: nil, syncCursor: "new")])
@@ -158,5 +157,71 @@ final class D1SyncTests: XCTestCase {
         XCTAssertNil(try state.submitNext()) // children await authorized trip snapshot/review
         XCTAssertEqual(state.outbox.first?.status, .quarantined)
     }
-
+    func testStaleSnapshotStaysReadableAndSurvivesRelaunch() throws {
+        var state = try workspace()
+        let refreshed = state.lastRefresh
+        state.markSnapshotStale()
+        let restored = try JSONDecoder().decode(D1Workspace.self, from: JSONEncoder().encode(state))
+        XCTAssertEqual(restored, state)
+        XCTAssertNil(restored.cursor)
+        XCTAssertTrue(restored.hasSnapshot)
+        XCTAssertEqual(restored.lastRefresh, refreshed)
+        XCTAssertEqual(try restored.presentationTrips().first?.records.first?.title, "Walk")
+    }
+    func testStaleSnapshotBlocksUploadsAndReviewUntilReplaced() throws {
+        var state = try workspace(); try state.stage(edited(state))
+        try state.applyChanges(D1ChangesPage(protocolVersion: 1, entities: [activity(revision: 3, title: "Remote")], hasMore: false, cursor: "next"))
+        let draft = try XCTUnwrap(state.outbox.first?.id)
+        state.markSnapshotStale()
+        XCTAssertThrowsError(try state.submitNext())
+        XCTAssertThrowsError(try state.reapply(id: draft))
+        XCTAssertThrowsError(try state.applyChanges(D1ChangesPage(protocolVersion: 1, entities: [], hasMore: false, cursor: "stale")))
+        try state.publishBootstrap(pages: [D1BootstrapPage(protocolVersion: 1, entities: [trip(), activity(revision: 3, title: "Remote")], complete: true, nextCursor: nil, syncCursor: "fresh")])
+        XCTAssertNil(state.isSnapshotStale)
+        XCTAssertEqual(state.cursor, "fresh")
+        XCTAssertNoThrow(try state.reapply(id: draft))
+    }
+    func testFailedBootstrapLeavesStaleSnapshotInPlace() throws {
+        var state = try workspace(); state.markSnapshotStale(); let stale = state
+        XCTAssertThrowsError(try state.publishBootstrap(pages: [D1BootstrapPage(protocolVersion: 1, entities: [trip()], complete: false, nextCursor: "page2", syncCursor: nil)]))
+        XCTAssertEqual(state, stale)
+        XCTAssertFalse(try state.presentationTrips().isEmpty)
+    }
+    func testBootstrapRemovesRevokedRecordsFromStaleSnapshot() throws {
+        var state = try workspace(); try state.stage(edited(state)); state.markSnapshotStale()
+        XCTAssertEqual(try state.presentationTrips().first?.records.first?.title, "New walk")
+        try state.publishBootstrap(pages: [D1BootstrapPage(protocolVersion: 1, entities: [], complete: true, nextCursor: nil, syncCursor: "revoked")])
+        XCTAssertTrue(try state.presentationTrips().isEmpty)
+        XCTAssertEqual(state.outbox.first?.status, .quarantined)
+    }
+    func testDraftSavedOnStaleSnapshotIsCheckedWhenReplaced() throws {
+        var state = try workspace(); state.markSnapshotStale()
+        try state.stage(edited(state))
+        XCTAssertThrowsError(try state.submitNext())
+        try state.publishBootstrap(pages: [D1BootstrapPage(protocolVersion: 1, entities: [trip(), activity(revision: 3, title: "Remote")], complete: true, nextCursor: nil, syncCursor: "fresh")])
+        XCTAssertEqual(state.outbox.first?.status, .conflict)
+    }
+    func testBootstrapRestartBeforeFirstSnapshotShowsNothing() throws {
+        var state = D1Workspace(account: account)
+        state.markSnapshotStale()
+        XCTAssertFalse(state.hasSnapshot)
+        XCTAssertNil(state.isSnapshotStale)
+    }
+    func testCacheWrittenBeforeStaleFlagStillDecodes() throws {
+        let state = try workspace()
+        var fields = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any])
+        XCTAssertNil(fields["isSnapshotStale"])
+        fields.removeValue(forKey: "isSnapshotStale")
+        let restored = try JSONDecoder().decode(D1Workspace.self, from: JSONSerialization.data(withJSONObject: fields))
+        XCTAssertEqual(restored.cursor, "signed-cursor")
+        XCTAssertNil(restored.isSnapshotStale)
+    }
+    func testEmptyChangesPageLeavesOpenEditorsValid() throws {
+        var state = try workspace(); let revision = state.presentationRevision
+        try state.applyChanges(D1ChangesPage(protocolVersion: 1, entities: [], hasMore: false, cursor: "same-data"))
+        XCTAssertEqual(state.presentationRevision, revision)
+        XCTAssertEqual(state.cursor, "same-data")
+        try state.applyChanges(D1ChangesPage(protocolVersion: 1, entities: [activity(revision: 3, title: "Remote")], hasMore: false, cursor: "new-data"))
+        XCTAssertGreaterThan(state.presentationRevision, revision)
+    }
 }

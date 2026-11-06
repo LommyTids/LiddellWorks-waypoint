@@ -115,6 +115,8 @@ data. Supply only the newly created staging database ID.
 All paths start at `/WayPoint/api`. Sign in through `/login`; `/setup` creates
 the first staging account from `{setupKey,username,password}`. Retain the secure
 HttpOnly `wp_session` cookie. Native clients need a cookie-aware HTTP session.
+`/whoami` reissues the cookie once it is a day old, so active clients stay signed
+in. Renewal keeps the account's `sessionVersion`, so changing it still ends them.
 Cross-origin browser writes are rejected; a future web client should use the
 same origin or an explicitly designed authenticated proxy. Do not put secrets
 in a WebView JavaScript bridge. Existing `/data` routes are unavailable here.
