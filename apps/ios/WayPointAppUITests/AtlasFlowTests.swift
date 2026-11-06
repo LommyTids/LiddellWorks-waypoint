@@ -27,6 +27,39 @@ final class AtlasFlowTests: XCTestCase {
         // No credentials are submitted and no real account is used.
     }
 
+    /// Production can't be made to offer these on demand, so a debug-only launch
+    /// argument supplies what the server would.
+    @MainActor
+    func testProvidersReplaceThePhoneFormOnceItHasEnded() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WayPointSignInPreview", "providers"]
+        app.launch()
+        let login = app.buttons["Log in to WayPoint"]
+        XCTAssertTrue(login.waitForExistence(timeout: 10))
+        login.tap()
+        XCTAssertTrue(app.buttons["sign-in-apple"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["sign-in-google"].isHittable)
+        XCTAssertFalse(app.textFields["login-code"].exists)
+        capture("Login providers", app: app)
+        app.buttons["Need help logging in?"].tap()
+        XCTAssertTrue(app.staticTexts["Sign in with the Apple or Google account linked to your WayPoint account."].waitForExistence(timeout: 5))
+        capture("Login providers help", app: app)
+    }
+
+    @MainActor
+    func testProvidersAndPhoneFormCanShareTheScreen() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WayPointSignInPreview", "with-phone"]
+        app.launch()
+        let login = app.buttons["Log in to WayPoint"]
+        XCTAssertTrue(login.waitForExistence(timeout: 10))
+        login.tap()
+        XCTAssertTrue(app.buttons["sign-in-apple"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["sign-in-google"].exists)
+        XCTAssertTrue(app.textFields["login-code"].exists)
+        capture("Login providers and phone", app: app)
+    }
+
     @MainActor
     func testDemoNavigationCollapseAndParticipantEditor() {
         let app = XCUIApplication()

@@ -14,7 +14,7 @@ Updated 7 October 2026 for production D1 sync and the Atlas interface. See [nati
 The authoring workspace checks are static. GitHub macOS CI runs the core tests, unsigned simulator app build and app-hosted tests using the runner’s selected Xcode. Review the latest workflow for the specific revision you build. These checks do not prove live authentication or device sync; perform the manual checks below with the production website account.
 ## Tests supplied
 
-The core tests cover original decoder/demo queue behavior plus D1 record revisions, patches preserving unknown fields, immutable retries, unrelated vs same-record conflicts, explicit reapply, complete bootstrap, quarantine on access changes, scoped permissions, trip/child dependency order, local creation cancellation and mutation wire shape. App-hosted tests cover login cookie parsing, unauthorized/permission-epoch errors, escaped cursors, mutation conflict results, account-isolated storage, retained legacy store and corrupt-file recovery.
+The core tests cover original decoder/demo queue behavior plus D1 record revisions, patches preserving unknown fields, immutable retries, unrelated vs same-record conflicts, explicit reapply, complete bootstrap, quarantine on access changes, scoped permissions, trip/child dependency order, local creation cancellation and mutation wire shape. App-hosted tests cover login cookie parsing, Apple and Google sign-in with stand-in tokens (Google's PKCE exchange, redirect checks, cancelling, refusals), unauthorized/permission-epoch errors, escaped cursors, mutation conflict results, account-isolated storage, retained legacy store and corrupt-file recovery.
 
 Run `bash scripts/check-mac.sh` for core tests and simulator build, then its `--test` option with an installed simulator destination for app tests. Record exact Xcode/SDK versions and results. Resolve compiler/SDK/runtime errors before treating this as a validated app.
 
@@ -31,6 +31,7 @@ Run `bash scripts/check-mac.sh` for core tests and simulator build, then its `--
 9. Check multiple-person viewing filters, named assignments and the current selection default for new records. Changing destination must retain that explicit selection; existing records must not be silently retagged. Contributor/viewer roles cannot gain broader edit rights.
 10. Edit transport departure/arrival separately and preserve booking details. Test all-day, blank dates, overnight/cross-zone travel, address changes clearing stale pins, rapid search cancellation and manual coordinates.
 11. Check stale editors after a refresh, Dynamic Type, VoiceOver, dark mode, iPad rotation and unavailable/corrupt storage.
+12. With the app client IDs set, run the real-account checks in `docs/backend-v1/sign-in.md` on a physical iPhone. The automated tests can't reach Apple or Google.
 
 ## Remaining gates
 

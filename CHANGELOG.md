@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased — Apple and Google sign-in
+
+- Refuse phone login for the site owner's account, with the same reply as an
+  unknown number. The owner signs in with their password at
+  `/waypoint/#owner-login`. **Set a password you know before deploying.**
+- Add Apple and Google sign-in to the server and website, hidden until client
+  IDs are set. An identity works only after an owner-issued, one-time invite
+  links it to an account. Each account has one sign-in, and the owner can reset
+  it to change it.
+- Add Apple and Google sign-in to the iOS app, hidden until the app client IDs
+  are set. Google uses the system browser with PKCE, so no Google SDK or client
+  secret is needed. Invites are redeemed on the website. Not yet tried with a
+  real Apple or Google account.
+- Show the server's reason when iOS sign-in is refused, including the notice that
+  phone sign-in has ended.
+- Add **Invite** and **Reset sign-in** to Manage accounts.
+- Add `WAYPOINT_PHONE_LOGIN=off` for cutover, and an owner route that ends every
+  session. See `docs/backend-v1/sign-in.md`.
+
 ## Unreleased — iOS offline resilience
 
 - Keep the saved itinerary readable when the server asks for a fresh snapshot,

@@ -204,12 +204,13 @@ for (const phone of [null, 447700900123, "", "not-a-number", "++447700900123", "
 for (const phone of ["+447700900000"]) {
   assert.equal((await jsonCall(env, "/WayPoint/api/login", "POST", { phone })).status, 401);
 }
+// A guessed number must not reach the owner, and the refusal must not reveal
+// that the number belongs to anyone.
 const ownerPhoneLogin = await jsonCall(env, "/WayPoint/api/login", "POST", { phone: "+447700900999" });
-assert.equal(ownerPhoneLogin.status, 200);
-const ownerPhoneIdentity = await ownerPhoneLogin.json();
-assert.equal(ownerPhoneIdentity.id, owner.id);
-assert.equal(ownerPhoneIdentity.isUberUser, true);
-assert.equal((await call(env, "/WayPoint/api/users", { headers: { Cookie: cookieFrom(ownerPhoneLogin) } })).status, 200);
+const unknownPhoneLogin = await jsonCall(env, "/WayPoint/api/login", "POST", { phone: "+447700900000" });
+assert.equal(ownerPhoneLogin.status, 401);
+assert.equal(cookieFrom(ownerPhoneLogin), null);
+assert.deepEqual(await ownerPhoneLogin.json(), await unknownPhoneLogin.json());
 accounts.users.push({ id: "duplicate", username: "duplicate", phone: "00447700900123" });
 await env.WAYPOINT_KV.put("users", JSON.stringify(accounts));
 assert.equal((await jsonCall(env, "/WayPoint/api/login", "POST", { phone: "+447700900123" })).status, 401);

@@ -13,6 +13,7 @@
   // hand off to renderBoot() to decide what to actually show — the login
   // screen, or (once state is loaded) the normal app. See section 4b,
   // "Auth", further up for both of these.
+  readPendingInvite();
   await checkAuth();
   await renderBoot();
 })();

@@ -1,3 +1,4 @@
+import AuthenticationServices
 import XCTest
 import Foundation
 import SwiftData
@@ -42,20 +43,7 @@ final class WayPointAPITests: XCTestCase {
         let client = api(status: 200,
                          body: "{\"status\":\"ok\",\"id\":\"test_account\",\"username\":\"Tester\"}",
                          headers: ["Set-Cookie": "wp_session=\(cookie); Path=/waypoint; Secure; HttpOnly; SameSite=Lax; Max-Age=604800"]) { request in
-            // URLSession may convert httpBody into a stream before URLProtocol.
-            var body = request.httpBody ?? Data()
-            if request.httpBody == nil, let stream = request.httpBodyStream {
-                stream.open()
-                defer { stream.close() }
-                var buffer = [UInt8](repeating: 0, count: 1024)
-                while true {
-                    let count = stream.read(&buffer, maxLength: buffer.count)
-                    if count < 0 { XCTFail("Could not read request body stream"); break }
-                    if count == 0 { break }
-                    body.append(contentsOf: buffer.prefix(count))
-                }
-            }
-            let payload = try? JSONSerialization.jsonObject(with: body) as? [String: String]
+            let payload = try? JSONSerialization.jsonObject(with: requestBody(request)) as? [String: String]
             XCTAssertEqual(payload, ["phone": "+44 7700 900123"])
             XCTAssertEqual(request.url?.path, "/waypoint/api/login")
         }
@@ -68,6 +56,59 @@ final class WayPointAPITests: XCTestCase {
         let client = api(status: 401, body: "{\"error\":\"Phone number is not registered.\"}")
         do { _ = try await client.login(phone: "+447700900000"); XCTFail("Expected rejected phone") }
         catch APIError.server(let message) { XCTAssertEqual(message, "Phone number is not registered.") }
+    }
+
+    func testEndedPhoneSignInSaysWhy() async throws {
+        let client = api(status: 403, body: "{\"error\":\"Phone sign-in has ended.\"}")
+        do { _ = try await client.login(phone: "+447700900000"); XCTFail("Expected refusal") }
+        catch APIError.server(let message) { XCTAssertEqual(message, "Phone sign-in has ended.") }
+    }
+
+    func testIdentityLoginSendsOnlyProviderAndTokenAndKeepsItsCookie() async throws {
+        let cookie = session().cookieValue
+        let client = api(status: 200, body: "{\"status\":\"ok\",\"id\":\"test_account\",\"username\":\"Tester\"}",
+                         headers: ["Set-Cookie": "wp_session=\(cookie); Path=/waypoint; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000"]) { request in
+            let payload = try? JSONSerialization.jsonObject(with: requestBody(request)) as? [String: String]
+            XCTAssertEqual(payload, ["provider": "apple", "idToken": "the.id.token"])
+            XCTAssertEqual(request.url?.path, "/waypoint/api/login/identity")
+            XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+        }
+        let saved = try await client.login(provider: .apple, idToken: "the.id.token")
+        XCTAssertEqual(saved.account.id, "test_account")
+        XCTAssertEqual(saved.cookieValue, cookie)
+    }
+
+    func testRefusedIdentityShowsTheServersReason() async throws {
+        for status in [401, 403, 409, 503] {
+            let client = api(status: status, body: "{\"error\":\"Reason \(status)\"}")
+            do { _ = try await client.login(provider: .google, idToken: "token"); XCTFail("Expected refusal") }
+            catch APIError.server(let message) { XCTAssertEqual(message, "Reason \(status)") }
+        }
+    }
+
+    func testSyncRefusalsKeepTheirOwnMeaning() async throws {
+        let forbidden = api(status: 403, body: "{\"error\":\"Should not be shown\"}")
+        do { _ = try await forbidden.bootstrap(session: session()); XCTFail("Expected refusal") }
+        catch APIError.server(let message) { XCTAssertEqual(message, "Your account does not have permission for this request.") }
+        let conflict = api(status: 409, body: "{\"error\":{\"code\":\"conflict\",\"message\":\"Changed elsewhere\"}}")
+        do { _ = try await conflict.bootstrap(session: session()); XCTFail("Expected conflict") }
+        catch APIError.server(let message) { XCTAssertEqual(message, "Changed elsewhere") }
+    }
+
+    func testOnlyProvidersWithAnAppClientIDAreOffered() async throws {
+        let body = "{\"nonce\":\"abc.def.012\",\"providers\":{\"apple\":{\"clientId\":\"web\",\"nativeClientId\":null},"
+            + "\"google\":{\"clientId\":\"web\",\"nativeClientId\":\"app.apps.googleusercontent.com\"}},\"phoneLogin\":false}"
+        let options = try await api(status: 200, body: body).signInOptions()
+        XCTAssertEqual(options, SignInOptions(appleNonce: nil, googleClientID: "app.apps.googleusercontent.com", phoneLogin: false))
+        XCTAssertEqual(options.providerNames, "Google")
+    }
+
+    func testAppleIsOfferedWithItsNonceInHand() async throws {
+        let body = "{\"nonce\":\"abc.def.012\",\"providers\":{\"apple\":{\"clientId\":\"web\",\"nativeClientId\":\"com.example\"}},\"phoneLogin\":true}"
+        var paths: [String] = []
+        let options = try await api(status: 200, body: body) { paths.append($0.url?.path ?? "") }.signInOptions()
+        XCTAssertEqual(options, SignInOptions(appleNonce: "abc.def.012", googleClientID: nil, phoneLogin: true))
+        XCTAssertEqual(paths, ["/waypoint/api/login/config", "/waypoint/api/login/nonce"])
     }
 
     func testUnauthorizedDoesNotDecodeServerData() async throws {
@@ -172,6 +213,23 @@ private func testSession(expiresIn seconds: TimeInterval, accountID: String = "t
                         cookieValue: claims + ".testsignature", expiresAt: expiry)
 }
 
+/// URLSession may convert httpBody into a stream before URLProtocol.
+private func requestBody(_ request: URLRequest) -> Data {
+    var body = request.httpBody ?? Data()
+    if request.httpBody == nil, let stream = request.httpBodyStream {
+        stream.open()
+        defer { stream.close() }
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        while true {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count < 0 { XCTFail("Could not read request body stream"); break }
+            if count == 0 { break }
+            body.append(contentsOf: buffer.prefix(count))
+        }
+    }
+    return body
+}
+
 private func renewalCookie(_ session: SavedSession) -> String {
     "wp_session=\(session.cookieValue); Path=/waypoint; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax"
 }
@@ -205,7 +263,7 @@ final class AppModelOfflineTests: XCTestCase {
         let log = requests
         StubProtocol.handler = { request in
             let path = request.url?.path.replacingOccurrences(of: "/waypoint/api/", with: "") ?? ""
-            log.add(path: path, cookie: request.value(forHTTPHeaderField: "Cookie"))
+            log.add(path: path, cookie: request.value(forHTTPHeaderField: "Cookie"), body: requestBody(request))
             let (status, body, headers) = try routes(path)
             return (HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
                                     headerFields: headers.merging(["Content-Type": "application/json"]) { _, new in new })!, Data(body.utf8))
@@ -350,6 +408,124 @@ final class AppModelOfflineTests: XCTestCase {
         XCTAssertNotNil(model.message)
     }
 
+    private let googleConfig = "{\"nonce\":\"abc.def.012\",\"providers\":{\"google\":{\"clientId\":\"web\",\"nativeClientId\":\"123-abc.apps.googleusercontent.com\"}},\"phoneLogin\":true}"
+    private let loggedIn = "{\"status\":\"ok\",\"id\":\"test_account\",\"username\":\"Tester\"}"
+    private let emptyBootstrap = "{\"protocolVersion\":1,\"entities\":[],\"complete\":true,\"nextCursor\":null,\"syncCursor\":\"fresh\"}"
+
+    /// A server that accepts the sign-in and has nothing new to send.
+    private func acceptingModel() -> AppModel {
+        let fresh = testSession(expiresIn: 86_400)
+        return model { [googleConfig, loggedIn, capabilities, emptyBootstrap, emptyChanges] path in
+            switch path {
+            case "login/config", "login/nonce": return (200, googleConfig, [:])
+            case "/token": return (200, "{\"access_token\":\"dropped\",\"id_token\":\"google.id.token\"}", [:])
+            case "login/identity": return (200, loggedIn, ["Set-Cookie": renewalCookie(fresh)])
+            case "whoami": return (200, identityBody, [:])
+            case "v1/sync/capabilities": return (200, capabilities, [:])
+            case "v1/sync/bootstrap": return (200, emptyBootstrap, [:])
+            case "v1/sync/changes": return (200, emptyChanges, [:])
+            default: throw URLError(.badServerResponse)
+            }
+        }
+    }
+
+    func testAppleTokenOpensTheAccountAndStoresItsSession() async throws {
+        let model = acceptingModel()
+        await model.signIn(provider: .apple, idToken: "apple.id.token")
+        XCTAssertNil(model.message)
+        XCTAssertEqual(model.accountName, "Tester")
+        XCTAssertNotNil(try keychain.read())
+        let sent = try XCTUnwrap(requests.bodies(for: "login/identity").first)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: sent) as? [String: String],
+                       ["provider": "apple", "idToken": "apple.id.token"])
+    }
+
+    func testGoogleRedirectIsExchangedAndOnlyTheIDTokenReachesWayPoint() async throws {
+        let model = acceptingModel()
+        await model.prepareSignIn()
+        var verifierChallenge: String?
+        await model.signInWithGoogle { url, scheme in
+            XCTAssertEqual(scheme, "com.googleusercontent.apps.123-abc")
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            func value(_ name: String) -> String { items.first { $0.name == name }?.value ?? "" }
+            XCTAssertEqual(value("nonce"), "abc.def.012")
+            verifierChallenge = value("code_challenge")
+            return URL(string: "\(scheme):/oauth2redirect?state=\(value("state"))&code=4%2Fgoogle-code")!
+        }
+        XCTAssertNil(model.message)
+        XCTAssertEqual(model.accountName, "Tester")
+        XCTAssertNotNil(verifierChallenge)
+        let exchange = try XCTUnwrap(requests.bodies(for: "/token").first)
+        XCTAssertTrue(try XCTUnwrap(String(data: exchange, encoding: .utf8)).contains("code=4%2Fgoogle-code&code_verifier="))
+        let sent = try XCTUnwrap(requests.bodies(for: "login/identity").first)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: sent) as? [String: String],
+                       ["provider": "google", "idToken": "google.id.token"])
+    }
+
+    func testGoogleRedirectForAnotherAttemptNeverReachesGoogleOrWayPoint() async throws {
+        let model = acceptingModel()
+        await model.prepareSignIn()
+        await model.signInWithGoogle { _, scheme in URL(string: "\(scheme):/oauth2redirect?state=forged&code=stolen")! }
+        XCTAssertEqual(requests.count(of: "/token"), 0)
+        XCTAssertEqual(requests.count(of: "login/identity"), 0)
+        XCTAssertEqual(model.message, "Google sign-in did not finish. Please try again.")
+        XCTAssertNil(try keychain.read())
+    }
+
+    func testClosingGooglesPageSaysNothing() async throws {
+        let model = acceptingModel()
+        await model.prepareSignIn()
+        await model.signInWithGoogle { _, _ in throw ASWebAuthenticationSessionError(.canceledLogin) }
+        XCTAssertNil(model.message)
+        XCTAssertFalse(model.isBusy)
+        XCTAssertEqual(requests.count(of: "/token"), 0)
+    }
+
+    func testClosingApplesSheetSaysNothingButOtherFailuresDo() {
+        let model = acceptingModel()
+        model.appleSignInFailed(ASAuthorizationError(.canceled))
+        XCTAssertNil(model.message)
+        model.appleSignInFailed(ASAuthorizationError(.failed))
+        XCTAssertEqual(model.message, "Apple sign-in did not finish. Please try again.")
+    }
+
+    func testUnlinkedProviderShowsTheReasonAndKeepsTheExpiredCopyOpen() async throws {
+        try savedTrip(); try signedIn(expiresIn: -60)
+        let model = model { path in
+            guard path == "login/identity" else { throw URLError(.notConnectedToInternet) }
+            return (403, "{\"error\":\"This Apple account isn't linked to WayPoint yet.\"}", [:])
+        }
+        await model.start()
+        await model.signIn(provider: .apple, idToken: "apple.id.token")
+        XCTAssertEqual(model.message, "This Apple account isn't linked to WayPoint yet.")
+        XCTAssertEqual(model.trips.map(\.name), ["Saved trip"])
+        XCTAssertTrue(model.needsSignIn)
+    }
+
+    func testProviderSignInRecoversAnExpiredCopy() async throws {
+        try savedTrip(); try signedIn(expiresIn: -60)
+        let model = acceptingModel()
+        await model.start()
+        XCTAssertTrue(model.needsSignIn)
+        await model.signIn(provider: .apple, idToken: "apple.id.token")
+        XCTAssertFalse(model.needsSignIn)
+        XCTAssertNil(model.message)
+    }
+
+    func testOptionsSurviveALostConnectionAndThePhoneFormIsTheFirstFallback() async throws {
+        let log = requests
+        let model = model { [googleConfig] path in
+            guard log.count(of: path) == 1 else { throw URLError(.notConnectedToInternet) }
+            return (200, googleConfig, [:])
+        }
+        XCTAssertNil(model.signInOptions)
+        let first = await model.prepareSignIn()
+        XCTAssertTrue(first)
+        let second = await model.prepareSignIn()
+        XCTAssertFalse(second)
+        XCTAssertEqual(model.signInOptions?.googleClientID, "123-abc.apps.googleusercontent.com")
+    }
+
     func testFailedSignInKeepsExpiredCopyOpen() async throws {
         try savedTrip(); try signedIn(expiresIn: -60)
         let model = model { _ in throw URLError(.notConnectedToInternet) }
@@ -363,9 +539,10 @@ final class AppModelOfflineTests: XCTestCase {
 /// URLProtocol runs off the main actor, so the log guards its own state.
 private final class RequestLog: @unchecked Sendable {
     private let lock = NSLock()
-    private var entries: [(path: String, cookie: String?)] = []
+    private var entries: [(path: String, cookie: String?, body: Data)] = []
     var count: Int { lock.withLock { entries.count } }
-    func add(path: String, cookie: String?) { lock.withLock { entries.append((path, cookie)) } }
+    func add(path: String, cookie: String?, body: Data) { lock.withLock { entries.append((path, cookie, body)) } }
+    func bodies(for path: String) -> [Data] { lock.withLock { entries.filter { $0.path == path }.map(\.body) } }
     func count(of path: String) -> Int { lock.withLock { entries.filter { $0.path == path }.count } }
     func cookies(for path: String) -> [String?] { lock.withLock { entries.filter { $0.path == path }.map(\.cookie) } }
 }

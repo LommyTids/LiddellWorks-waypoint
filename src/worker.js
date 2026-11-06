@@ -187,6 +187,11 @@ const SALT_BYTES = 16;
 // should also cover this route because separate isolates do not share memory.
 const LOGIN_WINDOW_MS = 5 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 8;
+const LOGIN_NONCE_LIFETIME_MS = 10 * 60 * 1000;
+const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+const JWKS_CACHE_MS = 60 * 60 * 1000;
+const JWKS_REFETCH_GAP_MS = 60 * 1000;
+const MAX_IDENTITY_TOKEN_LENGTH = 8192;
 const loginAttempts = new Map();
 
 // Roles that can be GRANTED on a trip (via /api/trip-grants). "superuser"
@@ -421,6 +426,15 @@ export default {
     if (path === "/WayPoint/api/login" && request.method === "POST") {
       return handleLogin(request, env);
     }
+    if (path === "/WayPoint/api/login/config" && request.method === "GET") {
+      return handleLoginConfig(env);
+    }
+    if (path === "/WayPoint/api/login/nonce" && request.method === "GET") {
+      return handleLoginNonce(env);
+    }
+    if (path === "/WayPoint/api/login/identity" && request.method === "POST") {
+      return handleIdentityLogin(request, env);
+    }
     if (path === "/WayPoint/api/logout" && request.method === "POST") {
       return handleLogout(request, env);
     }
@@ -517,6 +531,18 @@ export default {
       if (path === "/WayPoint/api/users/delete" && request.method === "POST") {
         if (!user.isUberUser) return jsonError(403, "Only the site owner's account can manage logins.");
         return handleUsersDelete(request, env);
+      }
+      if (path === "/WayPoint/api/invites" && request.method === "POST") {
+        if (!user.isUberUser) return jsonError(403, "Only the site owner's account can create invites.");
+        return handleInviteCreate(request, env);
+      }
+      if (path === "/WayPoint/api/identities/reset" && request.method === "POST") {
+        if (!user.isUberUser) return jsonError(403, "Only the site owner's account can reset sign-ins.");
+        return handleIdentitiesReset(request, env);
+      }
+      if (path === "/WayPoint/api/sessions/end-all" && request.method === "POST") {
+        if (!user.isUberUser) return jsonError(403, "Only the site owner's account can end sessions.");
+        return handleEndAllSessions(env, user);
       }
 
       // An /api/ path that isn't any of the above.
@@ -2363,6 +2389,21 @@ async function getCurrentUser(request, env) {
 
 /* ---- Route handlers: login / logout / whoami / setup --------------------- */
 
+// Counts one attempt, and returns the refusal once the window is full.
+function recordLoginAttempt(attemptKey) {
+  const now = Date.now();
+  const recent = (loginAttempts.get(attemptKey) || []).filter(function (time) { return now - time < LOGIN_WINDOW_MS; });
+  if (recent.length >= LOGIN_MAX_ATTEMPTS) {
+    return new Response(JSON.stringify({ error: "Too many login attempts. Wait a few minutes and try again." }), {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(LOGIN_WINDOW_MS / 1000)) },
+    });
+  }
+  recent.push(now);
+  loginAttempts.set(attemptKey, recent);
+  return null;
+}
+
 // Match formatting only; never guess a country code or change account IDs.
 function normalizeLoginPhone(value) {
   if (typeof value !== "string" || value.length > 80) return null;
@@ -2380,6 +2421,9 @@ async function handleLogin(request, env) {
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(400, "Invalid login request.");
   const phoneLogin = Object.prototype.hasOwnProperty.call(body, "phone");
+  if (phoneLogin && env.WAYPOINT_PHONE_LOGIN === "off") {
+    return jsonError(403, "Phone sign-in has ended. Update WayPoint and sign in with Apple or Google.");
+  }
   const phone = phoneLogin ? normalizeLoginPhone(body.phone) : null;
   const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
   const password = body.password || "";
@@ -2389,21 +2433,14 @@ async function handleLogin(request, env) {
   }
 
   const attemptKey = (request.headers.get("CF-Connecting-IP") || "unknown") + ":" + (phoneLogin ? "phone:" + phone : username);
-  const now = Date.now();
-  const recent = (loginAttempts.get(attemptKey) || []).filter(function (time) { return now - time < LOGIN_WINDOW_MS; });
-  if (recent.length >= LOGIN_MAX_ATTEMPTS) {
-    return new Response(JSON.stringify({ error: "Too many login attempts. Wait a few minutes and try again." }), {
-      status: 429,
-      headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(LOGIN_WINDOW_MS / 1000)) },
-    });
-  }
-  recent.push(now);
-  loginAttempts.set(attemptKey, recent);
+  const limited = recordLoginAttempt(attemptKey);
+  if (limited) return limited;
 
   const usersDoc = await loadUsers(env);
   // A phone must identify exactly one existing account; retain its ID and role.
+  // The owner is excluded: a guessed number must never reach site-wide control.
   const matches = phoneLogin ? usersDoc.users.filter(function (u) { return normalizeLoginPhone(u.phone) === phone; }) : [];
-  const user = phoneLogin ? (matches.length === 1 ? matches[0] : null) :
+  const user = phoneLogin ? (matches.length === 1 && !matches[0].isUberUser ? matches[0] : null) :
     usersDoc.users.find(function (u) { return u.username.toLowerCase() === username; });
   // Deliberately the same generic message whether the username doesn't
   // exist or the password's wrong — doesn't help an attacker narrow down
@@ -2422,6 +2459,10 @@ async function handleLogin(request, env) {
   }
 
   loginAttempts.delete(attemptKey);
+  return signedInResponse(user, env);
+}
+
+async function signedInResponse(user, env) {
   const token = await signSession({ uid: user.id, sv: user.sessionVersion || 0, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }, env);
   // isUberUser is included here (and in handleWhoami/handleSetup), unlike
   // publicUser() -- this response only ever describes the caller's own
@@ -2433,6 +2474,272 @@ async function handleLogin(request, env) {
     status: 200,
     headers: { "Content-Type": "application/json", "Set-Cookie": buildSessionCookieHeader(token) },
   });
+}
+
+/* ---- Sign in with Apple and Google ----------------------------------------
+ * Apple and Google prove who someone is; WayPoint still decides who may come
+ * in. A provider identity works only once it is linked to an existing account,
+ * and the only way to link one is a one-time invite the site owner creates for
+ * that account. A phone number never links anything: numbers can be guessed,
+ * and a guess must not be able to attach a stranger's Apple ID to someone's
+ * trips.
+ *
+ * Only the provider's stable `sub` is stored. Names and email addresses in the
+ * token are ignored, so Apple's Hide My Email needs no special handling.
+ *
+ * All of this stays off until WAYPOINT_APPLE_CLIENT_IDS or
+ * WAYPOINT_GOOGLE_CLIENT_IDS is set. Each is a comma-separated list: the first
+ * ID is the one the website uses, and any others belong to native apps. Setup
+ * and cutover steps are in docs/backend-v1/sign-in.md.
+ * ------------------------------------------------------------------------ */
+
+const IDENTITY_PROVIDERS = new Map([
+  ["apple", {
+    label: "Apple", clientIdsVar: "WAYPOINT_APPLE_CLIENT_IDS",
+    keysUrl: "https://appleid.apple.com/auth/keys",
+    issuers: ["https://appleid.apple.com"],
+  }],
+  ["google", {
+    label: "Google", clientIdsVar: "WAYPOINT_GOOGLE_CLIENT_IDS",
+    keysUrl: "https://www.googleapis.com/oauth2/v3/certs",
+    issuers: ["https://accounts.google.com", "accounts.google.com"],
+  }],
+]);
+
+const identityKeyCache = new Map();
+
+class IdentityKeysUnavailable extends Error {}
+
+function identityClientIds(env, provider) {
+  return String(env[IDENTITY_PROVIDERS.get(provider).clientIdsVar] || "")
+    .split(",").map(function (id) { return id.trim(); }).filter(Boolean);
+}
+
+function configuredIdentityProviders(env) {
+  return Array.from(IDENTITY_PROVIDERS.keys()).filter(function (provider) {
+    return identityClientIds(env, provider).length > 0;
+  });
+}
+
+function noStoreJSON(value) {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
+}
+
+function handleLoginConfig(env) {
+  const providers = {};
+  for (const provider of configuredIdentityProviders(env)) {
+    const ids = identityClientIds(env, provider);
+    providers[provider] = { clientId: ids[0], nativeClientId: ids[1] || null };
+  }
+  return noStoreJSON({ providers, phoneLogin: env.WAYPOINT_PHONE_LOGIN !== "off" });
+}
+
+// Stateless, so sign-in keeps working while KV is read-only for a migration.
+// The prefix keeps a nonce from ever passing as a session or a sync cursor,
+// which are signed with the same secret.
+async function loginNonceSignature(body, env) {
+  return hmacSign("login-nonce:" + body, env.WAYPOINT_SESSION_SECRET);
+}
+
+async function handleLoginNonce(env) {
+  const expires = (Date.now() + LOGIN_NONCE_LIFETIME_MS).toString(36);
+  const random = base64UrlEncode(crypto.getRandomValues(new Uint8Array(16)));
+  const body = expires + "." + random;
+  return noStoreJSON({ nonce: body + "." + await loginNonceSignature(body, env) });
+}
+
+async function verifyLoginNonce(nonce, env) {
+  if (typeof nonce !== "string") return false;
+  const parts = nonce.split(".");
+  if (parts.length !== 3) return false;
+  const expected = await loginNonceSignature(parts[0] + "." + parts[1], env);
+  if (!safeCompareHex(parts[2], expected)) return false;
+  return parseInt(parts[0], 36) > Date.now();
+}
+
+function base64UrlToBytes(text) {
+  return Uint8Array.from(base64UrlDecodeToString(text), function (char) { return char.charCodeAt(0); });
+}
+
+// A token naming a key we don't hold is either a provider rotating keys or a
+// forgery, so unknown IDs can trigger a refetch, but only once a minute.
+async function identitySigningKey(provider, kid) {
+  const cached = identityKeyCache.get(provider);
+  const now = Date.now();
+  const known = cached ? cached.keys.find(function (key) { return key.kid === kid; }) : null;
+  if (known && now - cached.fetchedAt < JWKS_CACHE_MS) return known;
+  if (cached && now - cached.fetchedAt < JWKS_REFETCH_GAP_MS) return null;
+
+  let keys;
+  try {
+    const response = await fetch(IDENTITY_PROVIDERS.get(provider).keysUrl, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw new Error("Key request failed");
+    keys = (await response.json()).keys;
+    if (!Array.isArray(keys)) throw new Error("Key response malformed");
+  } catch (err) {
+    throw new IdentityKeysUnavailable();
+  }
+  keys = keys.filter(function (key) { return key && key.kty === "RSA" && typeof key.kid === "string"; });
+  identityKeyCache.set(provider, { keys, fetchedAt: now });
+  return keys.find(function (key) { return key.kid === kid; }) || null;
+}
+
+// Returns the provider's stable user ID, or null if anything fails to check out.
+async function verifyIdentityToken(provider, token, env) {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  let header, claims, signature;
+  try {
+    header = JSON.parse(base64UrlDecodeToString(parts[0]));
+    claims = JSON.parse(new TextDecoder().decode(base64UrlToBytes(parts[1])));
+    signature = base64UrlToBytes(parts[2]);
+  } catch (err) {
+    return null;
+  }
+  // The algorithm is fixed here and never taken from the token. Trusting the
+  // header would let a forger pick "none", or HS256 keyed with the public key.
+  if (!header || header.alg !== "RS256" || typeof header.kid !== "string" || !claims) return null;
+  const jwk = await identitySigningKey(provider, header.kid);
+  if (!jwk) return null;
+  let verified;
+  try {
+    const key = await crypto.subtle.importKey("jwk", { kty: "RSA", n: jwk.n, e: jwk.e },
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+    verified = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, signature,
+      new TextEncoder().encode(parts[0] + "." + parts[1]));
+  } catch (err) {
+    return null;
+  }
+  if (!verified) return null;
+
+  if (!IDENTITY_PROVIDERS.get(provider).issuers.includes(claims.iss)) return null;
+  if (typeof claims.aud !== "string" || !identityClientIds(env, provider).includes(claims.aud)) return null;
+  if (typeof claims.exp !== "number" || claims.exp * 1000 <= Date.now()) return null;
+  if (typeof claims.sub !== "string" || !claims.sub || claims.sub.length > 255) return null;
+  // The nonce travels inside the signed token, so that copy is the one to check.
+  if (!await verifyLoginNonce(claims.nonce, env)) return null;
+  return claims.sub;
+}
+
+async function sha256Hex(text) {
+  return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
+}
+
+async function findInvitedAccount(usersDoc, invite) {
+  const hash = await sha256Hex(invite);
+  return usersDoc.users.find(function (u) {
+    return u.invite && u.invite.expiresAt > Date.now() && safeCompareHex(u.invite.hash, hash);
+  }) || null;
+}
+
+async function handleIdentityLogin(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (err) {
+    return jsonError(400, "Request body was not valid JSON.");
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(400, "Invalid sign-in request.");
+  const { provider, idToken, invite } = body;
+  if (!IDENTITY_PROVIDERS.has(provider) || !identityClientIds(env, provider).length) {
+    return jsonError(404, "That sign-in method is not available.");
+  }
+  if (typeof idToken !== "string" || idToken.length > MAX_IDENTITY_TOKEN_LENGTH ||
+      (invite !== undefined && typeof invite !== "string")) {
+    return jsonError(400, "Invalid sign-in request.");
+  }
+
+  const attemptKey = (request.headers.get("CF-Connecting-IP") || "unknown") + ":identity";
+  const limited = recordLoginAttempt(attemptKey);
+  if (limited) return limited;
+
+  let sub = null;
+  try {
+    sub = await verifyIdentityToken(provider, idToken, env);
+  } catch (err) {
+    if (err instanceof IdentityKeysUnavailable) return jsonError(503, "Sign-in is unavailable right now. Please try again shortly.");
+    throw err;
+  }
+  if (!sub) return jsonError(401, "That sign-in could not be verified. Please try again.");
+
+  const label = IDENTITY_PROVIDERS.get(provider).label;
+  const usersDoc = await loadUsers(env);
+  const linked = usersDoc.users.find(function (u) {
+    return (u.identities || []).some(function (i) { return i.provider === provider && i.sub === sub; });
+  });
+  const invited = invite === undefined ? null : await findInvitedAccount(usersDoc, invite);
+  if (linked && invited && invited.id !== linked.id) {
+    return jsonError(409, "This " + label + " account is already linked to a different WayPoint account.");
+  }
+  let user = linked;
+  if (!user) {
+    if (!invited) {
+      return jsonError(403, invite === undefined
+        ? "This " + label + " account isn't linked to WayPoint yet. Ask the site owner for an invite."
+        : "That invite has expired or has already been used. Ask the site owner for a new one.");
+    }
+    // One sign-in per account. Changing it takes an owner reset, so a forwarded
+    // invite can never add a stranger to an account that is already set up.
+    if ((invited.identities || []).length) return jsonError(409, "That account already has a sign-in. Ask the site owner to reset it.");
+    invited.identities = (invited.identities || []).concat({ provider, sub, linkedAt: new Date().toISOString() });
+    delete invited.invite;
+    await saveUsers(env, usersDoc);
+    user = invited;
+  }
+  loginAttempts.delete(attemptKey);
+  return signedInResponse(user, env);
+}
+
+// A new invite replaces any earlier one for that account, which is also how an
+// invite sent to the wrong person is withdrawn. Only the hash is stored.
+async function handleInviteCreate(request, env) {
+  if (!configuredIdentityProviders(env).length) return jsonError(409, "Set up Sign in with Apple or Google before creating invites.");
+  let body;
+  try {
+    body = await request.json();
+  } catch (err) {
+    return jsonError(400, "Request body was not valid JSON.");
+  }
+  const usersDoc = await loadUsers(env);
+  const account = usersDoc.users.find(function (u) { return u.id === (body && body.accountId); });
+  if (!account) return jsonError(404, "That account no longer exists.");
+  const invite = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
+  const expiresAt = Date.now() + INVITE_LIFETIME_MS;
+  account.invite = { hash: await sha256Hex(invite), expiresAt };
+  await saveUsers(env, usersDoc);
+  return noStoreJSON({ status: "ok", invite, accountId: account.id, username: account.username, expiresAt: new Date(expiresAt).toISOString() });
+}
+
+// For a lost or changed sign-in. The identity, any unused invite and every
+// session on the account end together, so a stolen sign-in can't linger.
+async function handleIdentitiesReset(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (err) {
+    return jsonError(400, "Request body was not valid JSON.");
+  }
+  const usersDoc = await loadUsers(env);
+  const account = usersDoc.users.find(function (u) { return u.id === (body && body.accountId); });
+  if (!account) return jsonError(404, "That account no longer exists.");
+  delete account.identities;
+  delete account.invite;
+  account.sessionVersion = (account.sessionVersion || 0) + 1;
+  await saveUsers(env, usersDoc);
+  return noStoreJSON({ status: "ok", accountId: account.id });
+}
+
+// Part of cutover: a session made through a guessed phone number would
+// otherwise keep renewing. Rotating WAYPOINT_SESSION_SECRET is not an option
+// because it also signs sync cursors, and installed apps cannot recover those.
+async function handleEndAllSessions(env, caller) {
+  const usersDoc = await loadUsers(env);
+  for (const account of usersDoc.users) account.sessionVersion = (account.sessionVersion || 0) + 1;
+  await saveUsers(env, usersDoc);
+  return signedInResponse(usersDoc.users.find(function (u) { return u.id === caller.id; }), env);
 }
 
 async function handleLogout(request, env) {
@@ -2553,7 +2860,11 @@ async function handleAccountAvatarUpdate(request, env, user) {
 
 async function handleUsersList(env) {
   const usersDoc = await loadUsers(env);
-  return new Response(JSON.stringify({ users: usersDoc.users.map(publicUser) }), {
+  // Owner-only, so it may say which provider is linked. The provider's user ID stays private.
+  const users = usersDoc.users.map(function (u) {
+    return { ...publicUser(u), linkedSignIn: (u.identities || []).length ? u.identities[0].provider : null };
+  });
+  return new Response(JSON.stringify({ users }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });

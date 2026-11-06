@@ -40,6 +40,9 @@ final class WayPointAPI {
     static let environmentID = "d1-production-v1"
     private enum Endpoint: String {
         case login, whoami, logout
+        case identity = "login/identity"
+        case loginConfig = "login/config"
+        case loginNonce = "login/nonce"
         case capabilities = "v1/sync/capabilities"
         case bootstrap = "v1/sync/bootstrap"
         case changes = "v1/sync/changes"
@@ -85,14 +88,59 @@ final class WayPointAPI {
         return try await login(body: body)
     }
 
-    private func login(body: Data) async throws -> SavedSession {
-        let (data, response) = try await send(.login, method: "POST", body: body)
+    /// The server finds the account from the token's verified subject. Name and
+    /// email are never sent, and invites are redeemed on the website.
+    func login(provider: IdentityProvider, idToken: String) async throws -> SavedSession {
+        let body = try JSONEncoder().encode(IdentityLoginBody(provider: provider.rawValue, idToken: idToken))
+        return try await login(.identity, body: body)
+    }
+
+    private func login(_ endpoint: Endpoint = .login, body: Data) async throws -> SavedSession {
+        let (data, response) = try await send(endpoint, method: "POST", body: body)
         guard let result = try? decoder.decode(LoginResponse.self, from: data),
               result.status == "ok", !result.id.isEmpty, !result.username.isEmpty else {
             throw APIError.invalidResponse
         }
         let account = Account(id: result.id, username: result.username)
         return try extractSession(response: response, account: account)
+    }
+
+    /// A provider is offered only once the server names a client ID for this app.
+    /// Otherwise its token's audience would be refused.
+    func signInOptions() async throws -> SignInOptions {
+        let (data, _) = try await send(.loginConfig)
+        guard let config = try? decoder.decode(LoginConfigResponse.self, from: data) else {
+            throw APIError.invalidResponse
+        }
+        let offersApple = config.providers["apple"]?.nativeClientId != nil
+        return SignInOptions(appleNonce: offersApple ? try await loginNonce() : nil,
+                             googleClientID: config.providers["google"]?.nativeClientId,
+                             phoneLogin: config.phoneLogin)
+    }
+
+    func loginNonce() async throws -> String {
+        let (data, _) = try await send(.loginNonce)
+        guard let result = try? decoder.decode(NonceResponse.self, from: data), !result.nonce.isEmpty else {
+            throw APIError.invalidResponse
+        }
+        return result.nonce
+    }
+
+    /// Google is the only host besides WayPoint that this app calls directly. The
+    /// reply's ID token goes on to WayPoint and its access token is dropped.
+    func googleIDToken(for attempt: GoogleSignInRequest, code: String) async throws -> String {
+        var request = URLRequest(url: GoogleSignInRequest.tokenEndpoint, cachePolicy: .reloadIgnoringLocalCacheData)
+        request.httpMethod = "POST"
+        request.httpBody = attempt.tokenRequestBody(code: code)
+        request.httpShouldHandleCookies = false
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        try Task.checkCancellation()
+        let (data, response) = try await transport.data(for: request)
+        guard let response = response as? HTTPURLResponse, response.statusCode == 200,
+              response.url == GoogleSignInRequest.tokenEndpoint else {
+            throw GoogleSignInError.missingIDToken
+        }
+        return try GoogleSignInRequest.idToken(fromTokenResponse: data)
     }
 
     func whoAmI(session: SavedSession) async throws -> IdentityCheck {
@@ -183,14 +231,16 @@ final class WayPointAPI {
         guard let response = response as? HTTPURLResponse, response.url == url else {
             throw APIError.invalidResponse
         }
+        // A refused sign-in is an answer for the person, not a sync failure: the
+        // server says why, for example that phone sign-in has ended.
+        if endpoint == .login || endpoint == .identity, [401, 403, 409].contains(response.statusCode) {
+            let detail = try? decoder.decode(LoginErrorResponse.self, from: data)
+            throw APIError.server(detail.map { String($0.error.prefix(240)) }
+                ?? "Could not sign in. Check your registered phone number or UberUser credentials.")
+        }
         switch response.statusCode {
         case 200...299: break
-        case 401:
-            if endpoint == .login {
-                let detail = try? decoder.decode(LoginErrorResponse.self, from: data)
-                throw APIError.server(detail?.error ?? "Could not sign in. Check your registered phone number or UberUser credentials.")
-            }
-            throw APIError.unauthorized
+        case 401: throw APIError.unauthorized
         case 403: throw APIError.server("Your account does not have permission for this request.")
         case 429:
             throw APIError.server("Too many requests. Wait a few minutes, then try again.")
@@ -215,7 +265,7 @@ final class WayPointAPI {
     private func extractSession(response: HTTPURLResponse, account: Account) throws -> SavedSession {
         guard let url = response.url,
               url.scheme == "https", url.host == URL(string: Self.origin)?.host,
-              ["/waypoint/api/login", "/waypoint/api/whoami"].contains(url.path),
+              ["/waypoint/api/login", "/waypoint/api/login/identity", "/waypoint/api/whoami"].contains(url.path),
               let raw = response.value(forHTTPHeaderField: "Set-Cookie") else {
             throw APIError.invalidResponse
         }
@@ -254,11 +304,45 @@ final class WayPointAPI {
 
 private struct LoginErrorResponse: Decodable { let error: String }
 private struct PhoneLoginBody: Encodable { let phone: String }
+private struct IdentityLoginBody: Encodable { let provider: String; let idToken: String }
+private struct NonceResponse: Decodable { let nonce: String }
+private struct LoginConfigResponse: Decodable {
+    struct Provider: Decodable { let nativeClientId: String? }
+    let providers: [String: Provider]
+    let phoneLogin: Bool
+}
 private struct LoginBody: Encodable { let username: String; let password: String }
 private struct LoginResponse: Decodable { let status: String; let id: String; let username: String }
 private struct IdentityResponse: Decodable { let loggedIn: Bool; let id: String?; let username: String? }
 private struct StatusResponse: Decodable { let status: String }
 private struct ErrorResponse: Decodable { let error: String }
+
+enum IdentityProvider: String { case apple, google }
+
+/// How this app may sign in, as the server currently offers it.
+struct SignInOptions: Equatable {
+    /// Present when Apple is offered. Apple's button builds its request without
+    /// waiting, so its nonce has to be in hand before the tap.
+    var appleNonce: String?
+    var googleClientID: String?
+    var phoneLogin: Bool
+
+    /// Named for the help text: "Apple or Google", or whichever one is offered.
+    var providerNames: String? {
+        let names = [appleNonce == nil ? nil : "Apple", googleClientID == nil ? nil : "Google"].compactMap { $0 }
+        return names.isEmpty ? nil : names.joined(separator: " or ")
+    }
+
+    #if DEBUG
+    /// For UI tests and screenshots, because production offers what it offers.
+    /// Launch with `-WayPointSignInPreview providers` or `with-phone`.
+    static var launchPreview: SignInOptions? {
+        guard let mode = UserDefaults.standard.string(forKey: "WayPointSignInPreview") else { return nil }
+        return SignInOptions(appleNonce: "preview", googleClientID: "preview.apps.googleusercontent.com",
+                             phoneLogin: mode == "with-phone")
+    }
+    #endif
+}
 
 /// `renewed` is a longer-lived replacement session, when the server offered one.
 struct IdentityCheck {

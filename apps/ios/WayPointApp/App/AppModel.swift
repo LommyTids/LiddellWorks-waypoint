@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Foundation
 import Combine
 import WayPointCore
@@ -13,6 +14,8 @@ final class AppModel: ObservableObject {
     /// Saved trips are open, but the sign-in has expired so nothing can sync.
     @Published private(set) var needsSignIn = false
     @Published var showSignIn = false
+    /// nil until the server has answered. The phone form stays available meanwhile.
+    @Published private(set) var signInOptions: SignInOptions?
 
     private var store: WorkspaceStore?
     private let keychain: KeychainSessionStore
@@ -64,12 +67,54 @@ final class AppModel: ObservableObject {
         } catch { message = error.localizedDescription }
     }
 
+    /// Returns whether the server answered. A failure keeps the last known options,
+    /// so a brief loss of signal does not take the buttons away.
+    @discardableResult
+    func prepareSignIn() async -> Bool {
+        #if DEBUG
+        if let preview = SignInOptions.launchPreview { signInOptions = preview; return true }
+        #endif
+        guard let options = try? await api.signInOptions() else { return false }
+        signInOptions = options
+        return true
+    }
+
     func signIn(phone: String) async {
+        await signIn { try await self.api.login(phone: phone) }
+    }
+
+    func signIn(provider: IdentityProvider, idToken: String) async {
+        await signIn { try await self.api.login(provider: provider, idToken: idToken) }
+    }
+
+    /// `browser` shows Google's page and returns the URL it redirected to. The nonce
+    /// is fetched here, not ahead of time, so a slow page keeps its full lifetime.
+    func signInWithGoogle(browser: @escaping (URL, String) async throws -> URL) async {
+        guard let clientID = signInOptions?.googleClientID else { return }
+        await signIn {
+            let attempt = try GoogleSignInRequest(clientID: clientID, nonce: try await self.api.loginNonce())
+            let callback: URL
+            do { callback = try await browser(attempt.authorizationURL, attempt.callbackScheme) }
+            catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
+                throw GoogleSignInError.cancelled
+            }
+            let code = try attempt.code(fromCallback: callback)
+            let idToken = try await self.api.googleIDToken(for: attempt, code: code)
+            return try await self.api.login(provider: .google, idToken: idToken)
+        }
+    }
+
+    func appleSignInFailed(_ error: Error) {
+        guard (error as? ASAuthorizationError)?.code != .canceled else { return }
+        message = "Apple sign-in did not finish. Please try again."
+    }
+
+    private func signIn(obtaining obtain: () async throws -> SavedSession) async {
         guard !isBusy, let store else { message = storageFailure; return }
         isBusy = true; message = nil
         defer { isBusy = false }
         do {
-            let saved = try await api.login(phone: phone)
+            let saved = try await obtain()
             _ = try await api.whoAmI(session: saved)
             let cached = try store.loadD1(accountID: saved.account.id, as: D1Workspace.self)
             guard cached == nil || cached?.account.id == saved.account.id else { throw APIError.unauthorized }
@@ -82,6 +127,7 @@ final class AppModel: ObservableObject {
             session = saved; isDemo = false; needsSignIn = false; showSignIn = false
             try await synchronize(saved: saved)
         } catch APIError.unauthorized { endRefusedSession() }
+        catch GoogleSignInError.cancelled { return }
         catch {
             // Failed synchronization never publishes an incomplete bootstrap.
             message = error.localizedDescription

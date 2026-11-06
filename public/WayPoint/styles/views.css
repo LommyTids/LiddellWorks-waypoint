@@ -32,6 +32,21 @@
 .empty-state.is-compact { padding: 28px 18px; }
 .auth-primary { width: 100%; }
 .auth-footer { margin-top: 14px; }
+.identity-sign-in { margin-top: 12px; }
+.identity-sign-in .field-hint { margin-bottom: 12px; }
+.identity-buttons { display: grid; gap: 10px; }
+.identity-apple { width: 100%; min-height: 40px; justify-content: center; gap: 8px; background: #000; border-color: #000; color: #fff; }
+.identity-apple:hover { border-color: #000; }
+.identity-logo { width: 18px; height: 18px; }
+.identity-google { min-height: 40px; display: flex; justify-content: center; }
+.auth-divider { margin: 14px 0; text-align: center; font: var(--wp-type-label); color: var(--wp-text-muted); }
+.invite-field { margin-top: 14px; }
+.invite-link { display: flex; align-items: center; gap: 6px; }
+.invite-link input { flex: 1; min-width: 0; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .identity-apple { background: #fff; border-color: #fff; color: #000; }
+}
+:root[data-theme="dark"] .identity-apple { background: #fff; border-color: #fff; color: #000; }
 .manage-users-intro { margin-bottom: 16px; }
 .form-details-hint { margin: 0 0 12px; }
 .companion-form-intro { margin-bottom: 14px; }
