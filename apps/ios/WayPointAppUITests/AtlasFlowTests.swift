@@ -119,8 +119,7 @@ final class AtlasFlowTests: XCTestCase {
         app.navigationBars["Log in"].buttons.firstMatch.tap()
         app.buttons["Explore a demo trip"].tap()
         let trip = app.buttons["trip-demo-lisbon"]
-        XCTAssertTrue(trip.waitForExistence(timeout: 10))
-        for _ in 0..<4 where !trip.isHittable { app.swipeUp() }
+        revealTrip(trip, app: app)
         XCTAssertTrue(trip.isHittable)
         trip.tap()
         let options = app.buttons["agenda-options"]
@@ -156,8 +155,8 @@ final class AtlasFlowTests: XCTestCase {
         app.launch()
         app.buttons["Explore a demo trip"].tap()
         let trip = app.buttons["trip-demo-lisbon"]
-        XCTAssertTrue(trip.waitForExistence(timeout: 10))
-        for _ in 0..<4 where !trip.isHittable { app.swipeUp() }
+        revealTrip(trip, app: app)
+        XCTAssertTrue(trip.isHittable)
         trip.tap()
         let options = app.buttons["agenda-options"]
         let dock = app.buttons["trip-tab-more"]
@@ -224,6 +223,16 @@ final class AtlasFlowTests: XCTestCase {
         app.buttons["filter-person-__trip_superuser__"].tap()
         app.buttons["Done"].tap()
         XCTAssertEqual(app.buttons["trip-people-filter"].value as? String, "1 selected")
+    }
+
+    /// At the largest text sizes the first card can start below the screen, and
+    /// iOS 18's lazy list doesn't build it until it is scrolled near.
+    @MainActor
+    private func revealTrip(_ trip: XCUIElement, app: XCUIApplication) {
+        for _ in 0..<6 {
+            if trip.waitForExistence(timeout: 3) && trip.isHittable { return }
+            app.swipeUp()
+        }
     }
 
     @MainActor
