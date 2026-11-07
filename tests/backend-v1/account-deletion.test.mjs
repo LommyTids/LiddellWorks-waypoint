@@ -351,3 +351,223 @@ test('the summary says how this account signs in, and needs nothing from Apple',
   assert.deepEqual(await s.summary(s.guest.cookie),{linkedSignIn:'apple',appleRevocation:true,blocked:null,tripsErased:0,tripsHandedOver:0,tripsLeft:0});
   assert.equal(apple.calls.length,0);
 });
+
+// ---- The trip rule ---------------------------------------------------------
+const url=new URL('https://staging.test/WayPoint/api/v1/sync/bootstrap?limit=100');
+const visible=async(s,who)=>(await s.store(who).bootstrap(url)).entities.map(e=>`${e.kind}:${e.recordId}`).sort();
+const tripRow=(s,id='trip1')=>s.db.prepare('SELECT * FROM trips WHERE id=?').bind(id).first();
+const record=async(s,kind,id)=>{
+  const row=await s.db.prepare('SELECT * FROM records WHERE kind=? AND id=?').bind(kind,id).first();
+  return row&&{...row,data:JSON.parse(row.payload_json)};
+};
+async function ownTrip(s,who,id='trip1') {
+  await s.store(who).apply(mutation('trip',id,id,{name:'Private plans',homeCurrency:'GBP',notes:'Surprise party'}));
+  await s.store(who).apply(mutation('companion',id,`person-${id}`,{name:'Unlinked friend'}));
+  await s.store(who).apply(mutation('activity',id,`activity-${id}`,{title:'Dinner',companions:[`person-${id}`,'__trip_superuser__']}));
+}
+
+test('a trip only they can open is erased, leaving an empty marker',async t=>{
+  const s=await site(t);
+  await ownTrip(s,s.guest);
+  assert.deepEqual({...await s.summary(s.guest.cookie),linkedSignIn:null,appleRevocation:null},{linkedSignIn:null,appleRevocation:null,blocked:null,tripsErased:1,tripsHandedOver:0,tripsLeft:0});
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  const row=await tripRow(s);
+  assert.deepEqual([row.deleted,row.owner_id,row.metadata_json,row.legacy_extras_json],[1,'','{}','{}']);
+  assert.equal(await count(s,'records'),0);
+  assert.equal(await count(s,'record_tags'),0);
+  assert.doesNotMatch(JSON.stringify(row),new RegExp(s.guest.id));
+});
+
+test('an erased trip disappears for the site owner and its ID is never reused',async t=>{
+  const s=await site(t);
+  await ownTrip(s,s.guest);
+  assert.ok((await visible(s,s.owner)).includes('trip:trip1'));
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  assert.deepEqual(await visible(s,s.owner),[]);
+  await assert.rejects(s.store(s.owner).apply(mutation('trip','trip1','trip1',{name:'Reused',homeCurrency:'GBP'})),e=>e.code==='deleted');
+});
+
+test('participants without accounts, and grants to deleted accounts, do not keep a trip',async t=>{
+  const s=await site(t);
+  await ownTrip(s,s.guest);
+  const gone=await s.account('gone');
+  await s.store(s.guest).setGrant('trip1',{accountId:gone.id,role:'viewer',companionId:'person-trip1'},s.users());
+  await s.post('users/delete',{id:gone.id},{cookie:s.owner.cookie});
+  assert.equal((await s.summary(s.guest.cookie)).tripsErased,1);
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  assert.equal((await tripRow(s)).deleted,1);
+  assert.equal(await count(s,'trip_grants'),0);
+});
+
+test('a shared trip passes to an admin, who becomes its owner',async t=>{
+  const s=await site(t);
+  const admin=await s.account('admin');
+  await sharedTrip(s,{owner:s.guest,guest:admin,role:'admin'});
+  assert.equal((await s.summary(s.guest.cookie)).tripsHandedOver,1);
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  const row=await tripRow(s);
+  assert.deepEqual([row.deleted,row.owner_id],[0,admin.id]);
+  assert.equal(await count(s,'trip_grants'),0);
+  const trip=(await s.store(admin).bootstrap(url)).entities.find(e=>e.kind==='trip');
+  assert.equal(trip.permission.role,'superuser');
+  assert.equal(trip.data.name,'Shared trip');
+});
+
+test('the longest-standing admin inherits',async t=>{
+  const s=await site(t);
+  const later=await s.account('later'),earlier=await s.account('earlier');
+  const doc={users:s.users()};
+  doc.users.find(u=>u.id===later.id).createdAt='2026-06-01T00:00:00.000Z';
+  doc.users.find(u=>u.id===earlier.id).createdAt='2026-01-01T00:00:00.000Z';
+  s.kv.values.set('users',JSON.stringify(doc));
+  await ownTrip(s,s.guest);
+  await s.store(s.guest).setGrant('trip1',{accountId:later.id,role:'admin'},s.users());
+  await s.store(s.guest).setGrant('trip1',{accountId:earlier.id,role:'admin'},s.users());
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  assert.equal((await tripRow(s)).owner_id,earlier.id);
+  assert.equal(await count(s,`trip_grants WHERE account_id='${later.id}' AND role='admin'`),1);
+});
+
+for(const role of ['user','viewer']){
+  test(`with no admin, the site owner takes the trip and a ${role} sees nothing new`,async t=>{
+    const s=await site(t);
+    const member=await s.account('member');
+    await sharedTrip(s,{owner:s.guest,guest:member,role});
+    await s.store(s.guest).apply(mutation('activity','trip1','private',{title:'Not for them',companions:[]}));
+    await s.store(s.guest).apply(mutation('activity','trip1','theirs',{title:'For them',companions:['person1']}));
+    await s.store(s.guest).apply(mutation('expense','trip1','cost',{description:'Deposit',amount:10,currency:'GBP'}));
+    const before=await visible(s,member);
+    assert.ok(before.includes('activity:theirs'));
+    assert.ok(!before.includes('activity:private'));
+    assert.equal((await s.remove(s.guest.cookie)).status,200);
+    assert.equal((await tripRow(s)).owner_id,s.owner.id);
+    assert.deepEqual(await visible(s,member),before);
+    const trip=(await s.store(member).bootstrap(url)).entities.find(e=>e.kind==='trip');
+    assert.equal(trip.permission.role,role);
+  });
+}
+
+test('the old owner\'s tag is removed, so the new owner is not put on their items',async t=>{
+  const s=await site(t);
+  const admin=await s.account('admin');
+  await ownTrip(s,s.guest);
+  await s.store(s.guest).setGrant('trip1',{accountId:admin.id,role:'admin'},s.users());
+  await s.store(s.guest).apply(mutation('activity','trip1','solo',{title:'Their flight',companions:['__trip_superuser__']}));
+  await s.store(s.guest).apply(mutation('activity','trip1','untagged',{title:'Lunch',companions:['person-trip1']}));
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  const both=await record(s,'activity','activity-trip1'),solo=await record(s,'activity','solo'),other=await record(s,'activity','untagged');
+  assert.deepEqual(both.data.companions,['person-trip1']);
+  assert.deepEqual(solo.data.companions,[]);
+  assert.deepEqual([both.revision,solo.revision,other.revision],[2,2,1]);
+  assert.equal(await count(s,"record_tags WHERE companion_id='__trip_superuser__'"),0);
+  assert.equal(await count(s,"record_tags WHERE record_id='activity-trip1' AND companion_id='person-trip1'"),1);
+});
+
+test('on trips that stay, their participant entry becomes Former traveller',async t=>{
+  const s=await site(t);
+  await sharedTrip(s);
+  const store=s.store(s.owner);
+  await store.apply(mutation('companion','trip1','person2',{name:'Someone else',notes:'Keep this'}));
+  await store.apply(mutation('activity','trip1','tagged',{title:'Museum',companions:['person1','person2']}));
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  const entry=await companion(s);
+  assert.equal(entry.name,'Former traveller');
+  assert.equal(entry.notes,'');
+  assert.equal(entry.accountId,undefined);
+  const other=await record(s,'companion','person2');
+  assert.deepEqual([other.data.name,other.data.notes,other.revision],['Someone else','Keep this',1]);
+  assert.deepEqual((await record(s,'activity','tagged')).data.companions,['person1','person2']);
+  assert.doesNotMatch(JSON.stringify(await s.db.prepare('SELECT * FROM records').all()),/Guest name|Allergic/);
+});
+
+test('their own linked entry on a trip they hand over is replaced too',async t=>{
+  const s=await site(t);
+  const admin=await s.account('admin');
+  await ownTrip(s,s.guest);
+  await s.store(s.guest).setGrant('trip1',{accountId:admin.id,role:'admin'},s.users());
+  await s.store(s.guest).apply(mutation('companion','trip1','me',{name:'Me myself'}));
+  await s.db.prepare(`UPDATE records SET payload_json=json_set(payload_json,'$.accountId',?) WHERE id='me'`).bind(s.guest.id).run();
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  assert.equal((await record(s,'companion','me')).data.name,'Former traveller');
+});
+
+test('other people\'s trips are left alone',async t=>{
+  const s=await site(t);
+  const third=await s.account('third');
+  await ownTrip(s,third,'theirs');
+  await ownTrip(s,s.guest,'mine');
+  const before=await visible(s,third);
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  assert.deepEqual(await visible(s,third),before);
+  assert.equal((await tripRow(s,'theirs')).owner_id,third.id);
+});
+
+test('the summary counts each kind of trip',async t=>{
+  const s=await site(t);
+  const member=await s.account('member');
+  await ownTrip(s,s.guest,'solo1');await ownTrip(s,s.guest,'solo2');
+  await ownTrip(s,s.guest,'shared');
+  await s.store(s.guest).setGrant('shared',{accountId:member.id,role:'viewer',companionId:'person-shared'},s.users());
+  await sharedTrip(s);
+  const summary=await s.summary(s.guest.cookie);
+  assert.deepEqual([summary.tripsErased,summary.tripsHandedOver,summary.tripsLeft],[2,1,1]);
+});
+
+test('a second site owner\'s shared trip passes to the remaining site owner',async t=>{
+  const s=await site(t);
+  const doc={users:s.users()};doc.users.find(u=>u.id===s.guest.id).isUberUser=true;s.kv.values.set('users',JSON.stringify(doc));
+  const member=await s.account('member');
+  await sharedTrip(s,{owner:s.guest,guest:member,role:'viewer'});
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  assert.equal((await tripRow(s)).owner_id,s.owner.id);
+});
+
+test('a trip shared while deleting is not erased',async t=>{
+  const s=await site(t);
+  const late=await s.account('late');
+  await ownTrip(s,s.guest);
+  const original=s.db.batch.bind(s.db);
+  s.db.batch=async list=>{
+    if(list[0].sql.startsWith('INSERT INTO write_guards')&&list.length>3){
+      s.db.batch=original;
+      await s.store(s.guest).setGrant('trip1',{accountId:late.id,role:'viewer',companionId:'person-trip1'},s.users());
+    }
+    return original(list);
+  };
+  assert.equal((await s.remove(s.guest.cookie)).status,409);
+  assert.equal((await tripRow(s)).deleted,0);
+  assert.equal(await count(s,'records'),2);
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  assert.equal((await tripRow(s)).owner_id,s.owner.id);
+});
+
+test('a failure partway erases nothing, and repeating a finished step changes nothing',async t=>{
+  const s=await site(t);
+  const admin=await s.account('admin');
+  await ownTrip(s,s.guest,'solo');
+  await ownTrip(s,s.guest,'shared');
+  await s.store(s.guest).setGrant('shared',{accountId:admin.id,role:'admin'},s.users());
+  const original=s.db.batch.bind(s.db);
+  s.db.batch=async list=>{if(list[0].sql.startsWith('INSERT INTO write_guards')&&list.length>3){s.db.batch=original;s.db.failAfter=6;}return original(list);};
+  assert.equal((await s.remove(s.guest.cookie)).status,503);
+  assert.deepEqual([(await tripRow(s,'solo')).deleted,(await tripRow(s,'shared')).owner_id],[0,s.guest.id]);
+  assert.equal(await count(s,'records'),4);
+
+  const put=s.kv.put.bind(s.kv);
+  s.kv.put=async()=>{throw new Error('KV down');};
+  assert.equal((await s.remove(s.guest.cookie)).status,503);
+  s.kv.put=put;
+  const after=await s.db.prepare('SELECT id,owner_id,deleted,revision FROM trips ORDER BY id').all();
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  assert.deepEqual((await s.db.prepare('SELECT id,owner_id,deleted,revision FROM trips ORDER BY id').all()).results,after.results);
+  assert.equal(s.exists(s.guest.id),false);
+});
+
+test('a device still holding the old copy is told to refresh, including after an erase',async t=>{
+  const s=await site(t);
+  await ownTrip(s,s.guest);
+  const cursor=(await s.store(s.owner).bootstrap(url)).syncCursor;
+  assert.equal((await s.remove(s.guest.cookie)).status,200);
+  const changes=new URL('https://staging.test/WayPoint/api/v1/sync/changes?cursor='+encodeURIComponent(cursor));
+  await assert.rejects(s.store(s.owner).changes(changes),e=>e.code==='bootstrap_required');
+});

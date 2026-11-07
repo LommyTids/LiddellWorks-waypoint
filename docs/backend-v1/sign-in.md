@@ -99,8 +99,42 @@ for an account that no longer exists is told the deletion worked.
 | 400 | The confirmation or Apple code is missing or malformed |
 | 401 | The session has ended, so nothing was deleted |
 | 403 | The person confirmed with a different Apple ID, so nothing was deleted |
-| 409 | This is the only site owner, or sharing changed while deleting. Try again for the second |
+| 409 | This is the only site owner, nobody can take over a shared trip, or sharing changed while deleting. Only the last is worth retrying |
 | 503 | D1 or KV failed, production is paused, or this server has no D1 backend |
+
+### What happens to trips
+
+| Trip | What happens |
+| --- | --- |
+| They own it, and no other account can open it | Erased, with its items, tags and grants. An empty row stays, because trip IDs are never reused |
+| They own it, and other accounts can open it | It stays. Ownership passes to the longest-standing admin on the trip, otherwise to the site owner |
+| Someone else owns it | Their access ends |
+
+On every trip that stays, the participant entry linked to their account is
+unlinked, renamed "Former traveller", and its notes are cleared. Items keep their
+tags. Handed-over trips also lose their "Trip owner" tags, because that tag
+follows whoever owns the trip and would otherwise move to the new owner.
+
+Only an admin or the site owner can take a trip over, because both already see
+all of it, so nobody sees anything new. A viewer or user is never promoted: they
+see only the items tagged with them. A grant left behind by an account that no
+longer exists doesn't keep a trip alive.
+
+The only site owner account can't be deleted, matching Manage accounts. The app
+shows how many trips fall into each row before the person confirms, and says that
+shared trips stay.
+
+**App Review risk.** Apple's account deletion page says deletion includes
+"user-generated content that's shared with others". It doesn't address group data
+that other people rely on. This rule keeps items the person may have written on
+shared trips, with their identity removed. Erasing those trips instead would take
+the itinerary from co-travellers, even during a trip, and would let anyone wipe a
+shared trip by deleting their account.
+
+Whether App Review accepts this is a judgement call that no test can settle. The
+risk was seen and accepted when this rule was chosen over erasing every trip the
+person owns. If review refuses it, that stricter rule is the fallback: it means
+changing `deletionPlan` in `src/backend-v1/store.js` and the wording in the app.
 
 ### Ending Apple's access
 
@@ -301,6 +335,9 @@ cursors, and installed apps get stuck on `400 invalid_cursor` when it changes.
   the only site owner account can't be deleted at all.
 - **Manage accounts still deletes only the account.** It leaves that person's
   trips, grants and Apple link in place.
+- **Only linked participant entries are replaced.** A person's name typed into an
+  unlinked participant entry, or into notes on a trip that stays, isn't searched
+  for or removed.
 - **Copies outside D1 outlive a deletion.** The old KV trips (`trip_index`,
   `trip:*`) stay in the live namespace after the move to D1, and the encrypted
   pre-migration backup has no automatic expiry. Both include anyone who later

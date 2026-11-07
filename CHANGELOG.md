@@ -7,6 +7,11 @@
   the server confirms. Apple requires this before App Store review.
 - Add `GET` and `POST /account/deletion`. Every step is safe to repeat, and the
   only site owner account is refused. See `docs/backend-v1/sign-in.md`.
+- Erase trips only that person can open when their account is deleted. Trips they
+  shared stay with the people on them, and pass to an admin on the trip, otherwise
+  to the site owner. Their participant entry becomes "Former traveller". App Review
+  may question keeping shared trips, and that risk was accepted: see
+  `docs/backend-v1/sign-in.md`.
 - Revoke Sign in with Apple when an account is deleted, from a code the app fetches
   at that moment. No Apple token is stored and `/login/identity` is unchanged, so
   older builds are unaffected. Set `WAYPOINT_APPLE_TEAM_ID`,
