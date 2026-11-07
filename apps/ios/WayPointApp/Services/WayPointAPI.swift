@@ -398,7 +398,7 @@ struct AccountDeletionSummary: Decodable, Equatable {
 
     /// Plain statements for the confirmation screen, in the order they matter.
     func consequences(pendingChanges: Int) -> [String] {
-        var lines = ["Your account and sign-in are removed for good. This can't be undone."]
+        var lines = ["Your account and sign-in are removed for good. This can’t be undone."]
         if tripsErased > 0 {
             lines.append("\(trips(tripsErased)) only you can open will be erased.")
         }
@@ -406,10 +406,10 @@ struct AccountDeletionSummary: Decodable, Equatable {
             lines.append("\(trips(tripsHandedOver)) you share with other people \(tripsHandedOver == 1 ? "stays" : "stay") with them, without your name.")
         }
         if tripsLeft > 0 {
-            lines.append("You'll lose access to \(trips(tripsLeft)) shared with you.")
+            lines.append("You’ll lose access to \(trips(tripsLeft)) shared with you.")
         }
         if pendingChanges > 0 {
-            lines.append("\(pendingChanges == 1 ? "1 change" : "\(pendingChanges) changes") on this device that \(pendingChanges == 1 ? "hasn't" : "haven't") synced will be lost.")
+            lines.append("\(pendingChanges == 1 ? "1 change" : "\(pendingChanges) changes") on this device that \(pendingChanges == 1 ? "hasn’t" : "haven’t") synced will be lost.")
         }
         lines.append("Saved trips on this device are removed too.")
         return lines

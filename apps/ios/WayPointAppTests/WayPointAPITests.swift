@@ -250,24 +250,24 @@ final class WayPointAPITests: XCTestCase {
         let none = AccountDeletionSummary(linkedSignIn: nil, appleRevocation: false, blocked: nil,
                                           tripsErased: 0, tripsHandedOver: 0, tripsLeft: 0)
         XCTAssertEqual(none.consequences(pendingChanges: 0), [
-            "Your account and sign-in are removed for good. This can't be undone.",
+            "Your account and sign-in are removed for good. This can’t be undone.",
             "Saved trips on this device are removed too."])
         let one = AccountDeletionSummary(linkedSignIn: nil, appleRevocation: false, blocked: nil,
                                          tripsErased: 1, tripsHandedOver: 1, tripsLeft: 1)
         XCTAssertEqual(one.consequences(pendingChanges: 1), [
-            "Your account and sign-in are removed for good. This can't be undone.",
+            "Your account and sign-in are removed for good. This can’t be undone.",
             "1 trip only you can open will be erased.",
             "1 trip you share with other people stays with them, without your name.",
-            "You'll lose access to 1 trip shared with you.",
-            "1 change on this device that hasn't synced will be lost.",
+            "You’ll lose access to 1 trip shared with you.",
+            "1 change on this device that hasn’t synced will be lost.",
             "Saved trips on this device are removed too."])
         let many = AccountDeletionSummary(linkedSignIn: nil, appleRevocation: false, blocked: nil,
                                           tripsErased: 2, tripsHandedOver: 3, tripsLeft: 4)
         XCTAssertEqual(Array(many.consequences(pendingChanges: 5).dropFirst().dropLast()), [
             "2 trips only you can open will be erased.",
             "3 trips you share with other people stay with them, without your name.",
-            "You'll lose access to 4 trips shared with you.",
-            "5 changes on this device that haven't synced will be lost."])
+            "You’ll lose access to 4 trips shared with you.",
+            "5 changes on this device that haven’t synced will be lost."])
     }
 
     func testConfirmationNeedsTheWholeWord() {

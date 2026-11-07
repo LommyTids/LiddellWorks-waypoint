@@ -309,7 +309,7 @@ final class AppModel: ObservableObject {
         if summary.isLinkedToApple, !appleRevoked {
             lines.append("To finish, open Settings, tap your name, then Sign-In & Security, then Sign in with Apple, and remove WayPoint.")
         }
-        if !removed { lines.append("Some saved data couldn't be removed from this device. Delete the app to remove it.") }
+        if !removed { lines.append("Some saved data couldn’t be removed from this device. Delete the app to remove it.") }
         notice = lines.joined(separator: " ")
     }
 
