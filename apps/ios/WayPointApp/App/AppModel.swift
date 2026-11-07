@@ -16,6 +16,8 @@ final class AppModel: ObservableObject {
     @Published var showSignIn = false
     /// nil until the server has answered. The phone form stays available meanwhile.
     @Published private(set) var signInOptions: SignInOptions?
+    /// A result worth saying on the welcome screen, where `message` reads as an error.
+    @Published private(set) var notice: String?
 
     private var store: WorkspaceStore?
     private let keychain: KeychainSessionStore
@@ -24,16 +26,22 @@ final class AppModel: ObservableObject {
     private var d1: D1Workspace?
     private var hasStarted = false
     private var storageFailure: String?
+    private let appleCredentialState: (String) async -> ASAuthorizationAppleIDProvider.CredentialState?
+    private var revocationWatch: AnyCancellable?
 
     var trips: [TripSnapshot] { workspace?.trips ?? [] }
     var pendingCount: Int { isDemo ? workspace?.mutations.count ?? 0 : d1?.outbox.count ?? 0 }
     var accountName: String { workspace?.account.username ?? "" }
     var canRefresh: Bool { !isDemo && session != nil && !needsSignIn && !isBusy }
+    var canDeleteAccount: Bool { canRefresh }
 
     /// Tests supply isolated services; the app uses the production defaults.
-    init(api: WayPointAPI? = nil, keychain: KeychainSessionStore? = nil, store: WorkspaceStore? = nil) {
+    init(api: WayPointAPI? = nil, keychain: KeychainSessionStore? = nil, store: WorkspaceStore? = nil,
+         appleCredentialState: ((String) async -> ASAuthorizationAppleIDProvider.CredentialState?)? = nil) {
         self.api = api ?? WayPointAPI()
         self.keychain = keychain ?? KeychainSessionStore()
+        self.appleCredentialState = appleCredentialState
+            ?? { try? await ASAuthorizationAppleIDProvider().credentialState(forUserID: $0) }
         do { self.store = try store ?? WorkspaceStore() }
         catch { storageFailure = "Could not open offline storage: \(error.localizedDescription)" }
     }
@@ -41,6 +49,9 @@ final class AppModel: ObservableObject {
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
+        revocationWatch = NotificationCenter.default
+            .publisher(for: ASAuthorizationAppleIDProvider.credentialRevokedNotification)
+            .sink { [weak self] _ in Task { await self?.closeIfAppleRevoked() } }
         guard storageFailure == nil, let store else { message = storageFailure; return }
         do {
             guard let saved = try keychain.read() else { return }
@@ -51,6 +62,7 @@ final class AppModel: ObservableObject {
             // Open the saved copy first so a slow or absent network cannot hold
             // it back. The server's answer in refresh() can still close it.
             publishSavedCopy()
+            if await closeIfAppleRevoked() { return }
             await refresh()
         } catch {
             session = nil; workspace = nil; d1 = nil
@@ -63,7 +75,7 @@ final class AppModel: ObservableObject {
         do {
             let demo = try store.load(accountID: DemoData.workspace.account.id) ?? DemoData.workspace
             try store.save(demo)
-            session = nil; d1 = nil; isDemo = true; workspace = demo; message = nil
+            session = nil; d1 = nil; isDemo = true; workspace = demo; message = nil; notice = nil
         } catch { message = error.localizedDescription }
     }
 
@@ -83,8 +95,12 @@ final class AppModel: ObservableObject {
         await signIn { try await self.api.login(phone: phone) }
     }
 
-    func signIn(provider: IdentityProvider, idToken: String) async {
-        await signIn { try await self.api.login(provider: provider, idToken: idToken) }
+    func signIn(provider: IdentityProvider, idToken: String, appleUserID: String? = nil) async {
+        await signIn {
+            var saved = try await self.api.login(provider: provider, idToken: idToken)
+            saved.appleUserID = appleUserID
+            return saved
+        }
     }
 
     /// `browser` shows Google's page and returns the URL it redirected to. The nonce
@@ -111,7 +127,7 @@ final class AppModel: ObservableObject {
 
     private func signIn(obtaining obtain: () async throws -> SavedSession) async {
         guard !isBusy, let store else { message = storageFailure; return }
-        isBusy = true; message = nil
+        isBusy = true; message = nil; notice = nil
         defer { isBusy = false }
         do {
             let saved = try await obtain()
@@ -259,6 +275,50 @@ final class AppModel: ObservableObject {
         workspace = nil; d1 = nil; session = nil; needsSignIn = false; showSignIn = false
         do { try keychain.clear(); message = "Please sign in again. Your saved drafts are retained for the same account." }
         catch { message = "Sign-in ended, but the saved credential could not be removed: \(error.localizedDescription)" }
+    }
+
+    /// Apple's answer is only about its own link, so a definite revocation closes the
+    /// session and anything else leaves the server to decide. Busy is skipped because
+    /// deleting an account revokes on purpose, and the next launch asks again.
+    @discardableResult
+    private func closeIfAppleRevoked() async -> Bool {
+        guard !isBusy, let userID = session?.appleUserID,
+              await appleCredentialState(userID) == .revoked,
+              session?.appleUserID == userID else { return false }
+        endRefusedSession()
+        return true
+    }
+
+    func accountDeletionSummary() async throws -> AccountDeletionSummary {
+        guard !isDemo, !needsSignIn, let saved = session else { throw AppStateError.unavailable }
+        do { return try await api.accountDeletionSummary(session: saved) }
+        catch APIError.unauthorized { endRefusedSession(); throw APIError.unauthorized }
+    }
+
+    /// Local copies go only once the server confirms, so a failed request loses
+    /// nothing. A refused session keeps them too: that account may well still exist.
+    func deleteAccount(summary: AccountDeletionSummary, appleAuthorizationCode: String? = nil) async throws {
+        guard !isBusy, !isDemo, !needsSignIn, let saved = session else { throw AppStateError.unavailable }
+        isBusy = true
+        defer { isBusy = false }
+        let appleRevoked: Bool
+        do { appleRevoked = try await api.deleteAccount(session: saved, appleAuthorizationCode: appleAuthorizationCode) }
+        catch APIError.unauthorized { endRefusedSession(); return }
+        let removed = removeLocalCopies(accountID: saved.account.id)
+        var lines = ["Your WayPoint account has been deleted."]
+        if summary.isLinkedToApple, !appleRevoked {
+            lines.append("To finish, open Settings, tap your name, then Sign-In & Security, then Sign in with Apple, and remove WayPoint.")
+        }
+        if !removed { lines.append("Some saved data couldn't be removed from this device. Delete the app to remove it.") }
+        notice = lines.joined(separator: " ")
+    }
+
+    private func removeLocalCopies(accountID: String) -> Bool {
+        workspace = nil; d1 = nil; session = nil; needsSignIn = false; showSignIn = false; message = nil
+        var removed = (try? keychain.clear()) != nil
+        if (try? store?.deleteD1(accountID: accountID)) == nil { removed = false }
+        if (try? store?.delete(accountID: accountID)) == nil { removed = false }
+        return removed
     }
 
     func signOut() async {

@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — account deletion
+
+- Add **Delete account** to iOS Settings. The app shows what will happen, asks
+  for `DELETE`, and removes that account's saved trips, drafts and session once
+  the server confirms. Apple requires this before App Store review.
+- Add `GET` and `POST /account/deletion`. Every step is safe to repeat, and the
+  only site owner account is refused. See `docs/backend-v1/sign-in.md`.
+- Revoke Sign in with Apple when an account is deleted, from a code the app fetches
+  at that moment. No Apple token is stored and `/login/identity` is unchanged, so
+  older builds are unaffected. Set `WAYPOINT_APPLE_TEAM_ID`,
+  `WAYPOINT_APPLE_KEY_ID` and the `WAYPOINT_APPLE_PRIVATE_KEY` secret to turn it
+  on. Not yet tried with a real Apple key.
+- Close the iOS session when Apple says its link was revoked, at launch or while
+  running. Drafts stay for the next sign-in.
+
 ## Unreleased — Apple and Google sign-in
 
 - Refuse phone login for the site owner's account, with the same reply as an

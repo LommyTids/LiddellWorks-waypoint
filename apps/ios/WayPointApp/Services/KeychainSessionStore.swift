@@ -6,6 +6,10 @@ struct SavedSession: Codable, Equatable, Sendable {
     let account: Account
     let cookieValue: String
     let expiresAt: Date
+    /// Apple's identifier for this person, when they signed in with Apple here. Only
+    /// used to ask Apple whether its link still stands, never sent to WayPoint.
+    /// Sessions saved by older builds have none, and skip that check.
+    var appleUserID: String? = nil
 
     /// This is only a local expiry/shape check. Only the server can verify the
     /// signature and current account permissions; never trust these claims as grants.

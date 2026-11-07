@@ -206,6 +206,39 @@ export class SyncStore {
     return {protocolVersion:1,results};
   }
 
+  // The trip half of deleting an account. handleAccountDeletion in worker.js runs
+  // this between Apple and removing the account, so it must be safe to repeat.
+  async deletionPlan() {
+    const accountId=this.user.id;
+    const [state,owned,left]=await this.db.batch([
+      this.db.prepare(META),
+      this.db.prepare('SELECT id FROM trips WHERE owner_id=? AND deleted=0').bind(accountId),
+      this.db.prepare('SELECT count(*) AS n FROM trip_grants g JOIN trips t ON t.id=g.trip_id WHERE g.account_id=? AND t.deleted=0 AND t.owner_id<>?').bind(accountId,accountId),
+    ]);
+    return {epoch:metadata(state).epoch,owned:owned.results.map(trip=>trip.id),left:left.results[0].n};
+  }
+
+  async accountDeletionSummary() {
+    const plan=await this.deletionPlan();
+    return {tripsErased:0,tripsHandedOver:0,tripsLeft:plan.left};
+  }
+
+  async deleteAccountData() {
+    const plan=await this.deletionPlan();
+    if(plan.owned.length) fail(503,'not_built','Deleting an account that owns trips is not available yet.');
+    const accountId=this.user.id,now=new Date().toISOString(),token=crypto.randomUUID();
+    const statements=[
+      // The plan is only good for the sharing it saw. Any sharing change moves the epoch.
+      this.db.prepare('INSERT INTO write_guards SELECT ?,CASE WHEN (SELECT epoch FROM sync_state WHERE singleton=1)=? THEN 1 ELSE 0 END').bind(token,plan.epoch),
+      this.db.prepare(`UPDATE records SET payload_json=json_remove(payload_json,'$.accountId'),revision=revision+1,updated_at=? WHERE kind='companion' AND json_extract(payload_json,'$.accountId')=?`).bind(now,accountId),
+      this.db.prepare('DELETE FROM trip_grants WHERE account_id=?').bind(accountId),
+      this.db.prepare('DELETE FROM mutation_receipts WHERE account_id=?').bind(accountId),
+      this.db.prepare('DELETE FROM write_guards WHERE token=?').bind(token),
+    ];
+    try { await this.db.batch(statements); }
+    catch(error) { if(/CHECK constraint failed/.test(error.message)) fail(409,'concurrent_change','Sharing changed while your account was being deleted. Please try again.'); throw error; }
+  }
+
   async setGrant(tripID,body,accounts) {
     const tripId=id(tripID); const accountId=id(body?.accountId);
     if (!accounts.some(a=>a.id===accountId)) fail(400,'invalid_account','Account unavailable.');

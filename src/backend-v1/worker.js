@@ -7,7 +7,7 @@ import { APIError, fail, readJSON, mutation } from './protocol.js';
 import { SyncStore } from './store.js';
 
 const PREFIX='/WayPoint/api/v1';
-const AUTH_PATHS=new Set(['/WayPoint/api/login','/WayPoint/api/login/config','/WayPoint/api/login/nonce','/WayPoint/api/login/identity','/WayPoint/api/invites','/WayPoint/api/identities/reset','/WayPoint/api/sessions/end-all','/WayPoint/api/logout','/WayPoint/api/whoami','/WayPoint/api/setup','/WayPoint/api/users','/WayPoint/api/users/delete','/WayPoint/api/account/avatar','/WayPoint/api/site-status','/WayPoint/api/flight-lookup','/WayPoint/api/location-search','/WayPoint/api/location-boundary','/WayPoint/api/location-boundaries']);
+const AUTH_PATHS=new Set(['/WayPoint/api/login','/WayPoint/api/login/config','/WayPoint/api/login/nonce','/WayPoint/api/login/identity','/WayPoint/api/invites','/WayPoint/api/identities/reset','/WayPoint/api/sessions/end-all','/WayPoint/api/logout','/WayPoint/api/whoami','/WayPoint/api/setup','/WayPoint/api/users','/WayPoint/api/users/delete','/WayPoint/api/account/avatar','/WayPoint/api/account/deletion','/WayPoint/api/site-status','/WayPoint/api/flight-lookup','/WayPoint/api/location-search','/WayPoint/api/location-boundary','/WayPoint/api/location-boundaries']);
 function json(value,status=200) {
   return new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'}});
 }
@@ -60,7 +60,13 @@ export default {
           const body=await readJSON(request,16384);
           request=new Request(request.url,{method:'POST',headers:request.headers,body:JSON.stringify(body)});
         }
-        const response=await legacyWorker.fetch(request,authEnv,ctx);
+        // Account deletion spans KV and D1. The auth code stays in worker.js, so it
+        // is handed the trip side here rather than importing it.
+        const accountData=url.pathname==='/WayPoint/api/account/deletion'?{
+          summary:(user,users)=>new SyncStore(env.WAYPOINT_DB,user,env.WAYPOINT_SESSION_SECRET).accountDeletionSummary(users),
+          remove:(user,users)=>new SyncStore(env.WAYPOINT_DB,user,env.WAYPOINT_SESSION_SECRET).deleteAccountData(users),
+        }:undefined;
+        const response=await legacyWorker.fetch(request,{...authEnv,WAYPOINT_ACCOUNT_DATA:accountData},ctx);
         const headers=new Headers(response.headers); headers.set('Cache-Control','no-store');
         return new Response(response.body,{status:response.status,headers});
       }

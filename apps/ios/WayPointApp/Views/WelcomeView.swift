@@ -29,6 +29,13 @@ struct WelcomeView: View {
                         feature("Your people, your plans", detail: "See who’s joining each part of the journey.", symbol: "person.2")
                         feature("Ready to go offline", detail: "Downloaded plans and saved places travel with you.", symbol: "suitcase.rolling")
                     }
+                    if let notice = model.notice {
+                        Label(notice, systemImage: "checkmark.circle")
+                            .font(.subheadline)
+                            .foregroundStyle(WayPointStyle.navy)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("welcome-notice")
+                    }
                     if let message = model.message { AuthErrorNotice(message: message) }
                 }
                 .padding(24)
@@ -222,7 +229,7 @@ struct SignInView: View {
             guard let data = credential?.identityToken, let token = String(data: data, encoding: .utf8) else {
                 return model.appleSignInFailed(ASAuthorizationError(.failed))
             }
-            Task { await model.signIn(provider: .apple, idToken: token) }
+            Task { await model.signIn(provider: .apple, idToken: token, appleUserID: credential?.user) }
         }
     }
 

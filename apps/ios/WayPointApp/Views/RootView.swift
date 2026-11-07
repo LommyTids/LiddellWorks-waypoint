@@ -223,6 +223,17 @@ private struct SettingsView: View {
                 } footer: {
                     Text("Signing out keeps drafts on this device for your next sign-in to the same account.")
                 }
+                if !model.isDemo {
+                    Section {
+                        NavigationLink { DeleteAccountView() } label: {
+                            Text("Delete account").foregroundStyle(WayPointStyle.danger)
+                        }
+                        .disabled(!model.canDeleteAccount)
+                        .accessibilityIdentifier("delete-account")
+                    } footer: {
+                        Text(model.needsSignIn ? "Sign in first to delete your account." : "Removes your account for good. You’ll see what happens to your trips first.")
+                    }
+                }
                 Section {
                     LabeledContent("WayPoint", value: "iOS production sync")
                 }

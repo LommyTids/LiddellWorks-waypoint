@@ -178,6 +178,121 @@ final class WayPointAPITests: XCTestCase {
         XCTAssertNil(identity.renewed)
     }
 
+    func testDeletionSendsTheConfirmationAndApplesCode() async throws {
+        let current = session()
+        let client = api(status: 200, body: "{\"status\":\"ok\",\"appleRevoked\":true}") { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/waypoint/api/account/deletion")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "wp_session=\(current.cookieValue)")
+            let payload = try? JSONSerialization.jsonObject(with: requestBody(request)) as? [String: String]
+            XCTAssertEqual(payload, ["confirm": "DELETE", "appleAuthorizationCode": "apple-code"])
+        }
+        let revoked = try await client.deleteAccount(session: current, appleAuthorizationCode: "apple-code")
+        XCTAssertTrue(revoked)
+    }
+
+    func testDeletionWithoutAppleSendsNoCode() async throws {
+        let client = api(status: 200, body: "{\"status\":\"ok\",\"appleRevoked\":false}") { request in
+            let payload = try? JSONSerialization.jsonObject(with: requestBody(request)) as? [String: String]
+            XCTAssertEqual(payload, ["confirm": "DELETE"])
+        }
+        let revoked = try await client.deleteAccount(session: session(), appleAuthorizationCode: nil)
+        XCTAssertFalse(revoked)
+    }
+
+    func testDeletionRefusalsShowTheServersReasonInEitherFormat() async throws {
+        let plain = api(status: 409, body: "{\"error\":\"This is the site owner's account.\"}")
+        do { _ = try await plain.deleteAccount(session: session(), appleAuthorizationCode: nil); XCTFail("Expected refusal") }
+        catch APIError.server(let message) { XCTAssertEqual(message, "This is the site owner's account.") }
+        let structured = api(status: 409, body: "{\"error\":{\"code\":\"concurrent_change\",\"message\":\"Sharing changed. Try again.\"}}")
+        do { _ = try await structured.deleteAccount(session: session(), appleAuthorizationCode: nil); XCTFail("Expected refusal") }
+        catch APIError.server(let message) { XCTAssertEqual(message, "Sharing changed. Try again.") }
+        let wrongApple = api(status: 403, body: "{\"error\":\"That isn't the Apple ID linked to this account.\"}")
+        do { _ = try await wrongApple.deleteAccount(session: session(), appleAuthorizationCode: "code"); XCTFail("Expected refusal") }
+        catch APIError.server(let message) { XCTAssertEqual(message, "That isn't the Apple ID linked to this account.") }
+    }
+
+    func testDeletionOutagesAreWordedForThePerson() async throws {
+        let paused = api(status: 503, body: "{\"error\":{\"code\":\"migration_paused\",\"message\":\"Saving is paused.\"}}")
+        do { _ = try await paused.deleteAccount(session: session(), appleAuthorizationCode: nil); XCTFail("Expected refusal") }
+        catch APIError.server(let message) { XCTAssertEqual(message, "Saving is paused.") }
+        let storage = api(status: 503, body: "{\"error\":{\"code\":\"service_unavailable\",\"message\":\"Retry using the same mutation IDs.\"}}")
+        do { _ = try await storage.deleteAccount(session: session(), appleAuthorizationCode: nil); XCTFail("Expected refusal") }
+        catch APIError.server(let message) { XCTAssertEqual(message, "Your account has not been deleted. Please try again.") }
+    }
+
+    func testAnUnrecognisedDeletionReplyIsNotTreatedAsDone() async throws {
+        let client = api(status: 200, body: "{\"status\":\"pending\"}")
+        do { _ = try await client.deleteAccount(session: session(), appleAuthorizationCode: nil); XCTFail("Expected failure") }
+        catch APIError.invalidResponse { }
+    }
+
+    func testDeletionSummaryIgnoresFieldsItDoesNotKnow() async throws {
+        let client = api(status: 200, body: "{\"linkedSignIn\":\"apple\",\"appleRevocation\":true,\"blocked\":null,\"tripsErased\":1,\"tripsHandedOver\":2,\"tripsLeft\":3,\"later\":true}")
+        let summary = try await client.accountDeletionSummary(session: session())
+        XCTAssertTrue(summary.confirmsWithApple)
+        XCTAssertEqual([summary.tripsErased, summary.tripsHandedOver, summary.tripsLeft], [1, 2, 3])
+    }
+
+    func testAppleIsOnlyAskedWhenTheServerCanUseItsCode() {
+        func summary(_ linked: String?, revocation: Bool) -> AccountDeletionSummary {
+            AccountDeletionSummary(linkedSignIn: linked, appleRevocation: revocation, blocked: nil,
+                                   tripsErased: 0, tripsHandedOver: 0, tripsLeft: 0)
+        }
+        XCTAssertTrue(summary("apple", revocation: true).confirmsWithApple)
+        XCTAssertFalse(summary("apple", revocation: false).confirmsWithApple)
+        XCTAssertTrue(summary("apple", revocation: false).isLinkedToApple)
+        XCTAssertFalse(summary("google", revocation: true).confirmsWithApple)
+        XCTAssertFalse(summary(nil, revocation: true).confirmsWithApple)
+    }
+
+    func testConfirmationScreenStatesOnlyWhatApplies() {
+        let none = AccountDeletionSummary(linkedSignIn: nil, appleRevocation: false, blocked: nil,
+                                          tripsErased: 0, tripsHandedOver: 0, tripsLeft: 0)
+        XCTAssertEqual(none.consequences(pendingChanges: 0), [
+            "Your account and sign-in are removed for good. This can't be undone.",
+            "Saved trips on this device are removed too."])
+        let one = AccountDeletionSummary(linkedSignIn: nil, appleRevocation: false, blocked: nil,
+                                         tripsErased: 1, tripsHandedOver: 1, tripsLeft: 1)
+        XCTAssertEqual(one.consequences(pendingChanges: 1), [
+            "Your account and sign-in are removed for good. This can't be undone.",
+            "1 trip only you can open will be erased.",
+            "1 trip you share with other people stays with them, without your name.",
+            "You'll lose access to 1 trip shared with you.",
+            "1 change on this device that hasn't synced will be lost.",
+            "Saved trips on this device are removed too."])
+        let many = AccountDeletionSummary(linkedSignIn: nil, appleRevocation: false, blocked: nil,
+                                          tripsErased: 2, tripsHandedOver: 3, tripsLeft: 4)
+        XCTAssertEqual(Array(many.consequences(pendingChanges: 5).dropFirst().dropLast()), [
+            "2 trips only you can open will be erased.",
+            "3 trips you share with other people stay with them, without your name.",
+            "You'll lose access to 4 trips shared with you.",
+            "5 changes on this device that haven't synced will be lost."])
+    }
+
+    func testConfirmationNeedsTheWholeWord() {
+        XCTAssertTrue(AccountDeletionSummary.isConfirmed("DELETE"))
+        XCTAssertTrue(AccountDeletionSummary.isConfirmed(" delete\n"))
+        XCTAssertFalse(AccountDeletionSummary.isConfirmed(""))
+        XCTAssertFalse(AccountDeletionSummary.isConfirmed("DELET"))
+        XCTAssertFalse(AccountDeletionSummary.isConfirmed("DELETE ACCOUNT"))
+    }
+
+    func testRenewedSessionKeepsItsAppleIdentifier() async throws {
+        var current = testSession(expiresIn: 3500)
+        current.appleUserID = "apple.user"
+        let fresh = testSession(expiresIn: 86_400)
+        let client = api(status: 200, body: identityBody, headers: ["Set-Cookie": renewalCookie(fresh)])
+        let renewed = try await client.whoAmI(session: current).renewed
+        XCTAssertEqual(renewed?.appleUserID, "apple.user")
+    }
+
+    func testSessionSavedByAnOlderBuildStillOpens() throws {
+        let older = try JSONEncoder().encode(session())
+        XCTAssertFalse(String(decoding: older, as: UTF8.self).contains("appleUserID"))
+        XCTAssertNil(try JSONDecoder().decode(SavedSession.self, from: older).appleUserID)
+    }
+
     func testExpiredSessionNamesItsAccountButCannotBeSent() async throws {
         let expired = testSession(expiresIn: -60)
         XCTAssertNoThrow(try expired.validateShape())
@@ -259,7 +374,8 @@ final class AppModelOfflineTests: XCTestCase {
         StubProtocol.handler = nil
     }
 
-    private func model(routes: @escaping (String) throws -> (Int, String, [String: String])) -> AppModel {
+    private func model(appleState: ((String) async -> ASAuthorizationAppleIDProvider.CredentialState?)? = nil,
+                       routes: @escaping (String) throws -> (Int, String, [String: String])) -> AppModel {
         let log = requests
         StubProtocol.handler = { request in
             let path = request.url?.path.replacingOccurrences(of: "/waypoint/api/", with: "") ?? ""
@@ -270,7 +386,8 @@ final class AppModelOfflineTests: XCTestCase {
         }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubProtocol.self]
-        return AppModel(api: WayPointAPI(configuration: configuration), keychain: keychain, store: store)
+        return AppModel(api: WayPointAPI(configuration: configuration), keychain: keychain, store: store,
+                        appleCredentialState: appleState ?? { _ in nil })
     }
 
     private func savedTrip(account: Account? = nil, id: String = "trip") throws {
@@ -281,9 +398,10 @@ final class AppModelOfflineTests: XCTestCase {
         try store.saveD1(state, accountID: owner.id)
     }
 
-    private func signedIn(expiresIn seconds: TimeInterval = 3500) throws {
+    private func signedIn(expiresIn seconds: TimeInterval = 3500, appleUserID: String? = nil) throws {
         // Saved while still in date: a stored session only expires by ageing.
-        let session = testSession(expiresIn: seconds)
+        var session = testSession(expiresIn: seconds)
+        session.appleUserID = appleUserID
         try keychain.save(session, at: session.expiresAt.addingTimeInterval(-1))
     }
 
@@ -534,6 +652,226 @@ final class AppModelOfflineTests: XCTestCase {
         XCTAssertEqual(model.trips.map(\.name), ["Saved trip"])
         XCTAssertTrue(model.needsSignIn)
     }
+
+    // MARK: Deleting an account
+
+    private let deleted = "{\"status\":\"ok\",\"appleRevoked\":false}"
+    private let deletedAndRevoked = "{\"status\":\"ok\",\"appleRevoked\":true}"
+
+    private func summary(linked: String? = nil) -> AccountDeletionSummary {
+        AccountDeletionSummary(linkedSignIn: linked, appleRevocation: linked == "apple", blocked: nil,
+                               tripsErased: 1, tripsHandedOver: 0, tripsLeft: 0)
+    }
+
+    /// Signed in with a saved trip open, on a server that answers deletion with `deletion`.
+    private func openModel(appleUserID: String? = nil,
+                           appleState: ((String) async -> ASAuthorizationAppleIDProvider.CredentialState?)? = nil,
+                           deletion: @escaping () throws -> (Int, String, [String: String])) async throws -> AppModel {
+        try savedTrip(); try signedIn(appleUserID: appleUserID)
+        let model = model(appleState: appleState) { [capabilities, emptyChanges] path in
+            switch path {
+            case "whoami": return (200, identityBody, [:])
+            case "v1/sync/capabilities": return (200, capabilities, [:])
+            case "v1/sync/changes": return (200, emptyChanges, [:])
+            case "account/deletion": return try deletion()
+            default: throw URLError(.badServerResponse)
+            }
+        }
+        await model.start()
+        XCTAssertEqual(model.trips.map(\.name), ["Saved trip"])
+        return model
+    }
+
+    func testDeletingAnAccountRemovesItsCopiesAndNoOneElses() async throws {
+        let other = Account(id: "other_account", username: "Other")
+        try savedTrip(account: other)
+        try store.save(LocalWorkspace(account: account))
+        let reply = deleted
+        let model = try await openModel { (200, reply, [:]) }
+        XCTAssertTrue(model.canDeleteAccount)
+
+        try await model.deleteAccount(summary: summary())
+
+        XCTAssertNil(try keychain.read())
+        XCTAssertNil(try reloadedState())
+        XCTAssertNil(try store.load(accountID: account.id))
+        XCTAssertNil(model.workspace)
+        XCTAssertFalse(model.canDeleteAccount)
+        XCTAssertNil(model.message)
+        XCTAssertEqual(model.notice, "Your WayPoint account has been deleted.")
+        XCTAssertNotNil(try store.loadD1(accountID: other.id, as: D1Workspace.self))
+    }
+
+    func testDeletingWithNoSavedCopyIsNotAnError() throws {
+        XCTAssertNoThrow(try store.deleteD1(accountID: "never_saved"))
+    }
+
+    func testFailedDeletionLosesNothing() async throws {
+        let model = try await openModel { throw URLError(.notConnectedToInternet) }
+        do { try await model.deleteAccount(summary: summary()); XCTFail("Expected failure") } catch { }
+        XCTAssertNotNil(try keychain.read())
+        XCTAssertNotNil(try reloadedState())
+        XCTAssertEqual(model.trips.map(\.name), ["Saved trip"])
+        XCTAssertNil(model.notice)
+        XCTAssertTrue(model.canDeleteAccount)
+    }
+
+    func testTryingAgainAfterALostReplyFinishes() async throws {
+        let log = requests, reply = deleted
+        let model = try await openModel {
+            if log.count(of: "account/deletion") == 1 { throw URLError(.networkConnectionLost) }
+            return (200, reply, [:])
+        }
+        do { try await model.deleteAccount(summary: summary()); XCTFail("Expected failure") } catch { }
+        try await model.deleteAccount(summary: summary())
+        XCTAssertNil(try keychain.read())
+        XCTAssertNil(try reloadedState())
+        XCTAssertEqual(model.notice, "Your WayPoint account has been deleted.")
+    }
+
+    func testRefusedDeletionShowsWhyAndLosesNothing() async throws {
+        let model = try await openModel { (409, "{\"error\":\"This is the site owner's account.\"}", [:]) }
+        do { try await model.deleteAccount(summary: summary()); XCTFail("Expected refusal") }
+        catch APIError.server(let message) { XCTAssertEqual(message, "This is the site owner's account.") }
+        XCTAssertNotNil(try keychain.read())
+        XCTAssertEqual(model.trips.map(\.name), ["Saved trip"])
+    }
+
+    func testAnEndedSessionKeepsDraftsBecauseTheAccountMayStillExist() async throws {
+        let model = try await openModel { (401, "{\"error\":\"Please log in.\"}", [:]) }
+        try await model.deleteAccount(summary: summary())
+        XCTAssertNil(try keychain.read())
+        XCTAssertNil(model.workspace)
+        XCTAssertNotNil(try reloadedState())
+        XCTAssertNil(model.notice)
+        XCTAssertNotNil(model.message)
+    }
+
+    func testAppleCodeIsSentAndAFinishedRevocationNeedsNoFurtherStep() async throws {
+        let reply = deletedAndRevoked
+        let model = try await openModel { (200, reply, [:]) }
+        try await model.deleteAccount(summary: summary(linked: "apple"), appleAuthorizationCode: "apple-code")
+        let sent = try XCTUnwrap(requests.bodies(for: "account/deletion").first)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: sent) as? [String: String],
+                       ["confirm": "DELETE", "appleAuthorizationCode": "apple-code"])
+        XCTAssertEqual(model.notice, "Your WayPoint account has been deleted.")
+    }
+
+    func testAppleLinkThatRemainsGetsTheManualStep() async throws {
+        let reply = deleted
+        let model = try await openModel { (200, reply, [:]) }
+        try await model.deleteAccount(summary: summary(linked: "apple"))
+        XCTAssertEqual(model.notice, "Your WayPoint account has been deleted. To finish, open Settings, tap your name, then Sign-In & Security, then Sign in with Apple, and remove WayPoint.")
+    }
+
+    func testOtherSignInsNeverGetTheAppleStep() async throws {
+        let reply = deleted
+        let model = try await openModel { (200, reply, [:]) }
+        try await model.deleteAccount(summary: summary(linked: "google"))
+        XCTAssertEqual(model.notice, "Your WayPoint account has been deleted.")
+    }
+
+    func testTheDemoHasNoAccountToDelete() async throws {
+        let model = model { _ in throw URLError(.badServerResponse) }
+        model.enterDemo()
+        XCTAssertFalse(model.canDeleteAccount)
+        do { try await model.deleteAccount(summary: summary()); XCTFail("Expected refusal") } catch { }
+        do { _ = try await model.accountDeletionSummary(); XCTFail("Expected refusal") } catch { }
+        XCTAssertEqual(requests.count, 0)
+        XCTAssertNotNil(model.workspace)
+    }
+
+    func testAnExpiredSessionMustSignInBeforeDeleting() async throws {
+        try savedTrip(); try signedIn(expiresIn: -60)
+        let model = model { _ in throw URLError(.notConnectedToInternet) }
+        await model.start()
+        XCTAssertTrue(model.needsSignIn)
+        XCTAssertFalse(model.canDeleteAccount)
+        do { try await model.deleteAccount(summary: summary()); XCTFail("Expected refusal") } catch { }
+        XCTAssertEqual(requests.count(of: "account/deletion"), 0)
+        XCTAssertEqual(model.trips.map(\.name), ["Saved trip"])
+    }
+
+    func testSigningInAgainClearsTheDeletionNotice() async throws {
+        let reply = deleted
+        let model = try await openModel { (200, reply, [:]) }
+        try await model.deleteAccount(summary: summary())
+        XCTAssertNotNil(model.notice)
+        model.enterDemo()
+        XCTAssertNil(model.notice)
+    }
+
+    // MARK: Apple's own view of the link
+
+    func testAppleSignInKeepsApplesIdentifierOutOfTheRequest() async throws {
+        let model = acceptingModel()
+        await model.signIn(provider: .apple, idToken: "apple.id.token", appleUserID: "apple.user")
+        XCTAssertEqual(try keychain.read()?.appleUserID, "apple.user")
+        let sent = try XCTUnwrap(requests.bodies(for: "login/identity").first)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: sent) as? [String: String],
+                       ["provider": "apple", "idToken": "apple.id.token"])
+    }
+
+    func testRevokedAppleLinkClosesTheSessionAtLaunchAndKeepsDrafts() async throws {
+        try savedTrip(); try signedIn(appleUserID: "apple.user")
+        var asked: [String] = []
+        let model = model(appleState: { asked.append($0); return .revoked }) { _ in throw URLError(.badServerResponse) }
+        await model.start()
+        XCTAssertEqual(asked, ["apple.user"])
+        XCTAssertNil(model.workspace)
+        XCTAssertNil(try keychain.read())
+        XCTAssertNotNil(try reloadedState())
+        XCTAssertEqual(requests.count, 0)
+    }
+
+    func testOnlyADefiniteRevocationClosesTheSession() async throws {
+        let states: [ASAuthorizationAppleIDProvider.CredentialState?] = [.authorized, .notFound, .transferred, nil]
+        for state in states {
+            let reply = deleted
+            let model = try await openModel(appleUserID: "apple.user", appleState: { _ in state }) { (200, reply, [:]) }
+            XCTAssertNotNil(model.workspace)
+            XCTAssertNotNil(try keychain.read())
+        }
+    }
+
+    func testSessionsWithoutAnAppleIdentifierAreNotChecked() async throws {
+        var asked = false
+        let reply = deleted
+        _ = try await openModel(appleState: { _ in asked = true; return .revoked }) { (200, reply, [:]) }
+        XCTAssertFalse(asked)
+    }
+
+    func testRevocationWhileRunningClosesTheSession() async throws {
+        var state = ASAuthorizationAppleIDProvider.CredentialState.authorized
+        let reply = deleted
+        let model = try await openModel(appleUserID: "apple.user", appleState: { _ in state }) { (200, reply, [:]) }
+        state = .revoked
+        NotificationCenter.default.post(name: ASAuthorizationAppleIDProvider.credentialRevokedNotification, object: nil)
+        for _ in 0..<200 where model.workspace != nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertNil(model.workspace)
+        XCTAssertNil(try keychain.read())
+    }
+
+    func testApplesNoticeDuringDeletionDoesNotInterruptIt() async throws {
+        let reply = deletedAndRevoked
+        let revoked = ManagedFlag()
+        let model = try await openModel(appleUserID: "apple.user", appleState: { _ in revoked.isSet ? .revoked : .authorized }) {
+            revoked.set()
+            NotificationCenter.default.post(name: ASAuthorizationAppleIDProvider.credentialRevokedNotification, object: nil)
+            return (200, reply, [:])
+        }
+        try await model.deleteAccount(summary: summary(linked: "apple"), appleAuthorizationCode: "apple-code")
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(model.notice, "Your WayPoint account has been deleted.")
+        XCTAssertNil(model.message)
+    }
+}
+
+private final class ManagedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    var isSet: Bool { lock.withLock { value } }
+    func set() { lock.withLock { value = true } }
 }
 
 /// URLProtocol runs off the main actor, so the log guards its own state.

@@ -15,7 +15,9 @@ owner-issued invite can link one.
 | Apple and Google buttons on the website | Built, and hidden until client IDs are set |
 | Invite and Reset sign-in in Manage accounts | Built, and hidden until client IDs are set |
 | Apple and Google sign-in in the iOS app | Built, and hidden until the app client IDs are set. Not yet tried with a real Apple or Google account |
-| In-app account deletion and Apple token revocation | Not built; required before App Store review |
+| In-app account deletion | Built in iOS Settings. It needs the D1 backend, and refuses to run without it |
+| Apple token revocation | Built, and off until the Apple key is set. Not yet tried with a real key |
+| Apple credential checks in the app | Built, for sessions signed in with Apple on this build or later |
 
 ## Approving someone
 
@@ -43,6 +45,8 @@ All paths start at `/WayPoint/api`.
 | `POST /invites` | Owner | `{accountId}`. Returns `{invite,accountId,username,expiresAt}`. Valid for seven days |
 | `POST /identities/reset` | Owner | `{accountId}`. Removes the linked sign-in and any unused invite, and ends the account's sessions |
 | `POST /sessions/end-all` | Owner | `{}`. Ends every session, then returns a new one for the caller |
+| `GET /account/deletion` | Signed in | What deleting this account would do: `{linkedSignIn,appleRevocation,blocked,tripsErased,tripsHandedOver,tripsLeft}` |
+| `POST /account/deletion` | Signed in | `{confirm:"DELETE",appleAuthorizationCode?}`. Deletes the caller's own account and clears the cookie. Returns `{status:"ok",appleRevoked}` |
 
 `/login/identity` responses:
 
@@ -70,16 +74,88 @@ The reset signs that person out everywhere. Their phone hides its saved trips
 until they sign in again, and their drafts stay on the device. If you reset your
 own account, sign back in at `/waypoint/#owner-login`.
 
+## Deleting an account
+
+Anyone signed in to the iOS app can delete their own account from **Settings**.
+Apple requires this (guideline 5.1.1(v)). The app shows what will happen, then
+asks the person to type `DELETE`.
+
+The server works in this order, so stopping at any point leaves the account in
+place to try again:
+
+1. It ends WayPoint's access to their Apple ID, if they confirmed with Apple.
+2. It updates their trips and removes their access in D1.
+3. It removes the account from KV, which ends all of its sessions at once.
+
+The app removes that account's saved trips, drafts and session only after the
+server confirms. If the reply is lost, trying again is safe: a genuine session
+for an account that no longer exists is told the deletion worked.
+
+`POST /account/deletion` responses:
+
+| Status | Meaning |
+| --- | --- |
+| 200 | Deleted. `appleRevoked` says whether Apple's access ended |
+| 400 | The confirmation or Apple code is missing or malformed |
+| 401 | The session has ended, so nothing was deleted |
+| 403 | The person confirmed with a different Apple ID, so nothing was deleted |
+| 409 | This is the only site owner, or sharing changed while deleting. Try again for the second |
+| 503 | D1 or KV failed, production is paused, or this server has no D1 backend |
+
+### Ending Apple's access
+
+The app asks Apple for a fresh authorization code at the moment of deletion. The
+server exchanges that code for a token and revokes it straight away, using a
+client secret it signs with the `.p8` key.
+
+Apple's notes describe storing a token at sign-in. WayPoint doesn't, for three
+reasons: no Apple credential sits in KV, `/login/identity` doesn't change so
+older builds are unaffected, and accounts linked before this shipped can still be
+revoked. An account stores only `{provider, sub, linkedAt}`, as before.
+
+Apple says a deletion must go ahead even without a token, so revocation never
+blocks one:
+
+| What happens | Result |
+| --- | --- |
+| The person confirms with a different Apple ID | Nothing is deleted. They can try again, or delete without Apple |
+| Apple refuses the code or revocation, or can't be reached | The account is deleted, with `appleRevoked:false` |
+| The key isn't set | The app doesn't ask Apple. The account is deleted, with `appleRevoked:false` |
+| The person chooses **Delete without Apple** | The account is deleted, with `appleRevoked:false` |
+
+After any of the last three, the app tells the person how to remove WayPoint in
+the Settings app. Failures are logged with Apple's error code and nothing else.
+
+WayPoint holds no Google token, so a Google account has nothing to revoke.
+
+The app also asks Apple at launch whether its link still stands, and listens for
+Apple's revocation notice while running. A revoked link closes the session and
+keeps drafts, the same as a session the server refuses. Any other answer leaves
+the decision to the server. Sessions saved by older builds have no Apple
+identifier and skip the check until the next sign-in.
+
 ## Worker variables
 
 Set these in the Cloudflare dashboard. `wrangler.toml` has `keep_vars = true` and
-no `[vars]` block. None of them are secrets.
+no `[vars]` block. None of these are secrets.
 
 | Variable | Value |
 | --- | --- |
 | `WAYPOINT_APPLE_CLIENT_IDS` | Services ID first, then the iOS bundle ID, separated by a comma |
 | `WAYPOINT_GOOGLE_CLIENT_IDS` | Web client ID first, then the iOS client ID, separated by a comma |
 | `WAYPOINT_PHONE_LOGIN` | Set to `off` at cutover. Leave unset until then |
+| `WAYPOINT_APPLE_TEAM_ID` | Your 10-character Apple team ID |
+| `WAYPOINT_APPLE_KEY_ID` | The Key ID of the Sign in with Apple key |
+
+The key itself is a secret, and is only used to revoke Apple's access:
+
+```bash
+npx wrangler secret put WAYPOINT_APPLE_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8
+```
+
+Revocation stays off until all three are set and
+`WAYPOINT_APPLE_CLIENT_IDS` lists the app's bundle ID second. Replacing the key
+needs nothing else, because a client secret is signed fresh for each deletion.
 
 The first ID in each list is the one the website uses. The second is the app's,
 and the app shows a provider's button only when that second ID is set.
@@ -105,9 +181,10 @@ slightly from these.
 
    The Primary App ID must be the app. That is what gives one person the same
    Apple identifier on the website and in the app.
-4. Before account deletion is built, create a **Key** with Sign in with Apple
-   enabled. Keep the `.p8` file safe and never commit it. It will be a Worker
-   secret, and is only needed for token revocation.
+4. Create a **Key** with Sign in with Apple enabled, and choose
+   `com.liddellworks.waypoint` as its Primary App ID. Apple lets you download the
+   `.p8` file only once. Keep it safe and never commit it. See
+   [Worker variables](#worker-variables) for where it goes.
 
 The website uses Apple's popup flow (`usePopup: true`). The redirect flow posts a
 form from Apple's site, which the Worker rejects as a cross-site write. Apple
@@ -141,6 +218,8 @@ refuses localhost and IP addresses, so try it on the real domain.
 - **The phone form** stays until `/login/config` says `phoneLogin:false`. It also
   shows whenever that route can't be reached, so a server without these routes
   behaves as it did before.
+- **Delete account** is in Settings. It's hidden in the demo, and disabled until
+  someone with an expired session signs in again.
 
 The app has the Sign in with Apple entitlement in
 `apps/ios/WayPointApp/WayPoint.entitlements`. With automatic signing, Xcode needs
@@ -158,6 +237,20 @@ cutover, try these with the client IDs set, on a physical iPhone:
 3. Do the same with Google, and confirm Google's page returns to the app.
 4. Cancel each one partway. The app should say nothing and stay on the sign-in
    screen.
+
+With the Apple key set too, try these on a test account you can lose:
+
+5. Delete an account from the app, confirming with Apple. WayPoint should leave
+   the list in the Settings app under Sign-In & Security, then Sign in with Apple.
+   Signing in again with that Apple ID should say it isn't linked.
+6. Delete an account whose Apple ID was linked on the website, confirming in the
+   app. Apple's list should clear in the same way. This is the check that a code
+   from the app can end access granted through the website.
+7. Start a deletion and confirm with a different Apple ID. Nothing should be
+   deleted, and the app should say why.
+8. Stop using Sign in with Apple for WayPoint in the Settings app, once with the
+   app closed and once with it open. Each time, the session should close and
+   drafts should survive signing back in.
 
 ## Cutover order
 
@@ -198,4 +291,17 @@ cursors, and installed apps get stuck on `400 invalid_cursor` when it changes.
   than stored, so sign-in keeps working while KV is read-only. A replay reaches
   only the account the token already belongs to.
 - **While production is paused**, linked identities can sign in, but invites
-  cannot be created or redeemed, and sign-ins cannot be reset.
+  cannot be created or redeemed, sign-ins cannot be reset, and accounts cannot be
+  deleted.
+- **Account deletion can briefly lag.** KV takes up to about a minute to reach
+  every Cloudflare location, so a session can work a little longer there. An
+  account edit in Manage accounts in that same moment could bring the account
+  back, without its trips.
+- **Only the app can delete an account for now.** The website has no button, and
+  the only site owner account can't be deleted at all.
+- **Manage accounts still deletes only the account.** It leaves that person's
+  trips, grants and Apple link in place.
+- **Copies outside D1 outlive a deletion.** The old KV trips (`trip_index`,
+  `trip:*`) stay in the live namespace after the move to D1, and the encrypted
+  pre-migration backup has no automatic expiry. Both include anyone who later
+  deletes their account.

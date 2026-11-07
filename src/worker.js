@@ -192,6 +192,10 @@ const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 const JWKS_CACHE_MS = 60 * 60 * 1000;
 const JWKS_REFETCH_GAP_MS = 60 * 1000;
 const MAX_IDENTITY_TOKEN_LENGTH = 8192;
+const MAX_APPLE_CODE_LENGTH = 2048;
+const APPLE_TOKEN_URL = "https://appleid.apple.com/auth/token";
+const APPLE_REVOKE_URL = "https://appleid.apple.com/auth/revoke";
+const ACCOUNT_DELETION_CONFIRMATION = "DELETE";
 const loginAttempts = new Map();
 
 // Roles that can be GRANTED on a trip (via /api/trip-grants). "superuser"
@@ -444,6 +448,11 @@ export default {
     if (path === "/WayPoint/api/setup" && request.method === "POST") {
       return handleSetup(request, env);
     }
+    // Not behind the check below: a retry must still get an answer when the
+    // first attempt worked and its reply was lost.
+    if (path === "/WayPoint/api/account/deletion" && request.method === "POST") {
+      return handleAccountDeletion(request, env);
+    }
 
     // ---- Everything below this line needs a real, logged-in account -----
     if (path.startsWith("/WayPoint/api/")) {
@@ -483,6 +492,11 @@ export default {
       // `user` from the session, never a body-supplied id. -------------
       if (path === "/WayPoint/api/account/avatar" && request.method === "POST") {
         return handleAccountAvatarUpdate(request, env, user);
+      }
+
+      // ---- What deleting this account would do, for its confirmation --
+      if (path === "/WayPoint/api/account/deletion" && request.method === "GET") {
+        return handleAccountDeletionSummary(env, user);
       }
 
       // ---- Flight lookup (reverse: flight number -> carrier + route) --
@@ -2740,6 +2754,154 @@ async function handleEndAllSessions(env, caller) {
   for (const account of usersDoc.users) account.sessionVersion = (account.sessionVersion || 0) + 1;
   await saveUsers(env, usersDoc);
   return signedInResponse(usersDoc.users.find(function (u) { return u.id === caller.id; }), env);
+}
+
+/* ---- Deleting your own account ---------------------------------------------
+ * Apple requires this in the app (guideline 5.1.1(v)). The steps run in an order
+ * that makes every one safe to repeat: Apple first, then trips, then the account.
+ * If anything stops partway, the account still exists and the person tries again.
+ *
+ * Trips live in D1, which this file can't import because test-security.mjs loads
+ * it as a single data URL. The D1 Worker passes in WAYPOINT_ACCOUNT_DATA instead.
+ * Without it nothing is deleted, because removing only the account would strand
+ * its trips.
+ *
+ * Apple's token is revoked from a code the app fetches at deletion, not one saved
+ * at sign-in. No Apple credential is ever stored, /login/identity is unchanged for
+ * older builds, and accounts linked long ago can be revoked the same way. Apple
+ * expects a deletion to be fulfilled even without a token, so a failure here never
+ * stops one. The app then tells the person how to remove WayPoint themselves.
+ * ------------------------------------------------------------------------ */
+
+function appleRevocationConfigured(env) {
+  return !!(env.WAYPOINT_APPLE_TEAM_ID && env.WAYPOINT_APPLE_KEY_ID && env.WAYPOINT_APPLE_PRIVATE_KEY &&
+    identityClientIds(env, "apple")[1]);
+}
+
+// ECDSA in Web Crypto already returns the raw r||s form that JWS wants. Apple
+// allows up to six months; five minutes is plenty for two requests.
+async function appleClientSecret(clientId, env) {
+  const base64 = env.WAYPOINT_APPLE_PRIVATE_KEY.replace(/-----[A-Z ]+-----/g, "").replace(/\\n|\s/g, "");
+  const der = Uint8Array.from(atob(base64), function (char) { return char.charCodeAt(0); });
+  const key = await crypto.subtle.importKey("pkcs8", der, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  const now = Math.floor(Date.now() / 1000);
+  const body = base64UrlEncode(JSON.stringify({ alg: "ES256", kid: env.WAYPOINT_APPLE_KEY_ID })) + "." + base64UrlEncode(JSON.stringify({
+    iss: env.WAYPOINT_APPLE_TEAM_ID, iat: now, exp: now + 300, aud: "https://appleid.apple.com", sub: clientId,
+  }));
+  const signature = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(body));
+  return body + "." + base64UrlEncode(new Uint8Array(signature));
+}
+
+function appleFormPost(url, fields) {
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(fields).toString(),
+    signal: AbortSignal.timeout(5000),
+  });
+}
+
+// Apple's error code is the only way to tell a bad key from a used code, and it
+// is never personal. The pattern keeps anything else out of the logs.
+async function logAppleFailure(step, response) {
+  const code = String(await response.json().then(function (body) { return body.error; }, function () { return ""; }));
+  console.error("apple-revocation " + step + " failed: " + response.status + (/^[a-z_]{1,40}$/.test(code) ? " " + code : ""));
+}
+
+// Returns "revoked", "failed", or "wrong_account" when the person confirmed with a
+// different Apple ID. This reply comes straight from Apple over TLS, so its
+// id_token needs no signature check, and its token is used here and then dropped.
+async function revokeAppleAccess(linked, code, env) {
+  try {
+    const clientId = identityClientIds(env, "apple")[1];
+    const clientSecret = await appleClientSecret(clientId, env);
+    const exchange = await appleFormPost(APPLE_TOKEN_URL, { client_id: clientId, client_secret: clientSecret, code, grant_type: "authorization_code" });
+    if (!exchange.ok) { await logAppleFailure("exchange", exchange); return "failed"; }
+    const tokens = await exchange.json();
+    const claims = JSON.parse(new TextDecoder().decode(base64UrlToBytes(tokens.id_token.split(".")[1])));
+    if (claims.sub !== linked.sub) return "wrong_account";
+    const revoke = await appleFormPost(APPLE_REVOKE_URL, {
+      client_id: clientId, client_secret: clientSecret,
+      token: tokens.refresh_token || tokens.access_token,
+      token_type_hint: tokens.refresh_token ? "refresh_token" : "access_token",
+    });
+    if (!revoke.ok) { await logAppleFailure("revoke", revoke); return "failed"; }
+    return "revoked";
+  } catch (err) {
+    console.error("apple-revocation failed: " + (err && err.name));
+    return "failed";
+  }
+}
+
+// Same rule as Manage accounts: a site with no owner can't be managed at all, and
+// an empty account list would reopen the one-time setup.
+function accountDeletionBlock(user, usersDoc) {
+  return user.isUberUser && countUberUsers(usersDoc.users) <= 1
+    ? "This is the site owner's account, so it can't be deleted here."
+    : null;
+}
+
+function accountDeletionUnavailable() {
+  return jsonError(503, "Account deletion isn't available on this server yet.");
+}
+
+function accountDeletedResponse(appleRevoked) {
+  return new Response(JSON.stringify({ status: "ok", appleRevoked }), {
+    status: 200,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Set-Cookie": buildClearCookieHeader() },
+  });
+}
+
+async function handleAccountDeletionSummary(env, user) {
+  if (!env.WAYPOINT_ACCOUNT_DATA) return accountDeletionUnavailable();
+  const usersDoc = await loadUsers(env);
+  const linked = (user.identities || [])[0];
+  return noStoreJSON({
+    linkedSignIn: linked ? linked.provider : null,
+    appleRevocation: appleRevocationConfigured(env),
+    blocked: accountDeletionBlock(user, usersDoc),
+    ...await env.WAYPOINT_ACCOUNT_DATA.summary(user, usersDoc),
+  });
+}
+
+async function handleAccountDeletion(request, env) {
+  const session = await verifySession(getCookie(request, SESSION_COOKIE_NAME), env);
+  if (!session) return jsonError(401, "Please log in.");
+  let body;
+  try {
+    body = await request.json();
+  } catch (err) {
+    return jsonError(400, "Request body was not valid JSON.");
+  }
+  const appleCode = body ? body.appleAuthorizationCode : undefined;
+  if (!body || body.confirm !== ACCOUNT_DELETION_CONFIRMATION || (appleCode !== undefined &&
+      (typeof appleCode !== "string" || !appleCode || appleCode.length > MAX_APPLE_CODE_LENGTH))) {
+    return jsonError(400, "Confirm that you want to delete this account.");
+  }
+
+  const usersDoc = await loadUsers(env);
+  const user = usersDoc.users.find(function (u) { return u.id === session.uid; });
+  // A genuine session for an account that's gone can only mean it was deleted, so
+  // a retry after a lost reply lands here and is told it worked.
+  if (!user) return accountDeletedResponse(false);
+  if ((session.sv || 0) !== (user.sessionVersion || 0)) return jsonError(401, "Please log in.");
+  if (!env.WAYPOINT_ACCOUNT_DATA) return accountDeletionUnavailable();
+  const blocked = accountDeletionBlock(user, usersDoc);
+  if (blocked) return jsonError(409, blocked);
+
+  const linked = (user.identities || []).find(function (i) { return i.provider === "apple"; });
+  let apple = "failed";
+  if (linked && appleCode && appleRevocationConfigured(env)) apple = await revokeAppleAccess(linked, appleCode, env);
+  if (apple === "wrong_account") {
+    return jsonError(403, "That isn't the Apple ID linked to this account, so nothing was deleted.");
+  }
+
+  await env.WAYPOINT_ACCOUNT_DATA.remove(user, usersDoc);
+  // Read again: Apple and D1 took time, and this document has no transactions.
+  const latest = await loadUsers(env);
+  latest.users = latest.users.filter(function (u) { return u.id !== user.id; });
+  await saveUsers(env, latest);
+  return accountDeletedResponse(apple === "revoked");
 }
 
 async function handleLogout(request, env) {
