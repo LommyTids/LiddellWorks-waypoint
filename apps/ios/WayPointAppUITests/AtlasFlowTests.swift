@@ -177,6 +177,11 @@ final class AtlasFlowTests: XCTestCase {
         capture("Identity after scroll", app: app)
         XCTAssertFalse(app.staticTexts["trip-title"].isHittable)
         XCTAssertFalse(app.staticTexts["trip-dates"].isHittable)
+        // Text under the status bar also reports not hittable, so check it really left the screen.
+        for name in ["trip-title", "trip-dates"] {
+            let identity = app.staticTexts[name]
+            XCTAssertTrue(!identity.exists || identity.frame.maxY <= 0, "Trip identity still on screen: \(name)")
+        }
         for name in ["trip-people-filter", "trip-add", "Agenda", "Map", "trip-tab-itinerary", "trip-tab-plan", "trip-tab-people", "trip-tab-more"] {
             XCTAssertTrue(app.buttons[name].isHittable, "Pinned control unavailable: \(name)")
         }
