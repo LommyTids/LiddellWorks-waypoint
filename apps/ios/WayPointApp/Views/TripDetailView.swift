@@ -236,6 +236,7 @@ struct TripDetailView: View {
         return GeometryReader { viewport in
             ScrollView {
                 // Keep enough room to scroll the identity away even on a short trip.
+                // Content stays visible under the clear bars, so it must clear the top inset too.
                 // Only the section header pins; the body can still clear the dock.
                 LazyVStack(alignment: .leading, spacing: 14, pinnedViews: [.sectionHeaders]) {
                     tripIdentity(trip)
@@ -249,7 +250,7 @@ struct TripDetailView: View {
                                 ForEach(dayKeys(records), id: \.self) { day in dayGroup(day, records: records, trip: trip) }
                             }
                         }
-                        .frame(maxWidth: .infinity, minHeight: max(0, viewport.size.height - controlsHeight - 80), alignment: .topLeading)
+                        .frame(maxWidth: .infinity, minHeight: max(0, viewport.size.height + viewport.safeAreaInsets.top - controlsHeight - 80), alignment: .topLeading)
                     } header: {
                         tripControls(trip)
                             .background {
