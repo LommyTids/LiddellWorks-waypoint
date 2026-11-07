@@ -72,10 +72,10 @@ final class AtlasFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["agenda-options"].waitForExistence(timeout: 5))
         capture("Agenda", app: app)
         app.buttons["agenda-options"].tap()
-        app.buttons["Collapse all"].tap()
+        chooseMenuItem(app.buttons["Collapse all"], app: app)
         app.buttons["agenda-options"].tap()
         XCTAssertTrue(app.buttons["Expand all"].exists)
-        app.buttons["Expand all"].tap()
+        chooseMenuItem(app.buttons["Expand all"], app: app)
         app.buttons["Map"].tap()
         capture("Map", app: app)
         app.buttons["Plan"].tap()
@@ -130,7 +130,7 @@ final class AtlasFlowTests: XCTestCase {
         XCTAssertLessThan(options.frame.maxY, dock.frame.minY)
         capture("Agenda large text before collapse", app: app)
         options.tap()
-        app.buttons["Collapse all"].tap()
+        chooseMenuItem(app.buttons["Collapse all"], app: app)
         capture("Agenda large text after collapse", app: app)
         // Every day offers the same global actions. After content shrinks,
         // use a day menu that is clear of the pinned header and floating dock.
@@ -141,7 +141,7 @@ final class AtlasFlowTests: XCTestCase {
         XCTAssertNotNil(visibleOptions)
         visibleOptions?.tap()
         XCTAssertTrue(app.buttons["Expand all"].waitForExistence(timeout: 5))
-        app.buttons["Expand all"].tap()
+        chooseMenuItem(app.buttons["Expand all"], app: app)
         XCTAssertTrue(app.buttons["trip-people-filter"].isHittable)
         XCTAssertTrue(app.buttons["trip-add"].isHittable)
         XCTAssertTrue(app.buttons["Map"].isHittable)
@@ -163,17 +163,17 @@ final class AtlasFlowTests: XCTestCase {
         revealAgendaOptions(options, app: app)
         options.tap()
         XCTAssertTrue(app.buttons["Oct 3, 2026"].waitForExistence(timeout: 5))
-        app.buttons["Oct 3, 2026"].tap()
+        chooseMenuItem(app.buttons["Oct 3, 2026"], app: app)
         XCTAssertTrue(options.isHittable)
         XCTAssertGreaterThanOrEqual(options.frame.minY, app.buttons["Map"].frame.maxY)
         XCTAssertLessThan(options.frame.maxY, dock.frame.minY)
         XCTAssertFalse(app.staticTexts["trip-title"].isHittable)
         capture("Date jump below glass", app: app)
         options.tap()
-        app.buttons["Collapse all"].tap()
+        chooseMenuItem(app.buttons["Collapse all"], app: app)
         revealAgendaOptions(options, app: app)
         options.tap()
-        app.buttons["Oct 3, 2026"].tap()
+        chooseMenuItem(app.buttons["Oct 3, 2026"], app: app)
         XCTAssertTrue(options.isHittable)
         XCTAssertGreaterThanOrEqual(options.frame.minY, app.buttons["Map"].frame.maxY)
         XCTAssertLessThan(options.frame.maxY, dock.frame.minY)
@@ -223,6 +223,16 @@ final class AtlasFlowTests: XCTestCase {
         app.buttons["filter-person-__trip_superuser__"].tap()
         app.buttons["Done"].tap()
         XCTAssertEqual(app.buttons["trip-people-filter"].value as? String, "1 selected")
+    }
+
+    /// On iOS 18 a menu keeps covering the screen while it fades out, so wait
+    /// for it to close before checking what is underneath.
+    @MainActor
+    private func chooseMenuItem(_ item: XCUIElement, app: XCUIApplication) {
+        item.tap()
+        for name in ["Collapse all", "Expand all"] {
+            XCTAssertTrue(app.buttons[name].waitForNonExistence(timeout: 5), "Agenda menu stayed open")
+        }
     }
 
     /// At the largest text sizes the first card can start below the screen, and
