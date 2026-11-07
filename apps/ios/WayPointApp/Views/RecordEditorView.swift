@@ -48,17 +48,8 @@ struct RecordEditorView: View {
     private var canEdit: Bool {
         guard let trip = model.trip(id: tripID) else { return false }
         if trip.role.allowsAddingAndDeleting { return true }
-        guard trip.role == .user, let existing,
-              let current = trip.records.first(where: { $0.kind == existing.kind && $0.id == existing.id }),
-              let grant = trip.raw["myGrant"]?["companionId"] else { return false }
-        let companionID: String
-        switch grant {
-        case .string(let value): companionID = value
-        case .number(let value) where value.isFinite && value.rounded() == value && abs(value) <= 9_007_199_254_740_991:
-            companionID = String(Int64(value))
-        default: return false
-        }
-        return current.companions.contains(companionID)
+        guard let existing else { return false }
+        return TripParticipant.canEdit(existing, in: trip)
     }
 
     private var participants: [TripParticipant] {
@@ -173,7 +164,7 @@ struct RecordEditorView: View {
         .navigationTitle(existing == nil ? "New \(kind.title.lowercased())" : kind.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+            ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.accessibilityIdentifier("record-editor-close") }
             if canEdit {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", action: save)
