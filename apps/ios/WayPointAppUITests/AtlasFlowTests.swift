@@ -27,6 +27,39 @@ final class AtlasFlowTests: XCTestCase {
         // No credentials are submitted and no real account is used.
     }
 
+    /// Production can't be made to offer these on demand, so a debug-only launch
+    /// argument supplies what the server would.
+    @MainActor
+    func testProvidersReplaceThePhoneFormOnceItHasEnded() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WayPointSignInPreview", "providers"]
+        app.launch()
+        let login = app.buttons["Log in to WayPoint"]
+        XCTAssertTrue(login.waitForExistence(timeout: 10))
+        login.tap()
+        XCTAssertTrue(app.buttons["sign-in-apple"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["sign-in-google"].isHittable)
+        XCTAssertFalse(app.textFields["login-code"].exists)
+        capture("Login providers", app: app)
+        app.buttons["Need help logging in?"].tap()
+        XCTAssertTrue(app.staticTexts["Sign in with the Apple or Google account linked to your WayPoint account."].waitForExistence(timeout: 5))
+        capture("Login providers help", app: app)
+    }
+
+    @MainActor
+    func testProvidersAndPhoneFormCanShareTheScreen() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WayPointSignInPreview", "with-phone"]
+        app.launch()
+        let login = app.buttons["Log in to WayPoint"]
+        XCTAssertTrue(login.waitForExistence(timeout: 10))
+        login.tap()
+        XCTAssertTrue(app.buttons["sign-in-apple"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["sign-in-google"].exists)
+        XCTAssertTrue(app.textFields["login-code"].exists)
+        capture("Login providers and phone", app: app)
+    }
+
     @MainActor
     func testDemoNavigationCollapseAndParticipantEditor() {
         let app = XCUIApplication()
@@ -39,10 +72,10 @@ final class AtlasFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["agenda-options"].waitForExistence(timeout: 5))
         capture("Agenda", app: app)
         app.buttons["agenda-options"].tap()
-        app.buttons["Collapse all"].tap()
+        chooseMenuItem(app.buttons["Collapse all"], app: app)
         app.buttons["agenda-options"].tap()
         XCTAssertTrue(app.buttons["Expand all"].exists)
-        app.buttons["Expand all"].tap()
+        chooseMenuItem(app.buttons["Expand all"], app: app)
         app.buttons["Map"].tap()
         capture("Map", app: app)
         app.buttons["Plan"].tap()
@@ -86,8 +119,7 @@ final class AtlasFlowTests: XCTestCase {
         app.navigationBars["Log in"].buttons.firstMatch.tap()
         app.buttons["Explore a demo trip"].tap()
         let trip = app.buttons["trip-demo-lisbon"]
-        XCTAssertTrue(trip.waitForExistence(timeout: 10))
-        for _ in 0..<4 where !trip.isHittable { app.swipeUp() }
+        revealTrip(trip, app: app)
         XCTAssertTrue(trip.isHittable)
         trip.tap()
         let options = app.buttons["agenda-options"]
@@ -98,7 +130,7 @@ final class AtlasFlowTests: XCTestCase {
         XCTAssertLessThan(options.frame.maxY, dock.frame.minY)
         capture("Agenda large text before collapse", app: app)
         options.tap()
-        app.buttons["Collapse all"].tap()
+        chooseMenuItem(app.buttons["Collapse all"], app: app)
         capture("Agenda large text after collapse", app: app)
         // Every day offers the same global actions. After content shrinks,
         // use a day menu that is clear of the pinned header and floating dock.
@@ -109,7 +141,7 @@ final class AtlasFlowTests: XCTestCase {
         XCTAssertNotNil(visibleOptions)
         visibleOptions?.tap()
         XCTAssertTrue(app.buttons["Expand all"].waitForExistence(timeout: 5))
-        app.buttons["Expand all"].tap()
+        chooseMenuItem(app.buttons["Expand all"], app: app)
         XCTAssertTrue(app.buttons["trip-people-filter"].isHittable)
         XCTAssertTrue(app.buttons["trip-add"].isHittable)
         XCTAssertTrue(app.buttons["Map"].isHittable)
@@ -123,25 +155,25 @@ final class AtlasFlowTests: XCTestCase {
         app.launch()
         app.buttons["Explore a demo trip"].tap()
         let trip = app.buttons["trip-demo-lisbon"]
-        XCTAssertTrue(trip.waitForExistence(timeout: 10))
-        for _ in 0..<4 where !trip.isHittable { app.swipeUp() }
+        revealTrip(trip, app: app)
+        XCTAssertTrue(trip.isHittable)
         trip.tap()
         let options = app.buttons["agenda-options"]
         let dock = app.buttons["trip-tab-more"]
         revealAgendaOptions(options, app: app)
         options.tap()
         XCTAssertTrue(app.buttons["Oct 3, 2026"].waitForExistence(timeout: 5))
-        app.buttons["Oct 3, 2026"].tap()
+        chooseMenuItem(app.buttons["Oct 3, 2026"], app: app)
         XCTAssertTrue(options.isHittable)
         XCTAssertGreaterThanOrEqual(options.frame.minY, app.buttons["Map"].frame.maxY)
         XCTAssertLessThan(options.frame.maxY, dock.frame.minY)
         XCTAssertFalse(app.staticTexts["trip-title"].isHittable)
         capture("Date jump below glass", app: app)
         options.tap()
-        app.buttons["Collapse all"].tap()
+        chooseMenuItem(app.buttons["Collapse all"], app: app)
         revealAgendaOptions(options, app: app)
         options.tap()
-        app.buttons["Oct 3, 2026"].tap()
+        chooseMenuItem(app.buttons["Oct 3, 2026"], app: app)
         XCTAssertTrue(options.isHittable)
         XCTAssertGreaterThanOrEqual(options.frame.minY, app.buttons["Map"].frame.maxY)
         XCTAssertLessThan(options.frame.maxY, dock.frame.minY)
@@ -177,6 +209,11 @@ final class AtlasFlowTests: XCTestCase {
         capture("Identity after scroll", app: app)
         XCTAssertFalse(app.staticTexts["trip-title"].isHittable)
         XCTAssertFalse(app.staticTexts["trip-dates"].isHittable)
+        // Text under the status bar also reports not hittable, so check it really left the screen.
+        for name in ["trip-title", "trip-dates"] {
+            let identity = app.staticTexts[name]
+            XCTAssertTrue(!identity.exists || identity.frame.maxY <= 0, "Trip identity still on screen: \(name)")
+        }
         for name in ["trip-people-filter", "trip-add", "Agenda", "Map", "trip-tab-itinerary", "trip-tab-plan", "trip-tab-people", "trip-tab-more"] {
             XCTAssertTrue(app.buttons[name].isHittable, "Pinned control unavailable: \(name)")
         }
@@ -186,6 +223,26 @@ final class AtlasFlowTests: XCTestCase {
         app.buttons["filter-person-__trip_superuser__"].tap()
         app.buttons["Done"].tap()
         XCTAssertEqual(app.buttons["trip-people-filter"].value as? String, "1 selected")
+    }
+
+    /// On iOS 18 a menu keeps covering the screen while it fades out, so wait
+    /// for it to close before checking what is underneath.
+    @MainActor
+    private func chooseMenuItem(_ item: XCUIElement, app: XCUIApplication) {
+        item.tap()
+        for name in ["Collapse all", "Expand all"] {
+            XCTAssertTrue(app.buttons[name].waitForNonExistence(timeout: 5), "Agenda menu stayed open")
+        }
+    }
+
+    /// At the largest text sizes the first card can start below the screen, and
+    /// iOS 18's lazy list doesn't build it until it is scrolled near.
+    @MainActor
+    private func revealTrip(_ trip: XCUIElement, app: XCUIApplication) {
+        for _ in 0..<6 {
+            if trip.waitForExistence(timeout: 3) && trip.isHittable { return }
+            app.swipeUp()
+        }
     }
 
     @MainActor

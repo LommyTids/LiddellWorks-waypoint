@@ -233,6 +233,9 @@ document.addEventListener('click', function (e) {
   if (action === 'new-user') { openUserForm(); return; }
   if (action === 'edit-user') { openUserForm(managedUsers.find(function (u) { return u.id === el.dataset.id; })); return; }
   if (action === 'delete-user') { deleteUserAccount(el.dataset.id); return; }
+  if (action === 'invite-user') { createUserInvite(el.dataset.id); return; }
+  if (action === 'reset-sign-in') { resetUserSignIn(el.dataset.id); return; }
+  if (action === 'sign-in-apple') { signInWithApple(); return; }
   if (action === 'new-trip') { openTripForm(); return; }
   if (action === 'edit-trip') { openTripForm(byId(state.trips, el.dataset.id, 'tripId')); return; }
   if (action === 'delete-trip') { deleteTrip(el.dataset.id); return; }
@@ -582,11 +585,20 @@ document.addEventListener('change', function (e) {
   }
 });
 
+// Opening an invite link or #owner-login in a tab that's already on the page
+// changes only the fragment, so the browser doesn't reload.
+window.addEventListener('hashchange', function () {
+  readPendingInvite();
+  if (!currentUser) showAuthScreen();
+});
+
 document.addEventListener('submit', function (e) {
   if (e.target.id === 'login-form') {
     e.preventDefault();
     var fdLogin = new FormData(e.target);
-    submitAuthForm('/WayPoint/api/login', { phone: fdLogin.get('phone') });
+    submitAuthForm('/WayPoint/api/login', fdLogin.has('password')
+      ? { username: fdLogin.get('username'), password: fdLogin.get('password') }
+      : { phone: fdLogin.get('phone') });
     return;
   }
   if (e.target.id === 'setup-form') {

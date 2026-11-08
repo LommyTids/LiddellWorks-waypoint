@@ -6,13 +6,8 @@ import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 
-test('Cloudflare runtime: cookie auth, D1 migrations, retries and competing writes',async t=>{
-  const bundle=await build({entryPoints:['src/backend-v1/worker.js'],bundle:true,format:'esm',platform:'browser',write:false});
-  const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-08-27',
-    d1Databases:['WAYPOINT_DB','REHEARSAL_DB'],kvNamespaces:['WAYPOINT_KV'],bindings:{WAYPOINT_ENV:'staging',WAYPOINT_SESSION_SECRET:'runtime-test-secret',WAYPOINT_PASSWORD:'runtime-setup-key'}}));
-  t.after(()=>mf.dispose());
-  const db=await mf.getD1Database('WAYPOINT_DB');
-  // The checked-in migration uses ordinary statements and BEGIN/END triggers.
+// The checked-in migration uses ordinary statements and BEGIN/END triggers.
+async function migrate(db) {
   const sql=await readFile(new URL('../../migrations/backend-v1/0001_sync_foundation.sql',import.meta.url),'utf8');
   let statement='';const statements=[];
   for(const line of sql.split('\n')) {
@@ -22,6 +17,15 @@ test('Cloudflare runtime: cookie auth, D1 migrations, retries and competing writ
     statements.push(db.prepare(statement));statement='';
   }
   assert.equal(statement.trim(),'');await db.batch(statements);
+}
+
+test('Cloudflare runtime: cookie auth, D1 migrations, retries and competing writes',async t=>{
+  const bundle=await build({entryPoints:['src/backend-v1/worker.js'],bundle:true,format:'esm',platform:'browser',write:false});
+  const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-08-27',
+    d1Databases:['WAYPOINT_DB','REHEARSAL_DB'],kvNamespaces:['WAYPOINT_KV'],bindings:{WAYPOINT_ENV:'staging',WAYPOINT_SESSION_SECRET:'runtime-test-secret',WAYPOINT_PASSWORD:'runtime-setup-key'}}));
+  t.after(()=>mf.dispose());
+  const db=await mf.getD1Database('WAYPOINT_DB');
+  await migrate(db);
   const call=(path,body,cookie)=>mf.dispatchFetch('https://staging.test/WayPoint/api/'+path,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
   const setup=await call('setup',{setupKey:'runtime-setup-key',username:'owner',password:'runtime-password'});
   assert.equal(setup.status,200);const cookie=setup.headers.get('set-cookie').split(';')[0];
@@ -52,6 +56,73 @@ test('Cloudflare runtime: cookie auth, D1 migrations, retries and competing writ
   assert.equal((await verifyPermissions(rehearsalDB,source)).accountsChecked,2);
   await completeRehearsal(rehearsalDB,plan);await importPlan(rehearsalDB,plan);await verifyData(rehearsalDB,source);
 
+});
+
+test('Cloudflare runtime: account deletion imports the Apple key and runs its SQL on D1',async t=>{
+  const pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
+  const der=Buffer.from(await crypto.subtle.exportKey('pkcs8',pair.privateKey)).toString('base64');
+  const p8=`-----BEGIN PRIVATE KEY-----\n${der.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----\n`;
+  const part=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
+  const apple=[];
+  const bundle=await build({entryPoints:['src/backend-v1/worker.js'],bundle:true,format:'esm',platform:'browser',write:false});
+  const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-08-27',
+    d1Databases:['WAYPOINT_DB'],kvNamespaces:['WAYPOINT_KV'],bindings:{WAYPOINT_ENV:'staging',WAYPOINT_SESSION_SECRET:'runtime-test-secret',WAYPOINT_PASSWORD:'runtime-setup-key',
+      WAYPOINT_APPLE_CLIENT_IDS:'web.client, app.client',WAYPOINT_APPLE_TEAM_ID:'TEAM123456',WAYPOINT_APPLE_KEY_ID:'KEY1234567',WAYPOINT_APPLE_PRIVATE_KEY:p8},
+    outboundService:async request=>{
+      apple.push({url:request.url,form:new URLSearchParams(await request.text())});
+      if(request.url==='https://appleid.apple.com/auth/token')return Response.json({refresh_token:'runtime-refresh',id_token:`${part({alg:'RS256'})}.${part({sub:'runtime-apple'})}.unchecked`});
+      if(request.url==='https://appleid.apple.com/auth/revoke')return new Response('');
+      return new Response('Unexpected request',{status:500});
+    }}));
+  t.after(()=>mf.dispose());
+  const db=await mf.getD1Database('WAYPOINT_DB'),kv=await mf.getKVNamespace('WAYPOINT_KV');
+  await migrate(db);
+  const call=(path,body,cookie)=>mf.dispatchFetch('https://staging.test/WayPoint/api/'+path,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
+  const cookieFrom=response=>response.headers.get('set-cookie').split(';')[0];
+  const owner=cookieFrom(await call('setup',{setupKey:'runtime-setup-key',username:'owner',password:'runtime-password'}));
+  const account=async username=>{
+    const user=(await (await call('users',{username,password:'runtime-password'},owner)).json()).user;
+    return {...user,cookie:cookieFrom(await call('login',{username,password:'runtime-password'}))};
+  };
+  const guest=await account('guest'),admin=await account('admin');
+  const doc=JSON.parse(await kv.get('users'));
+  doc.users.find(u=>u.id===guest.id).identities=[{provider:'apple',sub:'runtime-apple',linkedAt:'2026-01-01T00:00:00.000Z'}];
+  await kv.put('users',JSON.stringify(doc));
+  const mutation=(tripId,kind,recordId,data)=>({mutationId:crypto.randomUUID(),tripId,kind,recordId,operation:'create',baseRevision:0,data});
+  const save=async change=>{const r=await call('v1/sync/mutations',{protocolVersion:1,mutations:[change]},guest.cookie);assert.equal((await r.json()).results[0].status,'applied');};
+  for(const tripId of ['solo','shared']){
+    assert.equal((await call('v1/trips',mutation(tripId,'trip',tripId,{name:'Runtime trip'}),guest.cookie)).status,201);
+    await save(mutation(tripId,'companion','person-'+tripId,{name:'Friend'}));
+    await save(mutation(tripId,'activity','item-'+tripId,{title:'Dinner',companions:['person-'+tripId,'__trip_superuser__']}));
+  }
+  assert.equal((await call('v1/trips/shared/grants',{accountId:admin.id,role:'admin'},guest.cookie)).status,200);
+  await db.prepare(`UPDATE records SET payload_json=json_set(payload_json,'$.accountId',?),revision=revision WHERE id='person-shared'`).bind(guest.id).run();
+
+  const summary=await (await call('account/deletion',null,guest.cookie)).json();
+  assert.deepEqual(summary,{linkedSignIn:'apple',appleRevocation:true,blocked:null,tripsErased:1,tripsHandedOver:1,tripsLeft:0});
+  const response=await call('account/deletion',{confirm:'DELETE',appleAuthorizationCode:'runtime-code'},guest.cookie);
+  const text=await response.text();
+  assert.equal(response.status,200,text);
+  assert.deepEqual(JSON.parse(text),{status:'ok',appleRevoked:true});
+
+  assert.deepEqual(apple.map(call=>call.url),['https://appleid.apple.com/auth/token','https://appleid.apple.com/auth/revoke']);
+  assert.equal(apple[1].form.get('token'),'runtime-refresh');
+  const [header,claims,signature]=apple[0].form.get('client_secret').split('.');
+  assert.ok(await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},pair.publicKey,Buffer.from(signature,'base64url'),new TextEncoder().encode(header+'.'+claims)));
+
+  const solo=await db.prepare("SELECT * FROM trips WHERE id='solo'").first();
+  assert.deepEqual([solo.deleted,solo.owner_id,solo.metadata_json],[1,'','{}']);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM records WHERE trip_id='solo'").first()).n,0);
+  assert.equal((await db.prepare("SELECT owner_id FROM trips WHERE id='shared'").first()).owner_id,admin.id);
+  assert.equal((await db.prepare('SELECT count(*) AS n FROM trip_grants').first()).n,0);
+  const tagged=await db.prepare("SELECT payload_json FROM records WHERE id='item-shared'").first();
+  assert.deepEqual(JSON.parse(tagged.payload_json).companions,['person-shared']);
+  const entry=await db.prepare("SELECT payload_json FROM records WHERE id='person-shared'").first();
+  assert.equal(JSON.parse(entry.payload_json).name,'Former traveller');
+  assert.equal(JSON.parse(entry.payload_json).accountId,undefined);
+  assert.equal(JSON.parse(await kv.get('users')).users.some(u=>u.id===guest.id),false);
+  assert.equal((await (await call('whoami',null,guest.cookie)).json()).loggedIn,false);
+  assert.equal((await (await call('whoami',null,admin.cookie)).json()).loggedIn,true);
 });
 
 test('Cloudflare runtime: production KV pause rejects existing-client write routes',async t=>{

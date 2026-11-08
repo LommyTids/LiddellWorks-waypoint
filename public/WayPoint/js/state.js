@@ -67,6 +67,11 @@ var SUPERUSER_PARTICIPANT_ID = '__trip_superuser__';
 // so the login screen offers first-run setup instead of a login form.
 // See renderAuthScreen().
 var setupNeeded = false;
+// What the signed-out screen may offer. Stays at this default if the server
+// can't be reached, so the phone form still appears. See loadLoginConfig().
+var loginConfig = { providers: {}, phoneLogin: true };
+// An invite link's token, held until it is redeemed. See readPendingInvite().
+var pendingInvite = null;
 // Account list as last fetched for "Manage accounts" (site owner only).
 // See loadAndRenderManageUsers()/renderManageUsersView().
 var managedUsers = [];

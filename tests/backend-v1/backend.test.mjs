@@ -117,6 +117,26 @@ test('HTTP uses real cookie auth and denies cross-origin writes and old data rou
   assert.equal((await worker.fetch(new Request('https://staging.test/WayPoint/api/v1/trips'),{...environment,WAYPOINT_ENV:'production'},{})).status,503);
 });
 
+test('whoami renews an active sign-in without outliving expiry or revocation',async t=>{
+  const kv=new MemoryKV();const environment={WAYPOINT_ENV:'staging',WAYPOINT_DB:env(t),WAYPOINT_KV:kv,WAYPOINT_PASSWORD:'setup-secret',WAYPOINT_SESSION_SECRET:secret};
+  const call=(path,options={})=>worker.fetch(new Request('https://staging.test/WayPoint/api/'+path,options),environment,{});
+  const whoami=cookie=>call('whoami',{headers:{Cookie:cookie}});
+  const setup=await call('setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setupKey:'setup-secret',username:'testowner',password:'password123'})});
+  const cookie=setup.headers.get('set-cookie').split(';')[0];
+  const realNow=Date.now,start=realNow(),day=86400000;t.after(()=>{Date.now=realNow;});
+  assert.equal((await whoami(cookie)).headers.get('set-cookie'),null);
+  Date.now=()=>start+2*day;
+  const renewal=await whoami(cookie);assert.equal((await renewal.json()).loggedIn,true);
+  const header=renewal.headers.get('set-cookie');
+  for(const attribute of [/Path=\/WayPoint/,/Max-Age=2592000/,/HttpOnly/,/Secure/,/SameSite=Lax/])assert.match(header,attribute);
+  const renewed=header.split(';')[0];assert.notEqual(renewed,cookie);
+  Date.now=()=>start+31*day;
+  const expired=await whoami(cookie);assert.equal((await expired.json()).loggedIn,false);assert.equal(expired.headers.get('set-cookie'),null);
+  assert.equal((await (await whoami(renewed)).json()).loggedIn,true);
+  const users=JSON.parse(await kv.get('users'));users.users[0].sessionVersion=(users.users[0].sessionVersion||0)+1;await kv.put('users',JSON.stringify(users));
+  const revoked=await whoami(renewed);assert.equal((await revoked.json()).loggedIn,false);assert.equal(revoked.headers.get('set-cookie'),null);
+});
+
 function backup() {
   const content={name:'Import example',startDate:'2026-09-24',endDate:'2026-09-27',homeCurrency:'GBP',notes:'Keep me',_revision:8,
     companions:[{companionId:1,name:'Guest',accountId:'guest'}],activities:[{activityId:1,title:'Museum',companions:[1],bookingRef:'private-ref',futureField:{keep:true}}],

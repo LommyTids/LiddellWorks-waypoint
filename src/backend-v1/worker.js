@@ -7,7 +7,7 @@ import { APIError, fail, readJSON, mutation } from './protocol.js';
 import { SyncStore } from './store.js';
 
 const PREFIX='/WayPoint/api/v1';
-const AUTH_PATHS=new Set(['/WayPoint/api/login','/WayPoint/api/logout','/WayPoint/api/whoami','/WayPoint/api/setup','/WayPoint/api/users','/WayPoint/api/users/delete','/WayPoint/api/account/avatar','/WayPoint/api/site-status','/WayPoint/api/flight-lookup','/WayPoint/api/location-search','/WayPoint/api/location-boundary','/WayPoint/api/location-boundaries']);
+const AUTH_PATHS=new Set(['/WayPoint/api/login','/WayPoint/api/login/config','/WayPoint/api/login/nonce','/WayPoint/api/login/identity','/WayPoint/api/invites','/WayPoint/api/identities/reset','/WayPoint/api/sessions/end-all','/WayPoint/api/logout','/WayPoint/api/whoami','/WayPoint/api/setup','/WayPoint/api/users','/WayPoint/api/users/delete','/WayPoint/api/account/avatar','/WayPoint/api/account/deletion','/WayPoint/api/site-status','/WayPoint/api/flight-lookup','/WayPoint/api/location-search','/WayPoint/api/location-boundary','/WayPoint/api/location-boundaries']);
 function json(value,status=200) {
   return new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'}});
 }
@@ -32,7 +32,7 @@ export default {
       }
       const url=new URL(request.url);
       if(production && url.pathname==='/WayPoint/api/migration-status' && request.method==='GET')return json({storage:'d1',writesPaused:paused,editingAuthorized,activationSupported:true,freezeId:env.WAYPOINT_FREEZE_ID,sourceHash:env.WAYPOINT_SOURCE_HASH});
-      if(production && paused && request.method!=='GET' && !['/WayPoint/api/login','/WayPoint/api/logout'].includes(url.pathname))fail(503,'migration_paused','Saving is paused while the migrated trips are reviewed.');
+      if(production && paused && request.method!=='GET' && !['/WayPoint/api/login','/WayPoint/api/login/identity','/WayPoint/api/logout'].includes(url.pathname))fail(503,'migration_paused','Saving is paused while the migrated trips are reviewed.');
       if (!['GET','POST'].includes(request.method)) return json({error:{code:'method_not_allowed',message:'Use GET or POST.'}},405);
       if (request.method==='POST') {
         const origin=request.headers.get('Origin');
@@ -46,7 +46,9 @@ export default {
         if(!asset.ok)fail(503,'assets_missing','The web app assets could not be loaded.');
         const banner=production?(paused?'<body><div style="padding:10px;text-align:center;background:#fff3cd">Migration preview · Saving is paused</div>':'<body>'):'<body><div style="padding:10px;text-align:center;background:#e6f0ea;color:#17332f">Staging · Test trips only · <a href="/WayPoint/setup">Setup and tests</a></div>';
         const html=(await asset.text()).replace('<title>Waypoint</title>',production?'<title>Waypoint</title>':'<title>Waypoint · D1 staging</title>').replace('<body>', banner).replace('<script src="/WayPoint/js/boot.js"></script>','<script src="/WayPoint/d1-schema.js"></script><script src="/WayPoint/staging/d1-client.js"></script><script src="/WayPoint/js/boot.js"></script>');
-        return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY'}});
+        // Google's button needs the page's origin. Other sites then see that origin too, never the path.
+        const referrer=env.WAYPOINT_GOOGLE_CLIENT_IDS?'strict-origin-when-cross-origin':'no-referrer';
+        return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':referrer,'X-Frame-Options':'DENY'}});
       }
       if(request.method==='GET' && /^\/WayPoint\/(js|styles|data|vendor|ui|staging|branding)\//.test(url.pathname) && env.ASSETS) return env.ASSETS.fetch(request);
       if (!production && request.method==='GET' && ['/', '/WayPoint', '/WayPoint/', '/WayPoint/setup'].includes(url.pathname)) return setupResponse();
@@ -58,7 +60,13 @@ export default {
           const body=await readJSON(request,16384);
           request=new Request(request.url,{method:'POST',headers:request.headers,body:JSON.stringify(body)});
         }
-        const response=await legacyWorker.fetch(request,authEnv,ctx);
+        // Account deletion spans KV and D1. The auth code stays in worker.js, so it
+        // is handed the trip side here rather than importing it.
+        const accountData=url.pathname==='/WayPoint/api/account/deletion'?{
+          summary:(user,users)=>new SyncStore(env.WAYPOINT_DB,user,env.WAYPOINT_SESSION_SECRET).accountDeletionSummary(users),
+          remove:(user,users)=>new SyncStore(env.WAYPOINT_DB,user,env.WAYPOINT_SESSION_SECRET).deleteAccountData(users),
+        }:undefined;
+        const response=await legacyWorker.fetch(request,{...authEnv,WAYPOINT_ACCOUNT_DATA:accountData},ctx);
         const headers=new Headers(response.headers); headers.set('Cache-Control','no-store');
         return new Response(response.body,{status:response.status,headers});
       }

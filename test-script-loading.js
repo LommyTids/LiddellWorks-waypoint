@@ -69,6 +69,9 @@ async function startup(loggedIn) {
       if (url === '/WayPoint/api/whoami') return {
         ok: true, async json() { return { loggedIn, id: 'synthetic-user', username: 'Synthetic', isUberUser: true }; }
       };
+      if (url === '/WayPoint/api/login/config') return {
+        ok: true, async json() { return { providers: {}, phoneLogin: true }; }
+      };
       if (url === '/WayPoint/api/data' && loggedIn) return {
         ok: true, async json() { return { trips: [] }; }
       };
@@ -98,7 +101,8 @@ async function startup(loggedIn) {
     assert.equal(context.stateIsTrustworthy, true);
     assert(elements.get('app').innerHTML.includes('No trips yet'), 'Authenticated startup did not render the dashboard');
   } else {
-    assert.deepEqual(requests, ['/WayPoint/api/whoami']);
+    assert.deepEqual(requests, ['/WayPoint/api/whoami', '/WayPoint/api/login/config']);
+    assert(!elements.get('app').innerHTML.includes('identity-sign-in'), 'Sign-in buttons appeared with no provider configured');
     assert(elements.get('app').innerHTML.includes('id="login-form"'), 'Signed-out startup did not render login');
     assert(elements.get('app').innerHTML.includes('type="tel" name="phone"'));
     assert(!elements.get('app').innerHTML.includes('name="password"'));
@@ -113,6 +117,12 @@ async function startup(loggedIn) {
     assert.equal(submitted.url, '/WayPoint/api/login');
     assert.equal(JSON.stringify(submitted.payload), JSON.stringify({ phone: '+447700900123' }));
 
+    context.location = { hash: '#owner-login' };
+    const ownerScreen = context.renderAuthScreen();
+    assert(ownerScreen.includes('name="username"') && ownerScreen.includes('name="password"'));
+    assert(!ownerScreen.includes('name="phone"'));
+    submit({ target: { id: 'login-form', fields: { username: 'owner', password: 'owner-password' } }, preventDefault() {} });
+    assert.equal(JSON.stringify(submitted.payload), JSON.stringify({ username: 'owner', password: 'owner-password' }));
   }
 }
 

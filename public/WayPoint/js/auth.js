@@ -18,9 +18,19 @@ async function checkAuth() {
     } else {
       currentUser = null;
       setupNeeded = !!(body && body.setupNeeded);
+      await loadLoginConfig();
     }
   } catch (err) {
     currentUser = null;
+  }
+}
+
+async function loadLoginConfig() {
+  try {
+    var res = await fetch('/WayPoint/api/login/config', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    if (res.ok) loginConfig = await res.json();
+  } catch (err) {
+    // Offline: keep what we have, so the screen still renders.
   }
 }
 
@@ -76,13 +86,30 @@ function renderAuthScreen(errorMessage) {
       '</form>' +
     '</div></div>';
   }
+  // Phone login never reaches the owner's account, so the owner signs in here
+  // by opening #owner-login. Everyone else keeps the single-field screen.
+  if (window.location && window.location.hash === '#owner-login') {
+    return '<div class="auth-screen"><div class="auth-card">' +
+      '<h1>Owner sign-in</h1>' +
+      errorHtml +
+      '<form id="login-form">' +
+        '<div class="field"><label>Username</label><input type="text" name="username" required autocomplete="username"></div>' +
+        '<div class="field"><label>Password</label><input type="password" name="password" required autocomplete="current-password"></div>' +
+        '<button type="submit" class="btn btn-primary auth-primary">Log in</button>' +
+      '</form>' +
+    '</div></div>';
+  }
+  var identityHtml = identitySignInHtml();
+  var phoneHtml = loginConfig.phoneLogin ? '<form id="login-form">' +
+      '<div class="field"><label>Enter login code here</label><input type="tel" name="phone" required autocomplete="tel" placeholder="Enter login code here"></div>' +
+      '<button type="submit" class="btn btn-primary auth-primary">Log in</button>' +
+    '</form>' : '';
   return '<div class="auth-screen"><div class="auth-card">' +
     '<h1>Log in to Waypoint</h1>' +
     errorHtml +
-    '<form id="login-form">' +
-      '<div class="field"><label>Enter login code here</label><input type="tel" name="phone" required autocomplete="tel" placeholder="Enter login code here"></div>' +
-      '<button type="submit" class="btn btn-primary auth-primary">Log in</button>' +
-    '</form>' +
+    identityHtml +
+    (identityHtml && phoneHtml ? '<p class="auth-divider">or</p>' : '') +
+    phoneHtml +
     '<p class="field-hint auth-footer">Don\'t have an account? Ask the site owner to set one up for you.</p>' +
   '</div></div>';
 }
@@ -100,22 +127,152 @@ async function submitAuthForm(url, payload) {
     });
     var body = await res.json().catch(function () { return {}; });
     if (!res.ok) {
-      var errorApp = document.getElementById('app');
-      errorApp.innerHTML = renderAuthScreen(body.error || 'Something went wrong — try again.');
-      enhanceAccessibility(errorApp);
-      var authError = errorApp.querySelector('.auth-error');
-      if (authError) authError.focus();
+      // 403 means the server has refused this invite, so stop offering it.
+      if (payload.invite && res.status === 403) clearPendingInvite();
+      showAuthScreen(body.error || 'Something went wrong — try again.');
       return;
     }
+    if (payload.invite) clearPendingInvite();
     currentUser = { id: body.id, username: body.username, isUberUser: !!body.isUberUser, avatar: body.avatar || null };
     clearSavedNav();
     await renderBoot();
   } catch (err) {
-    var offlineApp = document.getElementById('app');
-    offlineApp.innerHTML = renderAuthScreen('Could not reach the server — check your connection and try again.');
-    enhanceAccessibility(offlineApp);
-    var offlineError = offlineApp.querySelector('.auth-error');
-    if (offlineError) offlineError.focus();
+    showAuthScreen('Could not reach the server — check your connection and try again.');
+  }
+}
+
+function showAuthScreen(errorMessage) {
+  var app = document.getElementById('app');
+  app.innerHTML = renderAuthScreen(errorMessage);
+  enhanceAccessibility(app);
+  var authError = app.querySelector('.auth-error');
+  if (authError) authError.focus();
+  prepareIdentityButtons();
+}
+
+/* ---- Sign in with Apple and Google -----------------------------------------
+   Nothing here runs, and neither provider's script loads, until the server
+   lists that provider in /login/config. The token goes to the server, which
+   makes every decision; see "Sign in with Apple and Google" in src/worker.js. */
+
+var IDENTITY_LABELS = { apple: 'Apple', google: 'Google' };
+var APPLE_SIGN_IN_SCRIPT = 'https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js';
+// The site is English only. Without hl, Google can choose by network location.
+var GOOGLE_SIGN_IN_SCRIPT = 'https://accounts.google.com/gsi/client?hl=en';
+var APPLE_LOGO = '<svg class="identity-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>';
+// Nonces last ten minutes, and a sign-in screen can sit open for much longer.
+var IDENTITY_REFRESH_MS = 9 * 60 * 1000;
+var identityRefreshTimer = null;
+var identityScriptLoads = {};
+
+// Invites arrive in the URL fragment, which browsers never send to servers or
+// other sites. It is removed at once, and kept for this tab until redeemed.
+function readPendingInvite() {
+  var match = /^#invite=([A-Za-z0-9_-]+)$/.exec((window.location && window.location.hash) || '');
+  try {
+    if (match) sessionStorage.setItem('waypoint-invite', match[1]);
+    pendingInvite = match ? match[1] : sessionStorage.getItem('waypoint-invite');
+  } catch (err) {
+    if (match) pendingInvite = match[1];
+  }
+  if (match) history.replaceState(null, '', window.location.pathname + window.location.search);
+}
+
+function clearPendingInvite() {
+  pendingInvite = null;
+  try { sessionStorage.removeItem('waypoint-invite'); } catch (err) { /* sessionStorage may be unavailable */ }
+}
+
+function identitySignInHtml() {
+  var providers = loginConfig.providers || {};
+  if (!providers.apple && !providers.google) return '';
+  return '<div class="identity-sign-in">' +
+    (pendingInvite ? '<p class="field-hint">You\'ve been invited to Waypoint. Sign in to finish setting up your account.</p>' : '') +
+    '<div id="identity-buttons" class="identity-buttons">' +
+      (providers.apple ? '<button type="button" class="btn identity-apple" data-action="sign-in-apple" disabled>' + APPLE_LOGO + 'Sign in with Apple</button>' : '') +
+      (providers.google ? '<div id="google-sign-in" class="identity-google"></div>' : '') +
+    '</div>' +
+    '<p id="identity-status" class="field-hint" hidden>Sign-in options could not load. Check your connection and reload this page.</p>' +
+  '</div>';
+}
+
+function loadIdentityScript(url) {
+  if (!identityScriptLoads[url]) {
+    identityScriptLoads[url] = new Promise(function (resolve, reject) {
+      var script = document.createElement('script');
+      script.src = url;
+      script.async = true;
+      script.onload = resolve;
+      script.onerror = function () { delete identityScriptLoads[url]; reject(new Error('Script failed to load')); };
+      document.head.appendChild(script);
+    });
+  }
+  return identityScriptLoads[url];
+}
+
+async function prepareAppleSignIn(clientId, nonce) {
+  await loadIdentityScript(APPLE_SIGN_IN_SCRIPT);
+  // An empty scope asks Apple for no name or email. The popup keeps the result
+  // on this page; Apple's redirect would be rejected as a cross-site write.
+  window.AppleID.auth.init({ clientId: clientId, scope: '', redirectURI: window.location.origin + '/WayPoint/', nonce: nonce, usePopup: true });
+  var button = document.querySelector('[data-action="sign-in-apple"]');
+  if (button) button.disabled = false;
+}
+
+async function prepareGoogleSignIn(clientId, nonce) {
+  await loadIdentityScript(GOOGLE_SIGN_IN_SCRIPT);
+  var parent = document.getElementById('google-sign-in');
+  if (!parent) return;
+  var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  window.google.accounts.id.initialize({
+    client_id: clientId, nonce: nonce,
+    callback: function (response) { completeIdentitySignIn('google', response.credential); }
+  });
+  parent.innerHTML = '';
+  window.google.accounts.id.renderButton(parent, {
+    theme: dark ? 'filled_black' : 'outline', size: 'large', text: 'signin_with', logo_alignment: 'center', locale: 'en',
+    width: Math.min(parent.offsetWidth || 320, 400)
+  });
+}
+
+// Nonces are fetched ahead of the click, because waiting for one inside the
+// click would lose the user gesture and the browser would block Apple's popup.
+async function prepareIdentityButtons() {
+  clearTimeout(identityRefreshTimer);
+  if (!document.getElementById('identity-buttons')) return;
+  var providers = loginConfig.providers;
+  var failed = false;
+  try {
+    var res = await fetch('/WayPoint/api/login/nonce', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error('Status ' + res.status);
+    var nonce = (await res.json()).nonce;
+    await Promise.all([
+      providers.apple ? prepareAppleSignIn(providers.apple.clientId, nonce) : null,
+      providers.google ? prepareGoogleSignIn(providers.google.clientId, nonce) : null
+    ]);
+  } catch (err) {
+    failed = true;
+  }
+  var status = document.getElementById('identity-status');
+  if (status) status.hidden = !failed;
+  identityRefreshTimer = setTimeout(prepareIdentityButtons, IDENTITY_REFRESH_MS);
+}
+
+function completeIdentitySignIn(provider, idToken) {
+  var payload = { provider: provider, idToken: idToken };
+  if (pendingInvite) payload.invite = pendingInvite;
+  submitAuthForm('/WayPoint/api/login/identity', payload);
+}
+
+async function signInWithApple() {
+  try {
+    var data = await window.AppleID.auth.signIn();
+    completeIdentitySignIn('apple', data.authorization.id_token);
+  } catch (err) {
+    // Closing Apple's window is a normal choice, so it needs no message.
+    var code = err && err.error;
+    if (code === 'user_cancelled_authorize' || code === 'popup_closed_by_user') return;
+    showAuthScreen('Apple sign-in did not finish — please try again.');
   }
 }
 
@@ -157,9 +314,7 @@ async function renderBoot() {
   applyAuthUI();
   if (!currentUser) {
     document.body.classList.remove('is-trip-view');
-    var authApp = document.getElementById('app');
-    authApp.innerHTML = renderAuthScreen();
-    enhanceAccessibility(authApp);
+    showAuthScreen();
     return;
   }
   state = await loadInitialState();
@@ -198,6 +353,7 @@ async function renderBoot() {
 
 async function loadAndRenderManageUsers() {
   currentView = 'manage-users';
+  await loadLoginConfig();
   try {
     var res = await fetch('/WayPoint/api/users', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
     var body = await res.json();
@@ -211,6 +367,7 @@ async function loadAndRenderManageUsers() {
 }
 
 function renderManageUsersView() {
+  var inviteEnabled = Object.keys(loginConfig.providers || {}).length > 0;
   var rows = managedUsers.slice().sort(function (a, b) { return a.username.localeCompare(b.username); }).map(function (u) {
     // Accounts are not a trip record, so rowActions() has no id field or
     // permission rule for them -- the two controls are supplied directly
@@ -219,7 +376,11 @@ function renderManageUsersView() {
       context: 'person', section: 'account', item: u, icon: 'person',
       title: u.username,
       showRecordActions: false,
+      supporting: inviteEnabled ? (u.linkedSignIn ? 'Signs in with ' + (IDENTITY_LABELS[u.linkedSignIn] || u.linkedSignIn) : 'No sign-in linked') : '',
       extraActionsHtml: '<div class="item-actions">' +
+        (inviteEnabled ? (u.linkedSignIn
+          ? '<button class="btn btn-ghost" data-action="reset-sign-in" data-id="' + esc(u.id) + '">Reset sign-in</button>'
+          : '<button class="btn btn-ghost" data-action="invite-user" data-id="' + esc(u.id) + '">Invite</button>') : '') +
         '<button class="btn btn-icon btn-ghost" data-action="edit-user" data-id="' + u.id + '" aria-label="Edit account" title="Edit account">' + icon('edit') + '</button>' +
         '<button class="btn btn-icon btn-ghost" data-action="delete-user" data-id="' + u.id + '" aria-label="Delete account" title="Delete account">' + icon('delete') + '</button>' +
       '</div>',
@@ -230,6 +391,7 @@ function renderManageUsersView() {
     '<div class="tab-panel-head"><h1 data-page-heading tabindex="-1">Manage accounts</h1>' +
       '<button class="btn btn-accent" data-action="new-user">' + icon('add') + ' Add account</button></div>' +
     '<p class="field-hint manage-users-intro">You set every account\'s username and password yourself and share it with them directly — there\'s no self-signup or "forgot password" flow. Creating an account here just gives someone a login; it doesn\'t give them access to any trip. Whoever creates a trip becomes that trip\'s owner, and can then share it with any of these accounts from that trip\'s own Settings tab.</p>' +
+    (inviteEnabled ? '<p class="field-hint manage-users-intro">To approve someone, add an account for them and send them an invite. Each account keeps one Apple or Google sign-in, and resetting it lets them link a different one.</p>' : '') +
     (managedUsers.length ? '<div class="item-list">' + rows + '</div>' : '<p class="field-hint">No accounts yet.</p>');
 }
 
@@ -315,6 +477,68 @@ async function saveUserAccount(payload) {
   } catch (err) {
     showToast('Could not save that account — check your connection and try again.', 'error');
   }
+}
+
+async function createUserInvite(id) {
+  var u = managedUsers.find(function (x) { return x.id === id; });
+  if (!u) return;
+  try {
+    var res = await fetch('/WayPoint/api/invites', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: id })
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) { showToast(body.error || 'Could not create that invite.', 'error'); return; }
+    openInviteDialog(u, window.location.origin + window.location.pathname + '#invite=' + body.invite, body.expiresAt);
+  } catch (err) {
+    showToast('Could not create that invite — check your connection and try again.', 'error');
+  }
+}
+
+function openInviteDialog(user, link, expiresAt) {
+  var expires = new Date(expiresAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
+  document.getElementById('modal-root').innerHTML =
+    '<div class="modal-backdrop" data-action="close-modal">' +
+      '<div class="modal">' +
+        '<div class="modal-head"><h2>Invite ' + esc(user.username) + '</h2>' +
+          '<button class="btn btn-icon btn-ghost" data-action="close-modal" aria-label="Close dialog" title="Close">' + icon('close') + '</button></div>' +
+        '<div class="modal-body">' +
+          '<p class="confirm-text">Send this link only to ' + esc(user.username) + '. It works once and expires on ' + esc(expires) + '. Creating another invite cancels this one.</p>' +
+          '<div class="field invite-field"><label>Invite link</label><div class="invite-link">' +
+            '<input type="text" readonly value="' + esc(link) + '">' + copyBtn(link, 'invite link') +
+          '</div></div>' +
+        '</div>' +
+        '<div class="modal-foot"><button class="btn" data-action="close-modal" data-modal-initial>Done</button></div>' +
+      '</div>' +
+    '</div>';
+}
+
+function resetUserSignIn(id) {
+  var u = managedUsers.find(function (x) { return x.id === id; });
+  if (!u) return;
+  openConfirm({
+    title: 'Reset this sign-in?',
+    message: '"' + u.username + '" will be signed out everywhere and will need a new invite to sign in. Their drafts stay on their device.',
+    confirmLabel: 'Reset',
+    onConfirm: async function () {
+      try {
+        var res = await fetch('/WayPoint/api/identities/reset', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accountId: id })
+        });
+        var body = await res.json().catch(function () { return {}; });
+        if (!res.ok) { showToast(body.error || 'Could not reset that sign-in.', 'error'); return; }
+        // Resetting your own account ends your own session too.
+        if (id === currentUser.id) { await checkAuth(); await renderBoot(); return; }
+        setSaveStatus('saved');
+        await loadAndRenderManageUsers();
+      } catch (err) {
+        showToast('Could not reset that sign-in — check your connection and try again.', 'error');
+      }
+    }
+  });
 }
 
 function deleteUserAccount(id) {

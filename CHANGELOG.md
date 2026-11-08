@@ -1,5 +1,57 @@
 # Changelog
 
+## Unreleased — account deletion
+
+- Add **Delete account** to iOS Settings. The app shows what will happen, asks
+  for `DELETE`, and removes that account's saved trips, drafts and session once
+  the server confirms. Apple requires this before App Store review.
+- Add `GET` and `POST /account/deletion`. Every step is safe to repeat, and the
+  only site owner account is refused. See `docs/backend-v1/sign-in.md`.
+- Erase trips only that person can open when their account is deleted. Trips they
+  shared stay with the people on them, and pass to an admin on the trip, otherwise
+  to the site owner. Their participant entry becomes "Former traveller". App Review
+  may question keeping shared trips, and that risk was accepted: see
+  `docs/backend-v1/sign-in.md`.
+- Revoke Sign in with Apple when an account is deleted, from a code the app fetches
+  at that moment. No Apple token is stored and `/login/identity` is unchanged, so
+  older builds are unaffected. Set `WAYPOINT_APPLE_TEAM_ID`,
+  `WAYPOINT_APPLE_KEY_ID` and the `WAYPOINT_APPLE_PRIVATE_KEY` secret to turn it
+  on. Not yet tried with a real Apple key.
+- Close the iOS session when Apple says its link was revoked, at launch or while
+  running. Drafts stay for the next sign-in.
+
+## Unreleased — Apple and Google sign-in
+
+- Refuse phone login for the site owner's account, with the same reply as an
+  unknown number. The owner signs in with their password at
+  `/waypoint/#owner-login`. **Set a password you know before deploying.**
+- Add Apple and Google sign-in to the server and website, hidden until client
+  IDs are set. An identity works only after an owner-issued, one-time invite
+  links it to an account. Each account has one sign-in, and the owner can reset
+  it to change it.
+- Add Apple and Google sign-in to the iOS app, hidden until the app client IDs
+  are set. Google uses the system browser with PKCE, so no Google SDK or client
+  secret is needed. Invites are redeemed on the website. Not yet tried with a
+  real Apple or Google account.
+- Show the server's reason when iOS sign-in is refused, including the notice that
+  phone sign-in has ended.
+- Add **Invite** and **Reset sign-in** to Manage accounts.
+- Add `WAYPOINT_PHONE_LOGIN=off` for cutover, and an owner route that ends every
+  session. See `docs/backend-v1/sign-in.md`.
+
+## Unreleased — iOS offline resilience
+
+- Keep the saved itinerary readable when the server asks for a fresh snapshot,
+  until a complete download replaces it. Uploads and draft review stay blocked
+  until then, and a completed download still removes revoked records.
+- Open saved trips immediately at launch instead of waiting for the network.
+- Keep saved trips open after a sign-in expires, with a notice to sign in again.
+  Signing in as a different account hides them, and a session the server refuses
+  still closes them.
+- Renew the session cookie from `/whoami` once it is a day old, so people who
+  keep using the app stay signed in. Older iOS builds ignore the new cookie.
+- Stop an empty sync from invalidating open editors.
+
 ## Unreleased — Free coordinate and Plus Code entry
 
 - Add a shared Coordinates or code panel to every location picker, with a

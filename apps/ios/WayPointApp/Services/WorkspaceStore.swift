@@ -149,6 +149,12 @@ final class WorkspaceStore {
         try data.write(to: url, options: [.atomic, .completeFileProtection])
     }
 
+    func deleteD1(accountID: String) throws {
+        let url = try d1URL(accountID: accountID)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
+    }
+
     private func d1URL(accountID: String) throws -> URL {
         guard !accountID.isEmpty else { throw WorkspaceStoreError.invalidAccount }
         let root = try d1Directory ?? FileManager.default.url(for: .applicationSupportDirectory,

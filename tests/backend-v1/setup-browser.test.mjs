@@ -88,6 +88,13 @@ test('production browser signs in to imported trips, shows pause and blocks edit
  await page.goto('https://production.test/WayPoint/');
  assert.equal(await page.locator('#login-form [name="password"]').count(),0);
  assert.equal(await page.locator('#login-form input').count(),1);
+ await page.goto('https://production.test/WayPoint/#owner-login');
+ assert.equal(await page.getByRole('heading',{name:'Owner sign-in'}).count(),1);
+ assert.equal(await page.locator('#login-form [name="phone"]').count(),0);
+ await page.locator('#login-form [name="username"]').fill('owner');await page.locator('#login-form [name="password"]').fill('wrong-password');
+ await page.getByRole('button',{name:'Log in',exact:true}).click();await page.getByText('Incorrect username or password.').waitFor();
+ assert.equal(await page.locator('#login-form [name="password"]').count(),1);
+ await page.goto('https://production.test/WayPoint/');await page.reload();
  assert.equal(await page.getByRole('button',{name:'UberUser login',exact:true}).count(),0);
  await page.locator('#login-form [name="phone"]').fill('+44 (7700) 900-123');await page.getByRole('button',{name:'Log in',exact:true}).click();
  await page.waitForFunction(()=>stateIsTrustworthy&&state.trips[0]?.activities.some(a=>a.title==='Preserved activity'));

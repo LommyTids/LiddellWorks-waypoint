@@ -206,6 +206,69 @@ export class SyncStore {
     return {protocolVersion:1,results};
   }
 
+  // The trip half of deleting an account. handleAccountDeletion in worker.js runs
+  // this between Apple and removing the account, so it must be safe to repeat.
+  // The rule itself is in docs/backend-v1/sign-in.md.
+  async deletionPlan(users) {
+    const accountId=this.user.id;
+    const [state,owned,grants,left]=await this.db.batch([
+      this.db.prepare(META),
+      this.db.prepare('SELECT id FROM trips WHERE owner_id=? AND deleted=0').bind(accountId),
+      this.db.prepare('SELECT g.trip_id,g.account_id,g.role FROM trip_grants g JOIN trips t ON t.id=g.trip_id WHERE t.owner_id=? AND t.deleted=0').bind(accountId),
+      this.db.prepare('SELECT count(*) AS n FROM trip_grants g JOIN trips t ON t.id=g.trip_id WHERE g.account_id=? AND t.deleted=0 AND t.owner_id<>?').bind(accountId,accountId),
+    ]);
+    const accounts=new Map(users.users.map(account=>[account.id,account]));
+    const longestStanding=(a,b)=>(a.createdAt||'').localeCompare(b.createdAt||'')||a.id.localeCompare(b.id);
+    const siteOwner=users.users.filter(account=>account.isUberUser&&account.id!==accountId).sort(longestStanding)[0];
+    const erased=[],handedOver=[];
+    for(const {id:tripId} of owned.results){
+      // A grant to an account that has since gone keeps nobody on the trip.
+      const others=grants.results.filter(g=>g.trip_id===tripId&&g.account_id!==accountId&&accounts.has(g.account_id));
+      if(!others.length){erased.push(tripId);continue;}
+      // Only an admin or the site owner can inherit, because both already see the
+      // whole trip. Promoting a user or viewer would show them what they never saw.
+      const heir=others.filter(g=>g.role==='admin').map(g=>accounts.get(g.account_id)).sort(longestStanding)[0]||siteOwner;
+      if(!heir)fail(409,'no_successor','This account has shared trips, and no one can take them over.');
+      handedOver.push({tripId,ownerId:heir.id});
+    }
+    return {epoch:metadata(state).epoch,erased,handedOver,left:left.results[0].n};
+  }
+
+  async accountDeletionSummary(users) {
+    const plan=await this.deletionPlan(users);
+    return {tripsErased:plan.erased.length,tripsHandedOver:plan.handedOver.length,tripsLeft:plan.left};
+  }
+
+  async deleteAccountData(users) {
+    const plan=await this.deletionPlan(users);
+    const accountId=this.user.id,now=new Date().toISOString(),token=crypto.randomUUID();
+    const erased=JSON.stringify(plan.erased),handedOver=JSON.stringify(plan.handedOver.map(trip=>trip.tripId));
+    const statements=[
+      // The plan is only good for the sharing it saw. Any sharing change moves the epoch.
+      this.db.prepare('INSERT INTO write_guards SELECT ?,CASE WHEN (SELECT epoch FROM sync_state WHERE singleton=1)=? THEN 1 ELSE 0 END').bind(token,plan.epoch),
+      this.db.prepare('DELETE FROM record_tags WHERE trip_id IN (SELECT value FROM json_each(?))').bind(erased),
+      this.db.prepare('DELETE FROM records WHERE trip_id IN (SELECT value FROM json_each(?))').bind(erased),
+      this.db.prepare('DELETE FROM trip_grants WHERE trip_id IN (SELECT value FROM json_each(?))').bind(erased),
+      // The empty row stays: identifiers are never reused, and devices need the delete.
+      this.db.prepare(`UPDATE trips SET owner_id='',metadata_json='{}',legacy_extras_json='{}',deleted=1,revision=revision+1,updated_at=? WHERE id IN (SELECT value FROM json_each(?))`).bind(now,erased),
+      // Moving owner_id moves the epoch, which is what sends every device to refresh.
+      // The trip's revision stays, so its queued edits aren't reported as conflicts.
+      ...plan.handedOver.flatMap(({tripId,ownerId})=>[
+        this.db.prepare('UPDATE trips SET owner_id=? WHERE id=?').bind(ownerId,tripId),
+        this.db.prepare('DELETE FROM trip_grants WHERE trip_id=? AND account_id=?').bind(tripId,ownerId),
+      ]),
+      // This tag means whoever owns the trip, so it would move onto the new owner.
+      this.db.prepare(`UPDATE records SET payload_json=json_set(payload_json,'$.companions',json((SELECT json_group_array(value) FROM json_each(records.payload_json,'$.companions') WHERE value<>'__trip_superuser__'))),revision=revision+1,updated_at=?
+        WHERE trip_id IN (SELECT value FROM json_each(?)) AND EXISTS(SELECT 1 FROM json_each(records.payload_json,'$.companions') WHERE value='__trip_superuser__')`).bind(now,handedOver),
+      this.db.prepare(`UPDATE records SET payload_json=json_set(json_remove(payload_json,'$.accountId'),'$.name','Former traveller','$.notes',''),revision=revision+1,updated_at=? WHERE kind='companion' AND json_extract(payload_json,'$.accountId')=?`).bind(now,accountId),
+      this.db.prepare('DELETE FROM trip_grants WHERE account_id=?').bind(accountId),
+      this.db.prepare('DELETE FROM mutation_receipts WHERE account_id=?').bind(accountId),
+      this.db.prepare('DELETE FROM write_guards WHERE token=?').bind(token),
+    ];
+    try { await this.db.batch(statements); }
+    catch(error) { if(/CHECK constraint failed/.test(error.message)) fail(409,'concurrent_change','Sharing changed while your account was being deleted. Please try again.'); throw error; }
+  }
+
   async setGrant(tripID,body,accounts) {
     const tripId=id(tripID); const accountId=id(body?.accountId);
     if (!accounts.some(a=>a.id===accountId)) fail(400,'invalid_account','Account unavailable.');

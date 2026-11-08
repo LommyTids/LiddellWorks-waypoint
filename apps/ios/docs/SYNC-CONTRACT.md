@@ -4,7 +4,9 @@ Authoritative backend: `LommyTids/LiddellWorks-waypoint`, production connection 
 
 Origin: https://liddellworks.com. Authentication routes use `/WayPoint/api`; sync routes use `/WayPoint/api/v1`. Capabilities must report the production environment and `productionReady: true`.
 
-Bootstrap returns paginated entities, `complete`, `nextCursor`, and final `syncCursor`. Changes return entities, `hasMore`, and cursor. Cursors are opaque and account/dataset/permission-bound. On `bootstrap_required`, invalidate authorized state before replacing it with a complete snapshot. Do not replay old drafts without current authorization.
+Bootstrap returns paginated entities, `complete`, `nextCursor`, and final `syncCursor`. Changes return entities, `hasMore`, and cursor. Cursors are opaque and account/dataset/permission-bound. On `bootstrap_required`, drop the cursor and mark the snapshot stale. The stale copy stays readable offline until a complete snapshot replaces it, and nothing uploads or advances until then. Do not replay old drafts without current authorization.
+
+`/whoami` may return a replacement `wp_session` cookie once a token is a day old. Store it only if it names the same account and expires later; otherwise keep using the current cookie. Older clients can ignore it. An expired session is never sent.
 
 Mutations are create/update/delete, with client UUID, tripId, kind, recordId and baseRevision. Create uses zero; update/delete use the latest observed record revision. Update is a field patch. Delete has no data. Trip record identity equals trip identity. Successful receipts make unchanged retries safe; a reused ID with changed contents conflicts. HTTP 200 batches can contain conflicts/rejections. Earlier operations may succeed before a later service error.
 

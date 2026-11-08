@@ -1,6 +1,6 @@
 # WayPoint iOS — production D1 sync
 
-Native SwiftUI app for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync. The app connects to **https://liddellworks.com/WayPoint**. Choose **Log in to WayPoint** on the welcome screen, then enter your registered phone number in the single “Enter login code here” field. Existing account IDs and permissions, including UberUser, are retained.
+Native SwiftUI app for iPhone and iPad, iOS 17+, with Apple Maps, account-isolated offline storage and record-level sync. The app connects to **https://liddellworks.com/WayPoint**. Choose **Log in to WayPoint** on the welcome screen, then use **Sign in with Apple** or **Sign in with Google** once the server offers them, or enter your registered phone number in the single “Enter login code here” field. Existing account IDs and permissions, including UberUser, are retained.
 
 ## Atlas interface
 
@@ -31,7 +31,7 @@ open apps/ios/WayPoint.xcodeproj
 If Git reports local changes or refuses the update, retain those changes and resolve them before proceeding. Do not discard them to update the app. If your checkout is elsewhere, use that directory in the first command. Opening the project by this path avoids Xcode reopening a different old copy.
 
 1. Select the **WayPoint** scheme and your iPhone/iPad or an installed iOS 17+ simulator.
-2. For a physical device, select your Apple development team in **Signing & Capabilities**. Change the bundle identifier only if your team requires it.
+2. For a physical device, select your Apple development team in **Signing & Capabilities**. Change the bundle identifier only if your team requires it. The app declares Sign in with Apple, so a device build needs a paid team with that capability on the App ID. Simulator builds don't.
 3. Select **Product → Clean Build Folder**, then **Run**. This installs the newly built app on the selected device or simulator.
 4. Sign in with your existing website account. The login screen describes the website account, and Settings shows **Server: liddellworks.com**.
 5. Use **Sync now** to send saved changes and download server changes. Review conflicts in Settings. Save a temporary item, verify it in the website, edit it there, then sync iOS to check both directions.
